@@ -27,12 +27,30 @@
 
 ## Phase 0 — 프로젝트 기반 구성
 
-- [ ] FND-1. Wails v2 + Go 기본 애플리케이션 구조 구성
-- [ ] FND-2. React 19 + TypeScript + Vite 프론트엔드 구성
-- [ ] FND-3. Tailwind CSS v4 + Ant Design v5 기본 UI 환경 구성
-- [ ] FND-4. 개발/빌드 명령과 저장소 기본 설정 구성
-- [ ] FND-5. 최소 앱 Shell과 Go 애플리케이션 바인딩 기반 구성
+- [x] FND-1. Wails v2 + Go 기본 애플리케이션 구조 구성
+- [x] FND-2. React 19 + TypeScript + Vite 프론트엔드 구성
+- [x] FND-3. Tailwind CSS v4 + Ant Design v5 기본 UI 환경 구성
+- [x] FND-4. 개발/빌드 명령과 저장소 기본 설정 구성
+- [x] FND-5. 최소 앱 Shell과 Go 애플리케이션 바인딩 기반 구성
 - [ ] FND-6. 가능한 범위의 포맷/정적 검증 및 빌드 절차 확인
+
+### Phase 0 검증 현황
+
+완료:
+
+- Go 소스 gofmt 적용
+- wails.json, package.json, tsconfig.json JSON 파싱 확인
+- 외부 의존성이 없는 App 코드 Go 컴파일 확인
+- Windows 로컬 개발/빌드 절차 README 기록
+
+현재 실행 환경 제약으로 미완료:
+
+- yarn install
+- yarn typecheck
+- yarn build
+- wails build
+
+외부 패키지 다운로드가 가능한 Windows 개발 환경에서 위 검증을 완료한 뒤 FND-6을 완료 처리한다.
 
 ### Phase 0 완료 조건
 

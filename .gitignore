@@ -1,0 +1,20 @@
+# Go / Wails
+build/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/src/wailsjs/
+
+# Local files
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.idea/
+.vscode/
