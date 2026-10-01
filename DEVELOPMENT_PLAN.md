@@ -986,6 +986,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-C3. Queue 대기 순서와 취소 액션의 가시성 개선 — 취소 즉시 제거 및 상태 전이 안정화 구현 완료, 실제 다운로드 검증 대기
 - [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리 — 기능 중심 상태 문구, 401 인증 필요/부분 데이터 충돌 오류 분류 구현 완료, 실제 Wails 검증 대기
 - [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 및 실패 다운로드의 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
+- [ ] UX-C6. VOD별 임시 다운로드 경로 격리 및 임시 데이터 충돌 복구 액션 — 구현 완료, 실제 Windows 다운로드 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
@@ -1036,9 +1037,10 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 다운로드 탭은 헤더 아래 남은 높이를 채우는 단일 Workspace로 구성하고 `진행 중 / 완료 / 실패` 섹션을 내부 스크롤 영역에서 분리한다.
 - 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
-- 취소 후 동일 VOD 재시도 시 이전 `.part`/fragment 상태를 이어받아 손상되지 않도록 다운로드 명령은 `--no-continue`를 사용하고 fragment 보존을 비활성화한다.
+- 다운로드 중간 파일은 최종 저장 경로와 분리해 `.chzzk-temp/{videoNo}`에 격리하고, `--continue`로 정상적인 부분 다운로드 재개를 허용한다.
+- 임시 데이터 충돌 실패는 `errorCode=partial_data_conflict`로 영속화하며, 실패 항목의 `임시 파일 정리 후 재시도` 액션은 해당 VOD 임시 디렉터리만 삭제한 뒤 새 Queue 작업을 생성한다. 최종 영상 파일은 삭제하지 않는다.
 - HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`를 표시한다.
-- `initialization fragment found after media fragments`는 `partial_data_conflict`로 분류해 내부 실행 도구명/원문 로그 대신 재시도 안내를 표시한다.
+- `initialization fragment found after media fragments`는 `partial_data_conflict`로 분류해 내부 실행 도구명/원문 로그 대신 임시 파일 정리 후 재시도 안내를 표시한다.
 - cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
 - 완료 Task에는 `폴더 열기`와 `목록에서 삭제`를 제공하고, 실패 Task에는 `목록에서 삭제`를 제공한다. 삭제는 파일이 아니라 앱의 다운로드 이력만 제거한다.
 - 다운로드 도구 상태 UI에는 외부 프로그램명을 직접 노출하지 않고 `영상 다운로드`, `파일 저장/영상 처리`처럼 사용자가 이해할 기능 수준으로만 표현한다.
@@ -1064,6 +1066,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Runner 취소 격리 fixture에서 `go test`, `go test -race`, `go vet` 성공
 - Runner가 context 취소 시 프로세스를 즉시 종료하는지 검증
 - Download Manager TSX를 TypeScript 5.8.3 parser로 구문 검증
+- VOD별 temp 경로가 `.chzzk-temp/{videoNo}`로 분리되고 최종 저장 경로와 별도 `--paths temp:` 인자로 전달되는 구조 정적 확인
+- `partial_data_conflict` 오류 코드의 Queue → SQLite → Frontend 타입 연결 및 복구 API/버튼 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:
 

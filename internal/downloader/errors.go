@@ -57,7 +57,7 @@ func classifyDownloadFailure(err error) error {
 	) && strings.Contains(text, "initialization fragment"):
 		return &DownloadFailure{
 			Kind:    DownloadFailurePartialDataConflict,
-			Message: "이전 다운로드의 임시 데이터와 충돌했습니다. 다운로드를 처음부터 다시 시도해 주세요.",
+			Message: "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
 			Cause:   err,
 		}
 	}

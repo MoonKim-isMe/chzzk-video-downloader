@@ -18,7 +18,12 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 	if err != nil {
 		return DownloadResult{}, err
 	}
-	return m.runPreparedDownload(ctx, spec, handler)
+	result, err := m.runPreparedDownload(ctx, spec, handler)
+	if err != nil {
+		return result, err
+	}
+	_ = cleanupTemporaryDownloadRequest(request)
+	return result, nil
 }
 
 func (m *Manager) runPreparedDownload(ctx context.Context, spec CommandSpec, handler ProgressHandler) (DownloadResult, error) {

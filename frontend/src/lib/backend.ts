@@ -22,6 +22,7 @@ interface BackendApp {
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
+  RecoverDownload(taskId: string): Promise<DownloadTask>;
   DeleteDownloadTask(taskId: string): Promise<void>;
   OpenDownloadFolder(taskId: string): Promise<void>;
 }
@@ -72,6 +73,8 @@ export const startDownload = (request: StartDownloadRequest) => app().StartDownl
 export const getDownloadTasks = () => app().GetDownloadTasks();
 
 export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);
+
+export const recoverDownload = (taskId: string) => app().RecoverDownload(taskId);
 
 export const deleteDownloadTask = (taskId: string) => app().DeleteDownloadTask(taskId);
 

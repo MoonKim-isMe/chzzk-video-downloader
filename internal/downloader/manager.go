@@ -42,6 +42,13 @@ func (m *Manager) Prepare(ctx context.Context, request DownloadRequest) (Command
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return CommandSpec{}, toolchain, fmt.Errorf("다운로드 폴더를 만들 수 없습니다: %w", err)
 	}
+	tempDir, err := temporaryDownloadDirForRequest(request)
+	if err != nil {
+		return CommandSpec{}, toolchain, err
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		return CommandSpec{}, toolchain, fmt.Errorf("다운로드 임시 폴더를 만들 수 없습니다: %w", err)
+	}
 	return command, toolchain, nil
 }
 

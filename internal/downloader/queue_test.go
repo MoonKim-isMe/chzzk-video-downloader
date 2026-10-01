@@ -619,3 +619,29 @@ func TestQueueRemoveOnlyRemovesTerminalTasks(t *testing.T) {
 		t.Fatalf("removed task still exists in queue order: %#v", queue.List())
 	}
 }
+
+
+func TestQueueStoresStructuredFailureCode(t *testing.T) {
+	executor := newControlledExecutor()
+	request := queueRequest(14001)
+	executor.fail(request.URL, &DownloadFailure{
+		Kind:    DownloadFailurePartialDataConflict,
+		Message: "임시 파일 충돌",
+	})
+
+	queue := NewQueue(context.Background(), executor, nil, 1)
+	task, err := queue.Enqueue(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStartedCount(t, executor, 1)
+	executor.release(request.URL)
+
+	failed := waitForTaskStatus(t, queue, task.TaskID, TaskStatusFailed)
+	if failed.ErrorCode != DownloadFailurePartialDataConflict {
+		t.Fatalf("unexpected error code: %q", failed.ErrorCode)
+	}
+	if failed.Error != "임시 파일 충돌" {
+		t.Fatalf("unexpected error message: %q", failed.Error)
+	}
+}

@@ -173,6 +173,7 @@ func (q *Queue) Cancel(taskID string) bool {
 		task.Status = TaskStatusCancelled
 		task.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		task.Error = ""
+		task.ErrorCode = ""
 		q.tasks[taskID] = task
 		q.mu.Unlock()
 
@@ -285,8 +286,14 @@ func (q *Queue) run(ctx context.Context, taskID string, request DownloadRequest)
 			task.Status = TaskStatusFailed
 		}
 		task.Error = err.Error()
+		task.ErrorCode = ""
+		if kind, ok := downloadFailureKind(err); ok {
+			task.ErrorCode = kind
+		}
 	} else {
 		task.Status = TaskStatusCompleted
+		task.Error = ""
+		task.ErrorCode = ""
 		task.Progress = result.LastProgress
 		task.FinalPath = result.FinalPath
 	}

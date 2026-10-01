@@ -187,6 +187,19 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
     setDownloadTasks((current) => current.filter((task) => task.taskId !== taskId));
   }, []);
 
+  const handleDownloadTaskRecovered = useCallback(
+    (previousTaskId: string, task: DownloadTask) => {
+      hiddenDownloadTaskIds.current.add(previousTaskId);
+      setDownloadTasks((current) =>
+        upsertDownloadTask(
+          current.filter((item) => item.taskId !== previousTaskId),
+          task,
+        ),
+      );
+    },
+    [],
+  );
+
   const searchWorkspace = (
     <div className="channel-workspace">
       <Card bordered={false} className="app-panel channel-sidebar-panel">
@@ -262,6 +275,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
           <DownloadPanel
             tasks={downloadTasks}
             onTaskRemoved={handleDownloadTaskRemoved}
+            onTaskRecovered={handleDownloadTaskRecovered}
           />
         );
 

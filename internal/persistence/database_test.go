@@ -33,7 +33,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
+	if version != 3 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -49,7 +49,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
+	if version != 3 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -222,5 +222,37 @@ func TestDeleteDownloadTaskRemovesHistory(t *testing.T) {
 	}
 	if len(tasks) != 0 {
 		t.Fatalf("expected deleted history, got %#v", tasks)
+	}
+}
+
+
+func TestDownloadHistoryPersistsErrorCode(t *testing.T) {
+	database := openTestDatabase(t)
+	task := downloader.DownloadTask{
+		TaskID:      "download-failed-with-code",
+		VideoNo:     3001,
+		VideoTitle:  "복구 가능한 실패",
+		ChannelName: "채널",
+		URL:         "https://chzzk.naver.com/video/3001",
+		OutputDir:   t.TempDir(),
+		Status:      downloader.TaskStatusFailed,
+		Error:       "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
+		ErrorCode:   downloader.DownloadFailurePartialDataConflict,
+		QueuedAt:    "2026-10-01T00:00:00Z",
+		FinishedAt:  "2026-10-01T00:00:01Z",
+	}
+	if err := database.UpsertDownloadTask(task); err != nil {
+		t.Fatal(err)
+	}
+
+	tasks, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected one task, got %#v", tasks)
+	}
+	if tasks[0].ErrorCode != downloader.DownloadFailurePartialDataConflict {
+		t.Fatalf("unexpected restored error code: %q", tasks[0].ErrorCode)
 	}
 }

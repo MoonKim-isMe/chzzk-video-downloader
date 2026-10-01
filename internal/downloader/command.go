@@ -47,6 +47,14 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	if err != nil {
 		return CommandSpec{}, err
 	}
+	videoNo, err := videoNoFromNormalizedURL(videoURL)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	tempDir, err := TemporaryDownloadDir(outputDir, videoNo)
+	if err != nil {
+		return CommandSpec{}, err
+	}
 
 	formatSelector := strings.TrimSpace(request.FormatSelector)
 	if formatSelector == "" {
@@ -71,13 +79,14 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--no-playlist",
 		"--windows-filenames",
 		"--no-overwrites",
-		"--no-continue",
+		"--continue",
 		"--no-keep-fragments",
 		"--progress-delta", "0.5",
 		"--progress-template", "download:" + progressTemplate,
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format", formatSelector,
 		"--paths", outputDir,
+		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
 	}
 	if outputFormat != "" {

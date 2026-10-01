@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -627,4 +628,100 @@ func TestUpdateSettingsDecreasingConcurrencyWaitsForActiveSlots(t *testing.T) {
 	if thirdRelease != nil {
 		close(thirdRelease)
 	}
+}
+
+
+func TestRecoverDownloadCleansTemporaryFilesAndQueuesRetry(t *testing.T) {
+	outputDir := t.TempDir()
+	store, err := appsettings.NewStore(appsettings.Defaults(outputDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	attempts := 0
+	release := make(chan struct{}, 1)
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			mu.Lock()
+			attempts++
+			attempt := attempts
+			mu.Unlock()
+
+			if attempt == 1 {
+				return downloader.DownloadResult{}, &downloader.DownloadFailure{
+					Kind:    downloader.DownloadFailurePartialDataConflict,
+					Message: "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
+				}
+			}
+
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	request := testStartRequest(t)
+	request.OutputDir = outputDir
+	failedTask, err := app.StartDownload(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := app.ensureDownloadQueue().Get(failedTask.TaskID)
+		if ok && current.Status == downloader.TaskStatusFailed {
+			failedTask = current
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if failedTask.Status != downloader.TaskStatusFailed ||
+		failedTask.ErrorCode != downloader.DownloadFailurePartialDataConflict {
+		t.Fatalf("expected recoverable failed task, got %#v", failedTask)
+	}
+
+	tempDir, err := downloader.TemporaryDownloadDir(outputDir, failedTask.VideoNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tempDir+"/stale.part", []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	retried, err := app.RecoverDownload(failedTask.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.TaskID == failedTask.TaskID {
+		t.Fatal("retry must create a new task")
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Fatalf("temporary directory was not removed: %v", err)
+	}
+	if _, ok := app.ensureDownloadQueue().Get(failedTask.TaskID); ok {
+		t.Fatal("previous failed task still exists in queue")
+	}
+
+	release <- struct{}{}
 }

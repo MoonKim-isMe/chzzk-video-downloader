@@ -29,12 +29,17 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if spec.Path != toolchain.YTDLP.Path {
 		t.Fatalf("unexpected path: %s", spec.Path)
 	}
+	expectedTempDir, err := TemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, expected := range []string{
 		"--ignore-config",
 		"--no-simulate",
 		"--progress",
 		"--newline",
-		"--no-continue",
+		"--continue",
 		"--no-keep-fragments",
 		"--progress-template",
 		"download:" + progressTemplate,
@@ -42,6 +47,9 @@ func TestBuildDownloadCommand(t *testing.T) {
 		"after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format",
 		DefaultFormatSelector,
+		"--paths",
+		filepath.Join(dir, "downloads"),
+		"temp:" + expectedTempDir,
 		"--ffmpeg-location",
 		dir,
 		"https://chzzk.naver.com/video/12345",

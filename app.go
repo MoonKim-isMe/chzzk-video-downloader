@@ -288,6 +288,45 @@ func (a *App) CancelDownload(taskID string) bool {
 	return a.ensureDownloadQueue().Cancel(strings.TrimSpace(taskID))
 }
 
+func (a *App) RecoverDownload(taskID string) (downloader.DownloadTask, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return downloader.DownloadTask{}, fmt.Errorf("복구할 다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return downloader.DownloadTask{}, fmt.Errorf("복구할 다운로드 작업을 찾을 수 없습니다")
+	}
+	if task.Status != downloader.TaskStatusFailed {
+		return downloader.DownloadTask{}, fmt.Errorf("실패한 다운로드만 복구할 수 있습니다")
+	}
+	if task.ErrorCode != downloader.DownloadFailurePartialDataConflict {
+		return downloader.DownloadTask{}, fmt.Errorf("임시 파일 정리로 복구할 수 있는 오류가 아닙니다")
+	}
+
+	if err := downloader.CleanupTemporaryDownload(task.OutputDir, task.VideoNo); err != nil {
+		return downloader.DownloadTask{}, err
+	}
+
+	retried, err := a.StartDownload(downloader.StartDownloadRequest{
+		VideoNo:           task.VideoNo,
+		VideoTitle:        task.VideoTitle,
+		ChannelName:       task.ChannelName,
+		ThumbnailImageURL: task.ThumbnailImageURL,
+		URL:               task.URL,
+		OutputDir:         task.OutputDir,
+	})
+	if err != nil {
+		return downloader.DownloadTask{}, fmt.Errorf("임시 파일은 정리했지만 다운로드를 다시 시작할 수 없습니다: %w", err)
+	}
+
+	if err := a.DeleteDownloadTask(taskID); err != nil {
+		runtime.LogErrorf(a.appContext(), "복구한 이전 다운로드 이력을 삭제할 수 없습니다: %v", err)
+	}
+	return retried, nil
+}
+
 func (a *App) DeleteDownloadTask(taskID string) error {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {

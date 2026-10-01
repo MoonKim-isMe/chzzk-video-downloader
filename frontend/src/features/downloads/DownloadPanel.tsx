@@ -16,6 +16,7 @@ import {
   deleteDownloadTask,
   getDownloadToolchainStatus,
   openDownloadFolder,
+  recoverDownload,
 } from '../../lib/backend';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
@@ -24,6 +25,7 @@ const { Text, Title } = Typography;
 interface DownloadPanelProps {
   tasks: DownloadTask[];
   onTaskRemoved: (taskId: string) => void;
+  onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
 }
 
 const statusMeta: Record<
@@ -127,9 +129,15 @@ interface DownloadTaskRowProps {
   task: DownloadTask;
   queuePosition?: number;
   onTaskRemoved: (taskId: string) => void;
+  onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
 }
 
-function DownloadTaskRow({ task, queuePosition, onTaskRemoved }: DownloadTaskRowProps) {
+function DownloadTaskRow({
+  task,
+  queuePosition,
+  onTaskRemoved,
+  onTaskRecovered,
+}: DownloadTaskRowProps) {
   const { message } = AntdApp.useApp();
   const [working, setWorking] = useState(false);
   const meta = statusMeta[task.status];
@@ -151,6 +159,23 @@ function DownloadTaskRow({ task, queuePosition, onTaskRemoved }: DownloadTaskRow
         return;
       }
       onTaskRemoved(task.taskId);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleRecover = async () => {
+    if (task.status !== 'failed' || task.errorCode !== 'partial_data_conflict' || working) {
+      return;
+    }
+
+    setWorking(true);
+    try {
+      const recovered = await recoverDownload(task.taskId);
+      onTaskRecovered(task.taskId, recovered);
+      message.success('임시 파일을 정리하고 다운로드를 다시 시작했습니다.');
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -216,9 +241,16 @@ function DownloadTaskRow({ task, queuePosition, onTaskRemoved }: DownloadTaskRow
               </>
             )}
             {task.status === 'failed' && (
-              <Button danger size="small" loading={working} onClick={() => void handleDelete()}>
-                목록에서 삭제
-              </Button>
+              <>
+                {task.errorCode === 'partial_data_conflict' && (
+                  <Button type="primary" size="small" loading={working} onClick={() => void handleRecover()}>
+                    임시 파일 정리 후 재시도
+                  </Button>
+                )}
+                <Button danger size="small" disabled={working} onClick={() => void handleDelete()}>
+                  목록에서 삭제
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -265,12 +297,14 @@ function DownloadSection({
   tasks,
   queuePositions,
   onTaskRemoved,
+  onTaskRecovered,
 }: {
   title: string;
   count: number;
   tasks: DownloadTask[];
   queuePositions: Map<string, number>;
   onTaskRemoved: (taskId: string) => void;
+  onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
 }) {
   if (tasks.length === 0) {
     return null;
@@ -289,6 +323,7 @@ function DownloadSection({
             task={task}
             queuePosition={queuePositions.get(task.taskId)}
             onTaskRemoved={onTaskRemoved}
+            onTaskRecovered={onTaskRecovered}
           />
         ))}
       </div>
@@ -296,7 +331,7 @@ function DownloadSection({
   );
 }
 
-function DownloadPanel({ tasks, onTaskRemoved }: DownloadPanelProps) {
+function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelProps) {
   const { message } = AntdApp.useApp();
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
   const [preparing, setPreparing] = useState(true);
@@ -409,6 +444,7 @@ function DownloadPanel({ tasks, onTaskRemoved }: DownloadPanelProps) {
               tasks={activeTasks}
               queuePositions={queuePositions}
               onTaskRemoved={onTaskRemoved}
+              onTaskRecovered={onTaskRecovered}
             />
             <DownloadSection
               title="완료"
@@ -416,6 +452,7 @@ function DownloadPanel({ tasks, onTaskRemoved }: DownloadPanelProps) {
               tasks={completedTasks}
               queuePositions={queuePositions}
               onTaskRemoved={onTaskRemoved}
+              onTaskRecovered={onTaskRecovered}
             />
             <DownloadSection
               title="실패"
@@ -423,6 +460,7 @@ function DownloadPanel({ tasks, onTaskRemoved }: DownloadPanelProps) {
               tasks={failedTasks}
               queuePositions={queuePositions}
               onTaskRemoved={onTaskRemoved}
+              onTaskRecovered={onTaskRecovered}
             />
           </div>
         )}
