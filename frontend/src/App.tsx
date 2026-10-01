@@ -15,6 +15,7 @@ import type { ReactNode } from 'react';
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import ChannelUrlTab from './features/channels/ChannelUrlTab';
+import ChannelVideoList from './features/videos/ChannelVideoList';
 import { getSavedChannels, removeSavedChannel, saveChannel } from './lib/backend';
 import type { Channel } from './types/channel';
 
@@ -37,6 +38,11 @@ function AppContent() {
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
     [savedChannels],
+  );
+
+  const selectedChannel = useMemo(
+    () => savedChannels.find((channel) => channel.channelId === selectedChannelId),
+    [savedChannels, selectedChannelId],
   );
 
   const handleSave = async (channel: Channel) => {
@@ -62,7 +68,16 @@ function AppContent() {
 
   const channelWorkspace = (content: ReactNode) => (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Card className="border-slate-800 bg-slate-900/80">{content}</Card>
+      <div className="min-w-0 space-y-6">
+        <Card className="border-slate-800 bg-slate-900/80">{content}</Card>
+        {selectedChannel ? (
+          <ChannelVideoList key={selectedChannel.channelId} channel={selectedChannel} />
+        ) : (
+          <Card className="border-slate-800 bg-slate-900/80">
+            <Empty description="저장 채널에서 채널을 선택하면 VOD 목록을 표시합니다." />
+          </Card>
+        )}
+      </div>
       <SavedChannels
         channels={savedChannels}
         selectedChannelId={selectedChannelId}
@@ -79,7 +94,7 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 1</Tag>
+          <Tag>Phase 2-B</Tag>
         </Space>
         <Text className="!text-slate-400">Wails v2</Text>
       </Header>

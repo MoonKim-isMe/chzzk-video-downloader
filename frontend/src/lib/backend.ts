@@ -1,4 +1,5 @@
 import type { Channel, ChannelSearchResult } from '../types/channel';
+import type { VideoListResult } from '../types/video';
 
 interface BackendApp {
   SearchChannels(keyword: string, offset: number, size: number): Promise<ChannelSearchResult>;
@@ -6,6 +7,7 @@ interface BackendApp {
   GetSavedChannels(): Promise<Channel[]>;
   SaveChannel(channel: Channel): Promise<Channel[]>;
   RemoveSavedChannel(channelId: string): Promise<Channel[]>;
+  GetChannelVideos(channelId: string, page: number, size: number): Promise<VideoListResult>;
 }
 
 type WailsWindow = Window & {
@@ -34,3 +36,6 @@ export const getSavedChannels = () => app().GetSavedChannels();
 export const saveChannel = (channel: Channel) => app().SaveChannel(channel);
 
 export const removeSavedChannel = (channelId: string) => app().RemoveSavedChannel(channelId);
+
+export const getChannelVideos = (channelId: string, page = 0, size = 24) =>
+  app().GetChannelVideos(channelId, page, size);

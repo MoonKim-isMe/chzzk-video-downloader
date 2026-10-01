@@ -195,8 +195,35 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 2-B — VOD 목록 UI
 
-- [ ] VOD-3. 선택 채널 VOD 목록 UI 구현
-- [ ] VOD-4. 페이지네이션 또는 연속 조회 UI 구현
+- [ ] VOD-3. 선택 채널 VOD 목록 UI 구현 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-4. 페이지네이션 또는 연속 조회 UI 구현 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 2-B 구현 및 검증 현황
+
+구현 완료:
+
+- 저장 채널 선택 시 첫 VOD 페이지 자동 조회
+- VOD 썸네일, 제목, 영상 타입, 게시일, 재생시간, 조회수, 카테고리, 태그 표시
+- VOD가 없을 때 Empty 상태 표시
+- 초기 목록 조회 중 Skeleton 표시
+- API 오류 메시지 표시
+- `hasNext` / `nextPage` 기반 `더 보기` 조회 및 기존 목록 뒤에 추가
+- 채널 변경 시 ChannelVideoList를 채널 ID 기준으로 재마운트해 이전 요청/화면 상태 분리
+- Wails `GetChannelVideos` 호출용 TypeScript 타입 및 backend wrapper 추가
+
+검증 완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 격리 프론트엔드 검사
+- React/AntD 외부 타입을 최소 스텁으로 대체하여 JSX 구문, 내부 Video 타입, BackendApp 시그니처, 상태 업데이트 타입 일관성 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 치지직 VOD API와 Wails UI 통합 동작
+
+위 전체 프론트엔드 검증이 완료되면 VOD-3, VOD-4를 완료 처리한다.
 
 ### Phase 2-C — 상태 연결 및 안정화
 
