@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
+	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
 
 type fakeDownloadService struct {
@@ -251,5 +253,371 @@ func TestStartDownloadReportsCancellationAndStartsNext(t *testing.T) {
 	case <-secondStarted:
 	case <-time.After(time.Second):
 		t.Fatal("next queued task did not start")
+	}
+}
+
+
+func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
+	requests := make(chan downloader.DownloadRequest, 3)
+	release := make(chan struct{}, 3)
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			requests <- request
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + "." + request.OutputFormat,
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	firstDir := t.TempDir()
+	secondDir := t.TempDir()
+	store, err := appsettings.NewStore(appsettings.AppSettings{
+		DownloadDir:            firstDir,
+		Resolution:             appsettings.Resolution1080p,
+		OutputFormat:           appsettings.OutputFormatMKV,
+		MaxConcurrentDownloads: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	firstRequest := testStartRequest(t)
+	first, err := app.StartDownload(firstRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstActual := <-requests
+	if firstActual.OutputDir != firstDir ||
+		firstActual.FormatSelector != "bv*[height<=1080]+ba/b[height<=1080]" ||
+		firstActual.OutputFormat != "mkv" {
+		t.Fatalf("first settings not applied: %#v", firstActual)
+	}
+
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected queued second task, got %s", second.Status)
+	}
+
+	if _, err := app.UpdateSettings(appsettings.AppSettings{
+		DownloadDir:            secondDir,
+		Resolution:             appsettings.Resolution720p,
+		OutputFormat:           appsettings.OutputFormatWebM,
+		MaxConcurrentDownloads: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	release <- struct{}{}
+	select {
+	case secondActual := <-requests:
+		if secondActual.OutputDir != firstDir ||
+			secondActual.FormatSelector != "bv*[height<=1080]+ba/b[height<=1080]" ||
+			secondActual.OutputFormat != "mkv" {
+			t.Fatalf("queued task settings changed after update: %#v", secondActual)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second task did not start")
+	}
+
+	release <- struct{}{}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		task, ok := app.ensureDownloadQueue().Get(second.TaskID)
+		if ok && task.Status == downloader.TaskStatusCompleted {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	thirdRequest := testStartRequest(t)
+	thirdRequest.VideoNo = 78901
+	thirdRequest.URL = "https://chzzk.naver.com/video/78901"
+	if _, err := app.StartDownload(thirdRequest); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case thirdActual := <-requests:
+		if thirdActual.OutputDir != secondDir ||
+			thirdActual.FormatSelector != "bv*[height<=720]+ba/b[height<=720]" ||
+			thirdActual.OutputFormat != "webm" {
+			t.Fatalf("new settings not applied to new task: %#v", thirdActual)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("third task did not start")
+	}
+
+	release <- struct{}{}
+	_ = first
+}
+
+func TestUpdateSettingsIncreasingConcurrencyStartsQueuedTask(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{}, 2)
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			started <- request.URL
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	store, err := appsettings.NewStore(appsettings.Defaults(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	if _, err := app.StartDownload(testStartRequest(t)); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected second task queued, got %s", second.Status)
+	}
+
+	current := store.Get()
+	current.MaxConcurrentDownloads = 2
+	if _, err := app.UpdateSettings(current); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case url := <-started:
+		if url != secondRequest.URL {
+			t.Fatalf("unexpected started URL: %s", url)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued task did not start after increasing concurrency")
+	}
+
+	release <- struct{}{}
+	release <- struct{}{}
+}
+
+
+func TestRunningDownloadKeepsSettingsSnapshotAfterUpdate(t *testing.T) {
+	started := make(chan struct{}, 1)
+	observe := make(chan struct{})
+	observed := make(chan downloader.DownloadRequest, 1)
+	release := make(chan struct{})
+
+	firstDir := t.TempDir()
+	secondDir := t.TempDir()
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			started <- struct{}{}
+			select {
+			case <-observe:
+				observed <- request
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + "." + request.OutputFormat,
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	store, err := appsettings.NewStore(appsettings.AppSettings{
+		DownloadDir:            firstDir,
+		Resolution:             appsettings.Resolution1440p,
+		OutputFormat:           appsettings.OutputFormatMKV,
+		MaxConcurrentDownloads: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	if _, err := app.StartDownload(testStartRequest(t)); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	if _, err := app.UpdateSettings(appsettings.AppSettings{
+		DownloadDir:            secondDir,
+		Resolution:             appsettings.Resolution720p,
+		OutputFormat:           appsettings.OutputFormatWebM,
+		MaxConcurrentDownloads: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	close(observe)
+	select {
+	case request := <-observed:
+		if request.OutputDir != firstDir ||
+			request.FormatSelector != "bv*[height<=1440]+ba/b[height<=1440]" ||
+			request.OutputFormat != "mkv" {
+			t.Fatalf("running task snapshot changed: %#v", request)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("running request was not observed")
+	}
+	close(release)
+}
+
+func TestUpdateSettingsDecreasingConcurrencyWaitsForActiveSlots(t *testing.T) {
+	started := make(chan string, 3)
+	var releaseMu sync.Mutex
+	releases := map[string]chan struct{}{}
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			release := make(chan struct{})
+			releaseMu.Lock()
+			releases[request.URL] = release
+			releaseMu.Unlock()
+			started <- request.URL
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	store, err := appsettings.NewStore(appsettings.AppSettings{
+		DownloadDir:            t.TempDir(),
+		Resolution:             appsettings.ResolutionBest,
+		OutputFormat:           appsettings.OutputFormatMP4,
+		MaxConcurrentDownloads: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	requests := make([]downloader.StartDownloadRequest, 3)
+	for index := range requests {
+		requests[index] = testStartRequest(t)
+		requests[index].VideoNo = int64(91000 + index)
+		requests[index].URL = fmt.Sprintf("https://chzzk.naver.com/video/%d", requests[index].VideoNo)
+		if _, err := app.StartDownload(requests[index]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	firstStarted := <-started
+	secondStarted := <-started
+	if firstStarted == secondStarted {
+		t.Fatal("expected two distinct running tasks")
+	}
+
+	current := store.Get()
+	current.MaxConcurrentDownloads = 1
+	if _, err := app.UpdateSettings(current); err != nil {
+		t.Fatal(err)
+	}
+	if app.ensureDownloadQueue().MaxConcurrent() != 1 {
+		t.Fatalf("unexpected queue concurrency: %d", app.ensureDownloadQueue().MaxConcurrent())
+	}
+
+	releaseMu.Lock()
+	firstRelease := releases[firstStarted]
+	releaseMu.Unlock()
+	close(firstRelease)
+
+	select {
+	case url := <-started:
+		t.Fatalf("third task started while one existing task was still active: %s", url)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	releaseMu.Lock()
+	secondRelease := releases[secondStarted]
+	releaseMu.Unlock()
+	close(secondRelease)
+
+	select {
+	case url := <-started:
+		if url != requests[2].URL {
+			t.Fatalf("unexpected third task URL: %s", url)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("third task did not start after active count dropped below limit")
+	}
+
+	releaseMu.Lock()
+	thirdRelease := releases[requests[2].URL]
+	releaseMu.Unlock()
+	if thirdRelease != nil {
+		close(thirdRelease)
 	}
 }

@@ -28,6 +28,7 @@ type StartDownloadRequest struct {
 	OutputDir         string `json:"outputDir"`
 	FormatSelector    string `json:"formatSelector,omitempty"`
 	OutputTemplate    string `json:"outputTemplate,omitempty"`
+	OutputFormat      string `json:"outputFormat,omitempty"`
 }
 
 type DownloadTask struct {
@@ -69,6 +70,7 @@ func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 		OutputDir:      r.OutputDir,
 		FormatSelector: r.FormatSelector,
 		OutputTemplate: r.OutputTemplate,
+		OutputFormat:   r.OutputFormat,
 	}
 }
 

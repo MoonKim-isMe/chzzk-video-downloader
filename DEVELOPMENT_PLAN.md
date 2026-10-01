@@ -610,11 +610,242 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 
 ## Phase 5 — Settings
 
-- [ ] SET-1. 다운로드 디렉터리 선택
-- [ ] SET-2. 해상도 선택
-- [ ] SET-3. 출력 포맷 선택
-- [ ] SET-4. 동시 다운로드 수 설정
-- [ ] SET-5. 설정 UI 구현
+### Phase 5-A — Settings 모델 / 백엔드 API
+
+- [x] SET-5A-1. AppSettings 모델 및 기본값 정의
+- [x] SET-5A-2. 다운로드 경로 / 해상도 / 출력 포맷 / 동시 다운로드 수 Validation 구현
+- [x] SET-5A-3. 메모리 기반 Settings Store 구현
+- [x] SET-5A-4. GetSettings / UpdateSettings Wails API 구현
+- [x] SET-5A-5. 프론트엔드 AppSettings 타입 및 backend wrapper 추가
+
+#### Phase 5-A 설정 기준
+
+기본값:
+
+- 다운로드 경로: 사용자 홈의 `Downloads/CHZZK Video Downloader`
+- 해상도: `best`
+- 출력 포맷: `mp4`
+- 동시 다운로드 수: `1`
+
+지원 해상도:
+
+- `best`
+- `2160p`
+- `1440p`
+- `1080p`
+- `720p`
+
+지원 출력 포맷:
+
+- `mp4`
+- `mkv`
+- `webm`
+
+Validation:
+
+- 다운로드 경로는 비어 있을 수 없고 NUL 문자를 허용하지 않는다.
+- 해상도와 출력 포맷은 위 허용 목록만 저장한다.
+- 동시 다운로드 수는 `1~8` 범위로 제한한다.
+- UpdateSettings는 전체 설정을 검증한 후 한 번에 교체한다.
+- 잘못된 업데이트는 기존 설정을 변경하지 않는다.
+- 문자열 enum 값은 trim/lower-case 정규화 후 저장한다.
+
+저장 정책:
+
+- Phase 5에서는 앱 실행 중 메모리에만 설정을 보관한다.
+- 앱 재시작 후 설정 영속화는 Phase 6의 SQLite `DB-4`에서 구현한다.
+- Phase 5-A에서는 설정값을 다운로드 엔진/Queue에 적용하지 않는다. 실제 적용은 Phase 5-B에서 수행한다.
+
+#### Phase 5-A 검증 현황
+
+완료:
+
+- Go 1.23 격리 Settings 모듈에서 `gofmt` 성공
+- `go test ./...` 성공
+- `go test -race ./...` 성공
+- `go vet ./...` 성공
+- 기본 다운로드 경로 입력 기반 기본 설정 생성 검증
+- 해상도/출력 포맷 대소문자 및 공백 정규화 검증
+- 지원하지 않는 해상도/포맷/동시 다운로드 수 거부 검증
+- 잘못된 Update가 기존 Store 값을 변경하지 않는지 검증
+- Settings Store 동시 Get/Update race 검증
+- Wails runtime 및 기존 App 의존성을 stub으로 대체한 App 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
+- App GetSettings / UpdateSettings 조회·정규화·실패 시 기존 값 보존 검증
+- TypeScript 5.8.3 격리 fixture에서 AppSettings 및 GetSettings / UpdateSettings backend 계약 `tsc --noEmit` 성공
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 Wails generated binding 생성 결과 확인
+- 실제 프로젝트 의존성 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+
+### Phase 5-B — 다운로드 엔진 설정 적용
+
+- [x] SET-1. 다운로드 디렉터리 설정을 신규 Queue 작업에 적용
+- [x] SET-2. 해상도 설정을 yt-dlp format selector로 변환
+- [x] SET-3. 출력 포맷 설정을 yt-dlp/ffmpeg 옵션에 적용
+- [x] SET-4. 동시 다운로드 수를 Queue SetMaxConcurrent에 연결
+- [x] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
+- [x] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
+
+#### Phase 5-B 적용 기준
+
+- `StartDownload`은 Queue 등록 직전에 현재 `AppSettings` 전체를 한 번 읽어 다운로드 요청에 Snapshot으로 적용한다.
+- 호출자가 넘긴 `OutputDir`, `FormatSelector`, `OutputFormat`보다 AppSettings를 우선한다.
+- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷 Snapshot을 유지한다.
+- 설정 변경 후 이미 queued/running인 작업의 다운로드 옵션은 변경하지 않는다.
+- 설정 변경 후 새로 Queue에 등록하는 작업부터 새 설정을 사용한다.
+- 동시 다운로드 수는 개별 작업 Snapshot이 아니라 Scheduler 전역 정책으로 취급하며 `UpdateSettings` 즉시 `Queue.SetMaxConcurrent`에 반영한다.
+- Queue가 아직 생성되지 않았다면 최초 생성 시 현재 Settings의 `maxConcurrentDownloads`를 사용한다.
+- Queue 동시성 적용에 실패하면 Settings Store를 이전 값으로 복구한다.
+
+해상도 → yt-dlp format selector:
+
+- `best` → `bv*+ba/b`
+- `2160p` → `bv*[height<=2160]+ba/b[height<=2160]`
+- `1440p` → `bv*[height<=1440]+ba/b[height<=1440]`
+- `1080p` → `bv*[height<=1080]+ba/b[height<=1080]`
+- `720p` → `bv*[height<=720]+ba/b[height<=720]`
+
+출력 포맷:
+
+- `mp4 / mkv / webm`만 허용한다.
+- 병합 컨테이너 지정에는 `--merge-output-format`을 사용한다.
+- 이미 단일 컨테이너로 제공되는 영상도 최종 확장자를 설정값에 맞추기 위해 `--remux-video`를 함께 사용한다.
+- 재인코딩은 수행하지 않고 ffmpeg remux 범위로 처리한다.
+
+#### Phase 5-B 검증 현황
+
+완료:
+
+- Phase 5-B downloader/settings 실제 소스 조합을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go test -race ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- 모든 지원 해상도의 format selector 변환 검증
+- Settings 적용 시 호출자 다운로드 옵션이 Snapshot 값으로 교체되는지 검증
+- Command Builder에 `--format`, `--merge-output-format`, `--remux-video`가 함께 적용되는지 검증
+- 지원하지 않는 출력 포맷 거부 검증
+- App/Wails 의존성을 stub으로 대체한 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
+- queued 작업이 설정 변경 후에도 등록 당시 경로/1080p/MKV Snapshot을 유지하는지 검증
+- 설정 변경 후 신규 작업이 새 경로/720p/WebM 설정을 사용하는지 검증
+- maxConcurrent 1 → 2 변경 시 기존 Queue 재생성 없이 대기 작업이 즉시 시작되는지 검증
+- 최초 Queue 생성 시 현재 Settings의 maxConcurrent를 사용하는지 검증
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 yt-dlp + ffmpeg에서 각 해상도/출력 포맷 조합 다운로드
+- 실제 Wails generated binding 기반 통합 실행
+- `yarn typecheck`
+- `yarn build`
+- `wails build`
+
+### Phase 5-C — Settings UI
+
+- [ ] SET-5. 설정 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-1. 설정 버튼 및 우측 Drawer 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-2. 다운로드 경로 표시/선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+
+#### Phase 5-C UI 기준
+
+- 앱 헤더 우측에 `설정` 버튼을 표시한다.
+- 설정은 우측 Drawer로 열고 Ant Design `destroyOnHidden`을 사용한다.
+- Drawer가 열릴 때마다 `GetSettings()`를 다시 호출해 현재 백엔드 설정값으로 Form을 초기화한다.
+- 다운로드 폴더는 직접 입력 대신 읽기 전용 경로 + `폴더 선택` 버튼을 제공한다.
+- 폴더 선택은 Wails Go Runtime의 `OpenDirectoryDialog`를 사용한다.
+- 폴더 선택 취소는 현재 Form 값을 변경하지 않는다.
+- 해상도는 `최고 화질 / 2160p 이하 / 1440p 이하 / 1080p 이하 / 720p 이하`를 제공한다.
+- 출력 포맷은 `MP4 / MKV / WebM`을 제공한다.
+- 동시 다운로드 수는 정수 `1~8`만 허용한다.
+- 저장 전 프론트 Form Validation을 수행하고, 최종 Validation은 기존 `UpdateSettings` 백엔드가 다시 수행한다.
+- 저장 성공 시 성공 메시지를 표시하고 Drawer를 닫는다.
+- 백엔드 오류는 Drawer를 유지한 채 사용자 메시지로 표시한다.
+- 경로·해상도·포맷의 Queue Snapshot 정책과 동시 다운로드 수의 즉시 Scheduler 적용 정책을 Drawer 내부에 안내한다.
+- Phase 6 전까지 설정이 앱 재시작 시 초기화된다는 안내를 표시한다.
+
+#### Phase 5-C 검증 현황
+
+완료:
+
+- Wails v2.15 공식 Runtime 문서에서 Go `OpenDirectoryDialog(ctx, OpenDialogOptions)` API와 취소 시 빈 문자열 반환 동작 확인
+- 네이티브 폴더 선택 메서드를 재현한 Go 1.23.2 격리 fixture에서 `gofmt` 성공
+- 동일 fixture에서 `go test ./...` 성공
+- 동일 fixture에서 `go test -race ./...` 성공
+- 동일 fixture에서 `go vet ./...` 성공
+- 현재 Form 경로가 native dialog의 DefaultDirectory로 전달되는지 검증
+- 현재 경로가 비어 있으면 Settings의 downloadDir을 native dialog 기본 경로로 사용하는지 검증
+- 폴더 선택 취소 시 빈 문자열을 정상 처리하는지 검증
+- native dialog 오류를 Wails API 오류로 래핑하는지 검증
+- TypeScript 5.8.3 격리 fixture에서 SettingsDrawer `tsc --noEmit` 성공
+- AppSettings Form, 다운로드 경로 선택, Select/InputNumber 값 타입, 저장 호출 타입 확인
+- Header 설정 버튼 / 우측 Drawer 연결 구조 확인
+- backend wrapper의 SelectDownloadDirectory 계약 추가
+
+현재 실행 환경 제약으로 검증 대기:
+
+- Node.js 24 + 실제 Yarn 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- 실제 Wails generated binding에서 SelectDownloadDirectory 생성 결과
+- Windows 네이티브 OpenDirectoryDialog 실제 동작
+- `wails build`
+- 실제 앱에서 설정 저장 후 maxConcurrent / 신규 Queue 다운로드 옵션 반영 UI 통합
+
+위 실제 프론트엔드/Wails 검증 완료 후 Phase 5-C 체크 항목을 완료 처리한다.
+
+### Phase 5-D — 설정 통합 안정화
+
+- [x] SET-5D-1. 설정 변경 후 신규 Queue 작업 적용 검증
+- [x] SET-5D-2. 실행 중 작업의 설정 Snapshot 불변성 검증
+- [x] SET-5D-3. maxConcurrent 증가/감소 Wails 통합 검증
+- [x] SET-5D-4. 다운로드 경로 및 포맷/해상도 조합 검증
+- [x] SET-5D-5. Phase 6 SQLite 설정 영속화용 Settings 구조 확정
+
+#### Phase 5-D 안정화 기준
+
+- 실행 중 작업과 queued 작업의 다운로드 경로/해상도/출력 포맷은 Queue 등록 시점 Snapshot을 끝까지 유지한다.
+- Settings 변경 후 신규 Queue 작업부터 새 다운로드 옵션을 적용한다.
+- `maxConcurrentDownloads` 증가 시 빈 Scheduler 슬롯만큼 queued 작업을 즉시 실행한다.
+- `maxConcurrentDownloads` 감소 시 현재 실행 중인 작업을 강제 종료하지 않으며 active 수가 새 제한 미만이 될 때까지 신규 실행을 보류한다.
+- 지원하는 해상도 5종 × 출력 포맷 3종, 총 15개 조합이 동일한 다운로드 경로와 올바른 yt-dlp 인자로 변환되어야 한다.
+- Phase 6 설정 영속화 경계는 API용 `AppSettings`와 분리된 `StorageRecord`를 사용한다.
+- `StorageRecord` v1은 `schemaVersion / downloadDir / resolution / outputFormat / maxConcurrentDownloads`를 저장한다.
+- 저장 레코드를 복원할 때도 Normalize/Validate를 다시 수행하고 지원하지 않는 schemaVersion은 거부한다.
+- Phase 6 SQLite 구현에서는 단일 settings 레코드를 이 StorageRecord v1 구조로 매핑하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
+
+#### Phase 5-D 검증 현황
+
+완료:
+
+- Settings StorageRecord v1을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 모듈에서 `go test ./internal/settings` 성공
+- 동일 모듈에서 `go test -race ./internal/settings` 성공
+- 동일 모듈에서 `go vet ./internal/settings` 성공
+- StorageRecord JSON encode/decode → AppSettings round-trip 검증
+- 지원하지 않는 StorageRecord schemaVersion 거부 검증
+- 잘못된 저장 설정값 복원 거부 검증
+- downloader/settings/command 조합을 재현한 Go 1.23 격리 모듈에서 `go test`, `go test -race`, `go vet` 성공
+- 5개 해상도 × 3개 출력 포맷 = 15개 조합의 `--format / --paths / --merge-output-format / --remux-video` 검증
+- App/Queue/Settings 통합 fixture에서 `go test`, `go test -race`, `go vet` 성공
+- maxConcurrent 2 → 1 감소 시 기존 active 작업 유지 및 세 번째 작업 대기 검증
+- 실행 중 작업의 Settings Snapshot 불변성 검증
+- queued 작업의 Settings Snapshot 불변성 재검증
+- Settings 변경 이후 신규 작업에 새 경로/해상도/포맷 적용 검증
+- Phase 5-C 테스트에서 누락된 `errors` import를 발견해 수정
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 Node.js 24 + Yarn 의존성 기반 `yarn typecheck` / `yarn build`
+- `wails build`
+- 실제 Windows Wails 앱에서 Settings Drawer 저장 → Scheduler 증가/감소 통합 동작
+- 실제 yt-dlp + ffmpeg를 사용한 15개 조합 다운로드 결과 검증
+
+Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Windows/Wails/외부 도구 검증은 배포 환경 통합 검증으로 유지한다.
 
 ## Phase 6 — Persistence 및 Windows 패키징
 

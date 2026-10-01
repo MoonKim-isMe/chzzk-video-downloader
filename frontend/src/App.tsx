@@ -1,5 +1,6 @@
 import {
   App as AntdApp,
+  Button,
   Card,
   ConfigProvider,
   Empty,
@@ -16,6 +17,7 @@ import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import ChannelUrlTab from './features/channels/ChannelUrlTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
+import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
 import {
   getDownloadTasks,
@@ -38,6 +40,7 @@ function AppContent() {
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     getSavedChannels()
@@ -175,9 +178,14 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 4-C</Tag>
+          <Tag>Phase 5-C</Tag>
         </Space>
-        <Text className="!text-slate-400">Wails v2</Text>
+        <Space size={10}>
+          <Text className="!text-slate-400">Wails v2</Text>
+          <Button size="small" onClick={() => setSettingsOpen(true)}>
+            설정
+          </Button>
+        </Space>
       </Header>
 
       <Content className="overflow-auto p-6">
@@ -206,6 +214,8 @@ function AppContent() {
           ]}
         />
       </Content>
+
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Layout>
   );
 }

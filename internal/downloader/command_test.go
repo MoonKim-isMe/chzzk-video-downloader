@@ -50,6 +50,47 @@ func TestBuildDownloadCommand(t *testing.T) {
 	}
 }
 
+func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.T) {
+	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:            "https://chzzk.naver.com/video/12345",
+		OutputDir:      t.TempDir(),
+		FormatSelector: "bv*[height<=1080]+ba/b[height<=1080]",
+		OutputFormat:   "MKV",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedPairs := [][2]string{
+		{"--format", "bv*[height<=1080]+ba/b[height<=1080]"},
+		{"--merge-output-format", "mkv"},
+		{"--remux-video", "mkv"},
+	}
+	for _, pair := range expectedPairs {
+		found := false
+		for index := 0; index+1 < len(spec.Args); index++ {
+			if spec.Args[index] == pair[0] && spec.Args[index+1] == pair[1] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing argument pair %#v in %#v", pair, spec.Args)
+		}
+	}
+}
+
+func TestBuildDownloadCommandRejectsUnsupportedOutputFormat(t *testing.T) {
+	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:          "https://chzzk.naver.com/video/12345",
+		OutputDir:    t.TempDir(),
+		OutputFormat: "avi",
+	})
+	if err == nil {
+		t.Fatal("expected output format validation error")
+	}
+}
+
 func TestBuildDownloadCommandRejectsNonChzzkURL(t *testing.T) {
 	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
 		URL:       "https://example.com/video/12345",

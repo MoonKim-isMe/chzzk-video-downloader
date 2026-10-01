@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
+	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -29,8 +31,14 @@ type App struct {
 
 	queueMu       sync.Mutex
 	downloadQueue *downloader.Queue
-	shuttingDown  atomic.Bool
-	eventEmitter  func(downloader.DownloadTask)
+
+	settingsMu      sync.Mutex
+	settingsApplyMu sync.Mutex
+	settingsStore   *appsettings.Store
+
+	shuttingDown atomic.Bool
+	eventEmitter    func(downloader.DownloadTask)
+	directoryPicker func(context.Context, runtime.OpenDialogOptions) (string, error)
 }
 
 type AppInfo struct {
@@ -113,13 +121,75 @@ func (a *App) GetDefaultDownloadDir() (string, error) {
 	return downloader.DefaultOutputDir()
 }
 
-func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader.DownloadTask, error) {
-	if request.OutputDir == "" {
-		outputDir, err := downloader.DefaultOutputDir()
-		if err != nil {
-			return downloader.DownloadTask{}, err
+func (a *App) SelectDownloadDirectory(currentDirectory string) (string, error) {
+	defaultDirectory := strings.TrimSpace(currentDirectory)
+	if defaultDirectory == "" {
+		if current, err := a.GetSettings(); err == nil {
+			defaultDirectory = current.DownloadDir
 		}
-		request.OutputDir = outputDir
+	}
+
+	picker := a.directoryPicker
+	if picker == nil {
+		picker = runtime.OpenDirectoryDialog
+	}
+	selected, err := picker(a.appContext(), runtime.OpenDialogOptions{
+		Title:            "다운로드 폴더 선택",
+		DefaultDirectory: defaultDirectory,
+	})
+	if err != nil {
+		return "", fmt.Errorf("다운로드 폴더를 선택할 수 없습니다: %w", err)
+	}
+	return strings.TrimSpace(selected), nil
+}
+
+func (a *App) GetSettings() (appsettings.AppSettings, error) {
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+	return store.Get(), nil
+}
+
+func (a *App) UpdateSettings(next appsettings.AppSettings) (appsettings.AppSettings, error) {
+	a.settingsApplyMu.Lock()
+	defer a.settingsApplyMu.Unlock()
+
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+
+	previous := store.Get()
+	updated, err := store.Update(next)
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+
+	a.queueMu.Lock()
+	queue := a.downloadQueue
+	a.queueMu.Unlock()
+	if queue != nil {
+		if err := queue.SetMaxConcurrent(updated.MaxConcurrentDownloads); err != nil {
+			if _, rollbackErr := store.Update(previous); rollbackErr != nil {
+				return previous, fmt.Errorf("동시 다운로드 수 적용 실패 후 설정 복구에도 실패했습니다: %v / %w", rollbackErr, err)
+			}
+			return previous, fmt.Errorf("동시 다운로드 수를 적용할 수 없습니다: %w", err)
+		}
+	}
+
+	return updated, nil
+}
+
+func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader.DownloadTask, error) {
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return downloader.DownloadTask{}, err
+	}
+
+	request, err = downloader.ApplySettings(request, store.Get())
+	if err != nil {
+		return downloader.DownloadTask{}, err
 	}
 	if err := request.Validate(); err != nil {
 		return downloader.DownloadTask{}, err
@@ -149,9 +219,38 @@ func (a *App) ensureDownloadQueue() *downloader.Queue {
 	defer a.queueMu.Unlock()
 
 	if a.downloadQueue == nil {
-		a.downloadQueue = downloader.NewQueue(a.appContext(), a.downloadManager, a.emitDownloadState, 1)
+		maxConcurrent := appsettings.DefaultMaxConcurrentDownloads
+		if store, err := a.ensureSettingsStore(); err == nil {
+			maxConcurrent = store.Get().MaxConcurrentDownloads
+		}
+		a.downloadQueue = downloader.NewQueue(
+			a.appContext(),
+			a.downloadManager,
+			a.emitDownloadState,
+			maxConcurrent,
+		)
 	}
 	return a.downloadQueue
+}
+
+func (a *App) ensureSettingsStore() (*appsettings.Store, error) {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.settingsStore != nil {
+		return a.settingsStore, nil
+	}
+
+	downloadDir, err := downloader.DefaultOutputDir()
+	if err != nil {
+		return nil, err
+	}
+	store, err := appsettings.NewStore(appsettings.Defaults(downloadDir))
+	if err != nil {
+		return nil, err
+	}
+	a.settingsStore = store
+	return store, nil
 }
 
 func (a *App) emitDownloadState(task downloader.DownloadTask) {

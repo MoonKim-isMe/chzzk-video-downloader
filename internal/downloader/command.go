@@ -21,6 +21,7 @@ type DownloadRequest struct {
 	OutputDir      string `json:"outputDir"`
 	FormatSelector string `json:"formatSelector,omitempty"`
 	OutputTemplate string `json:"outputTemplate,omitempty"`
+	OutputFormat   string `json:"outputFormat,omitempty"`
 }
 
 type CommandSpec struct {
@@ -56,6 +57,11 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		outputTemplate = DefaultOutputTemplate
 	}
 
+	outputFormat, err := normalizeOutputFormat(request.OutputFormat)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+
 	args := []string{
 		"--ignore-config",
 		"--no-simulate",
@@ -72,6 +78,12 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--format", formatSelector,
 		"--paths", outputDir,
 		"--output", outputTemplate,
+	}
+	if outputFormat != "" {
+		args = append(args,
+			"--merge-output-format", outputFormat,
+			"--remux-video", outputFormat,
+		)
 	}
 
 	location, err := ffmpegLocation(toolchain)
@@ -107,6 +119,19 @@ func normalizeVideoURL(raw string) (string, error) {
 	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
 	parsed.RawPath = ""
 	return parsed.String(), nil
+}
+
+func normalizeOutputFormat(raw string) (string, error) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return "", nil
+	}
+	switch value {
+	case "mp4", "mkv", "webm":
+		return value, nil
+	default:
+		return "", fmt.Errorf("지원하지 않는 출력 포맷입니다: %s", value)
+	}
 }
 
 func normalizeOutputDir(raw string) (string, error) {

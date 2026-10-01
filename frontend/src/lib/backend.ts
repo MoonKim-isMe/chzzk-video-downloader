@@ -4,6 +4,7 @@ import type {
   StartDownloadRequest,
   ToolchainStatus,
 } from '../types/download';
+import type { AppSettings } from '../types/settings';
 import type { VideoListResult } from '../types/video';
 
 interface BackendApp {
@@ -15,6 +16,9 @@ interface BackendApp {
   GetChannelVideos(channelId: string, page: number, size: number): Promise<VideoListResult>;
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
+  SelectDownloadDirectory(currentDirectory: string): Promise<string>;
+  GetSettings(): Promise<AppSettings>;
+  UpdateSettings(settings: AppSettings): Promise<AppSettings>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
@@ -53,6 +57,13 @@ export const getChannelVideos = (channelId: string, page = 0, size = 24) =>
 export const getDownloadToolchainStatus = () => app().GetDownloadToolchainStatus();
 
 export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
+
+export const selectDownloadDirectory = (currentDirectory: string) =>
+  app().SelectDownloadDirectory(currentDirectory);
+
+export const getSettings = () => app().GetSettings();
+
+export const updateSettings = (settings: AppSettings) => app().UpdateSettings(settings);
 
 export const startDownload = (request: StartDownloadRequest) => app().StartDownload(request);
 

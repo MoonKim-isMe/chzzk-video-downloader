@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 4-D — Download Manager 통합 안정화**까지 구현 중입니다.
+현재는 **Phase 5-D — Settings 통합 안정화**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -136,7 +136,7 @@ Go 포맷:
 
 ```powershell
 cd ..
-gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go
+gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go internal/settings/*.go
 ```
 
 전체 Wails 빌드:
@@ -176,3 +176,56 @@ Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있습니
 - 값을 줄여도 이미 실행 중인 작업은 중단하지 않습니다.
 - 이후 작업부터 변경된 동시 실행 제한을 적용합니다.
 - Phase 5의 동시 다운로드 수 설정은 기존 Queue를 재생성하지 않고 이 Scheduler 설정에 연결합니다.
+
+## Phase 5 Settings 기준
+
+Phase 5에서는 설정을 앱 실행 중 메모리에 저장하며, Phase 5-B부터 새 Queue 작업의 실제 다운로드 옵션과 Scheduler에 적용합니다. 앱 재시작 후 영속화는 Phase 6에서 처리합니다.
+
+기본 설정:
+
+- 다운로드 경로: `Downloads/CHZZK Video Downloader`
+- 해상도: `best`
+- 출력 포맷: `mp4`
+- 동시 다운로드 수: `1`
+
+지원 해상도는 `best / 2160p / 1440p / 1080p / 720p`, 출력 포맷은 `mp4 / mkv / webm`이며 동시 다운로드 수는 `1~8` 범위입니다.
+
+## Phase 5-B 다운로드 설정 적용
+
+Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포맷을 Snapshot으로 고정합니다. 이후 Settings를 변경해도 이미 queued/running인 작업은 기존 옵션을 유지하며 새로 등록한 작업부터 새 값을 사용합니다.
+
+해상도 선택은 yt-dlp `--format`의 최대 height 조건으로 적용합니다.
+
+- best: `bv*+ba/b`
+- 2160p: `bv*[height<=2160]+ba/b[height<=2160]`
+- 1440p: `bv*[height<=1440]+ba/b[height<=1440]`
+- 1080p: `bv*[height<=1080]+ba/b[height<=1080]`
+- 720p: `bv*[height<=720]+ba/b[height<=720]`
+
+출력 포맷은 `mp4 / mkv / webm`을 지원하며 yt-dlp의 `--merge-output-format`과 `--remux-video`를 함께 사용합니다. 동시 다운로드 수는 Snapshot이 아니라 Queue Scheduler 전역 설정으로 즉시 반영됩니다.
+
+## Phase 5-C Settings UI
+
+앱 헤더 우측의 `설정` 버튼에서 우측 Drawer를 열 수 있습니다.
+
+Drawer에서는 다음 값을 편집합니다.
+
+- 다운로드 폴더: Wails native directory dialog로 선택
+- 해상도: 최고 화질 / 2160p / 1440p / 1080p / 720p 이하
+- 출력 포맷: MP4 / MKV / WebM
+- 동시 다운로드 수: 1~8
+
+Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 설정 영속화 전인 Phase 5에서는 앱 재시작 시 기본값으로 초기화됩니다.
+
+## Phase 5-D Settings 안정화
+
+Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
+
+- 다운로드 경로/해상도/출력 포맷은 Queue 등록 순간 Snapshot으로 고정합니다.
+- 실행 중이거나 대기 중인 작업은 이후 Settings 변경의 영향을 받지 않습니다.
+- 변경 후 새로 등록한 작업부터 새 다운로드 옵션을 사용합니다.
+- 동시 다운로드 수는 Scheduler 전역 설정으로 즉시 반영됩니다.
+- 동시 다운로드 수를 낮춰도 현재 실행 중인 작업은 종료하지 않습니다.
+- 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
+
+Phase 6 설정 영속화는 `internal/settings.StorageRecord` v1을 기준으로 구현합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`이며 복원 시 현재 Settings Validation을 다시 수행합니다.
