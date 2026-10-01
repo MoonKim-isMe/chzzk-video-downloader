@@ -27,3 +27,7 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+
+# Build-time bundled download tools
+internal/downloader/bundled/windows-amd64/*.exe
+internal/downloader/bundled/windows-amd64/bundle-manifest.generated.json

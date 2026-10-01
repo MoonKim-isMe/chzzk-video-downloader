@@ -419,6 +419,48 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 
 위 Wails/실 도구 통합 검증까지 완료되면 Phase 3-B/C의 검증 대기 항목을 완료 처리한다.
 
+### Phase 3-D — Windows Download Tool Bundle
+
+- [ ] DL-3D-1. Windows amd64용 yt-dlp / ffmpeg / ffprobe build-time 준비 스크립트 구현 — 구현 완료, Windows 실행 검증 대기
+- [ ] DL-3D-2. 다운로드 바이너리 SHA-256 검증 및 bundle manifest 생성 — 구현 완료, Windows 실행 검증 대기
+- [ ] DL-3D-3. Windows 빌드 시 다운로드 도구를 Go executable에 embed — 구현 완료, 실제 Wails build 검증 대기
+- [x] DL-3D-4. 앱 최초 실행 시 embedded 도구를 사용자 LocalAppData 관리 디렉터리로 자동 추출
+- [x] DL-3D-5. Resolver에 managed bundled tools 경로를 추가해 PATH 없이 실행 가능하게 구성
+- [ ] DL-3D-6. Wails Windows build hook 및 NSIS build helper를 bundle 준비 단계와 연결 — 구현 완료, Windows Wails/NSIS 실행 검증 대기
+- [x] DL-3D-7. 기존 환경변수 / app-tools / PATH fallback 호환성 유지
+
+#### Phase 3-D 배포 기준
+
+- Windows amd64 기본 배포물은 사용자의 별도 yt-dlp / ffmpeg 설치에 의존하지 않는다.
+- Windows build 전 공식 yt-dlp standalone exe와 FFmpeg Windows static build를 준비하고 SHA-256 checksum을 검증한다.
+- 바이너리는 Git Repository에 commit하지 않고 build-time 생성물로 유지한다.
+- 준비된 바이너리는 Go `embed`를 통해 앱 executable 내부에 포함한다.
+- 앱 실행 시 `%LOCALAPPDATA%/CHZZK Video Downloader/tools`에 필요한 도구를 자동 materialize한다.
+- Program Files 등 설치 디렉터리에 런타임 쓰기를 시도하지 않는다.
+- Resolver 탐색 우선순위는 환경변수 override → managed bundle → 앱 옆 tools → 앱 디렉터리 → PATH 순으로 유지한다.
+- Wails NSIS installer는 앱 executable 안에 다운로드 도구가 포함되므로 별도 외부 tool 파일 설치 규칙 없이 동일하게 동작한다.
+- Windows arm64 bundle은 현재 범위에 포함하지 않고 amd64 패키징을 기준으로 한다.
+
+#### Phase 3-D 검증 현황
+
+완료:
+
+- bundle manifest SHA-256 검증 / 손상 bundle 거부 단위 테스트
+- 최초 materialize / 동일 bundle 재사용 / bundle 변경 시 교체 단위 테스트
+- managed bundle Resolver 우선 탐색 테스트 추가
+- 기존 환경변수 / app-tools / PATH fallback 구조 유지
+- Linux Go 1.23 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
+- placeholder-only bundle 상태에서 `GOOS=windows GOARCH=amd64 go test -c` cross-compile 성공
+- `wails.json` Windows amd64 preBuild hook JSON 구조 확인
+- 다운로드 도구 오류 UI가 ToolStatus.error 세부 원인을 표시하도록 보강
+
+Windows 검증 대기:
+
+- `scripts/prepare-windows-tools.ps1` 실제 실행 및 SHA-256 검증
+- `scripts/dev.ps1` 또는 직접 `wails dev` 실행 후 managed bundle Toolchain Ready 확인
+- `scripts/build-windows.ps1` 실행 후 executable 내부 bundle materialize 확인
+- NSIS 설치본에서 PATH에 yt-dlp/ffmpeg가 없는 환경의 Toolchain Ready 확인
+
 ## Phase 4 — 다운로드 탭 및 Download Manager
 
 다운로드 탭에서는 현재 실행 중인 작업과 대기/완료/실패 상태를 시각적으로 확인할 수 있어야 한다.
@@ -961,6 +1003,6 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 ## Phase 7 — Windows 패키징
 
-- [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용
+- [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용 — Phase 3-D에서 executable bundle 기반 선행 구현, 최종 installer 검증은 Phase 7에서 수행
 - [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용
 - [ ] PKG-3. 최종 Windows 패키징 검증

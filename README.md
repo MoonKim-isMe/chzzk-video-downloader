@@ -1,6 +1,6 @@
 # CHZZK Video Downloader
 
-치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
+치지직 채널을 검색하거나 치지직 VOD URL을 직접 입력해 원하는 영상을 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
 현재는 **Phase 6 — Persistence 완료 후 UX Refinement**를 진행 중입니다.
 
@@ -84,31 +84,53 @@ yarn install
 cd ..
 ```
 
-## 다운로드 도구 탐색
+## 다운로드 도구 준비 및 탐색
 
-Phase 3-A부터 앱은 `yt-dlp`, `ffmpeg`, `ffprobe` 실행 파일을 다음 순서로 찾습니다.
+Windows amd64에서는 사용자가 yt-dlp / ffmpeg / ffprobe를 별도로 설치할 필요가 없도록 다운로드 도구를 앱 executable에 bundle합니다.
 
-1. `CHZZK_DOWNLOADER_TOOLS_DIR` 환경 변수로 지정한 디렉터리
-2. 앱 실행 파일 옆 `tools` 디렉터리
-3. 앱 실행 파일과 같은 디렉터리
-4. 시스템 `PATH`
+`wails dev` 또는 Windows build 전에 Wails pre-build hook이 `scripts/prepare-windows-tools.ps1`을 실행합니다. 스크립트는 다음 파일을 준비합니다.
 
-개발 환경에서는 PATH에 등록하거나 다음처럼 도구 디렉터리를 지정할 수 있습니다.
+- yt-dlp 공식 Windows standalone `yt-dlp.exe`
+- FFmpeg Windows x64 LGPL static build의 `ffmpeg.exe`
+- 동일 build의 `ffprobe.exe`
 
-```powershell
-$env:CHZZK_DOWNLOADER_TOOLS_DIR = "C:\\Tools\\chzzk-video-downloader"
-wails dev
+다운로드한 release asset은 공급자가 제공하는 SHA-256 checksum으로 검증한 뒤 Go executable에 embed됩니다. 바이너리 자체는 Git에 commit하지 않습니다.
+
+앱 실행 시 embedded 파일은 다음 관리 디렉터리에 자동 추출됩니다.
+
+```text
+%LOCALAPPDATA%\CHZZK Video Downloader\tools
 ```
 
-최종 배포 시 도구를 어떤 위치에 포함하고 업데이트할지는 Windows 패키징 Phase에서 확정합니다.
+따라서 설치 디렉터리가 Program Files여도 런타임 쓰기 권한이 필요하지 않습니다.
+
+도구 탐색 우선순위:
+
+1. `CHZZK_DOWNLOADER_TOOLS_DIR` 환경 변수
+2. 앱이 관리하는 LocalAppData bundle 디렉터리
+3. 앱 실행 파일 옆 `tools` 디렉터리
+4. 앱 실행 파일과 같은 디렉터리
+5. 시스템 `PATH`
+
+환경 변수와 PATH는 개발/고급 사용자용 override 및 fallback으로 유지합니다.
 
 ## 개발 실행
 
+Windows에서는 아래 스크립트를 권장합니다.
+
 ```powershell
-wails dev
+powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
 
-Wails가 Vite 개발 서버와 Go 애플리케이션을 함께 실행합니다.
+최초 실행에서는 Windows 다운로드 도구를 내려받고 checksum을 검증하므로 시간이 걸릴 수 있습니다. 이후에는 준비된 bundle을 재사용합니다.
+
+직접 `wails dev`를 실행해도 Windows amd64 pre-build hook이 같은 준비 스크립트를 실행합니다.
+
+도구를 최신 release로 강제 갱신하려면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -RefreshTools
+```
 
 ## 검증
 
@@ -215,7 +237,7 @@ Drawer에서는 다음 값을 편집합니다.
 - 출력 포맷: MP4 / MKV / WebM
 - 동시 다운로드 수: 1~8
 
-Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 설정 영속화 전인 Phase 5에서는 앱 재시작 시 기본값으로 초기화됩니다.
+Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 현재는 SQLite에 저장되어 앱 재시작 후에도 유지됩니다.
 
 ## Phase 5-D Settings 안정화
 
@@ -273,3 +295,28 @@ https://chzzk.naver.com/video/{videoNo}
 ```
 
 URL을 확인하면 videoNo 기반으로 VOD 메타데이터 한 건을 조회하고, 해당 영상 카드를 바로 Download Queue에 추가할 수 있습니다. 채널 검색은 별도로 채널 사용자를 검색하고 선택한 채널의 VOD 목록을 표시합니다.
+
+
+## Windows 빌드 및 설치 패키지의 다운로드 도구
+
+일반 Windows executable 빌드:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1
+```
+
+NSIS 설치 패키지 빌드:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer
+```
+
+Release build에서 최신 다운로드 도구를 다시 준비하려면 `-RefreshTools`를 함께 사용합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer -RefreshTools
+```
+
+다운로드 도구가 Go executable에 embed되므로 Wails NSIS installer가 별도의 yt-dlp/ffmpeg 설치 프로그램을 실행할 필요가 없습니다. 설치 후 첫 Toolchain 확인 시 embedded 도구가 LocalAppData에 자동 materialize됩니다.
+
+현재 bundle 대상은 Windows amd64입니다. Windows arm64 bundle은 별도 패키징 작업으로 취급합니다. Third-party 도구 출처와 라이선스 안내는 `THIRD_PARTY_NOTICES.md`를 참고합니다.
