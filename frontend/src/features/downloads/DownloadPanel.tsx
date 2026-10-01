@@ -31,6 +31,7 @@ interface DownloadPanelProps {
 }
 
 const statusMeta: Record<DownloadTask['status'], { label: string; color?: string }> = {
+  queued: { label: '대기 중' },
   running: { label: '다운로드 중', color: 'processing' },
   completed: { label: '완료', color: 'success' },
   failed: { label: '실패', color: 'error' },
@@ -139,13 +140,13 @@ function DownloadPanel({ selectedVideo, currentTask, onTaskStarted }: DownloadPa
     };
   }, [message]);
 
-  const running = currentTask?.status === 'running';
+  const busy = currentTask?.status === 'queued' || currentTask?.status === 'running';
   const canStart = Boolean(
     selectedVideo &&
       outputDir &&
       toolchain?.downloadReady &&
       toolchain.mergeReady &&
-      !running &&
+      !busy &&
       !starting,
   );
 

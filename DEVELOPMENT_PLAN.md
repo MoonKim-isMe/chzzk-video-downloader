@@ -420,14 +420,77 @@ https://chzzk.naver.com/{channelId}
 - ETA
 - 출력 경로
 
-- [ ] DM-1. 앱 주요 탐색에 다운로드 탭 추가
-- [ ] DM-2. 다운로드 Queue 구현
-- [ ] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱
-- [ ] DM-4. 진행 중 다운로드 Progress UI 구현
-- [ ] DM-5. 대기/진행/완료/실패 상태 시각화
-- [ ] DM-6. 다운로드 취소 처리
-- [ ] DM-7. 중복 다운로드 방지
-- [ ] DM-8. 다운로드 완료 후 결과 파일 경로 표시
+### Phase 4-A — Download Manager / Queue 백엔드
+
+- [x] DM-2. 다운로드 Queue 구현
+- [x] DM-7. queued/running 상태의 videoNo 기준 중복 다운로드 방지
+- [x] DM-4A-1. DownloadTask Registry 및 등록 순서 기반 전체 작업 조회 구현
+- [x] DM-4A-2. queued → running FIFO 자동 스케줄링 구현
+- [x] DM-4A-3. 완료/실패/취소 Task를 메모리 Registry에 유지
+- [x] DM-4A-4. 현재 동시 실행 수 1개 고정 및 Phase 5 확장 가능한 Executor/Queue 분리
+- [x] DM-4A-5. 기존 StartDownload API를 Queue 등록 API로 호환 확장
+- [x] DM-4A-6. GetDownloadTasks Wails API 및 프론트엔드 타입/wrapper 추가
+
+#### Phase 4-A 동작 기준
+
+- 첫 등록 작업은 즉시 `running`으로 전환하고 실제 실행은 goroutine에서 처리한다.
+- 실행 중 작업이 있으면 이후 등록 작업은 FIFO `queued` 상태로 유지한다.
+- 실행 작업이 완료/실패/취소되면 다음 queued 작업을 자동으로 시작한다.
+- queued/running 상태인 동일 `videoNo`는 중복 등록을 거부한다.
+- completed/failed/cancelled 상태 작업은 Registry에 남지만 동일 VOD의 재다운로드를 차단하지 않는다.
+- Task Registry는 현재 메모리 기반이며 SQLite 영속화는 Phase 6에서 구현한다.
+- Phase 4-A에서는 queued 작업 취소 UI/정책을 확장하지 않는다. 해당 범위는 Phase 4-B에서 처리한다.
+- 동시 실행 수는 1개로 유지하며 설정 기반 동시 실행 수 확장은 Phase 5에서 처리한다.
+
+#### Phase 4-A 검증 현황
+
+완료:
+
+- Phase 4-A Queue 소스를 재현한 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 Go 모듈에서 `go test ./internal/downloader` 성공
+- 동일 격리 Go 모듈에서 `go vet ./internal/downloader` 성공
+- 첫 작업 running / 두 번째 작업 queued 상태 검증
+- FIFO 순서 및 이전 작업 종료 후 다음 작업 자동 시작 검증
+- queued/running 동일 videoNo 중복 등록 차단 검증
+- completed 이후 동일 VOD 재등록 허용 검증
+- 실행 중 작업 취소 후 다음 queued 작업 자동 시작 회귀 검증
+- Queue Stop 이후 신규 등록 거부 검증
+- Wails runtime을 최소 stub으로 대체한 App 통합 fixture에서 `go test ./...` 성공
+- 동일 App 통합 fixture에서 `go vet ./...` 성공
+- App `StartDownload` → Queue 등록, `GetDownloadTasks`, 중복 차단, 다음 작업 자동 시작 경로 검증
+- TypeScript 5.8.3 격리 fixture에서 queued 상태, `GetDownloadTasks()` 반환 타입, DownloadPanel status map 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...`
+- 실제 Wails generated binding 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 yt-dlp 다운로드 여러 건을 등록한 FIFO 통합 동작
+
+### Phase 4-B — Queue 제어 및 취소 안정화
+
+- [ ] DM-6. queued/running 작업 취소 처리
+- [ ] DM-4B-1. 실행 중 작업 실패/취소 후 다음 Queue 지속 실행 검증
+- [ ] DM-4B-2. 대기 작업 취소 시 Queue에서 제거하고 cancelled 상태 유지
+- [ ] DM-4B-3. 종료/취소 경합 시 Task 상태 일관성 보장
+
+### Phase 4-C — Download Manager UI
+
+- [ ] DM-1. 다운로드 탭을 다중 Task Manager 화면으로 확장
+- [ ] DM-4. 진행 중 다운로드 Progress UI를 Task 목록 단위로 확장
+- [ ] DM-5. 대기/진행/완료/실패/취소 상태 시각화
+- [ ] DM-8. 다운로드 완료 후 결과 파일 경로를 Task별 표시
+- [ ] DM-4C-1. VOD 화면의 다운로드 시작 동작을 Queue 추가 흐름으로 변경
+- [ ] DM-4C-2. GetDownloadTasks 초기 조회 + download:state 증분 이벤트 병합
+
+### Phase 4-D — 통합 안정화 및 Phase 5 준비
+
+- [ ] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱의 다중 Task 통합 검증
+- [ ] DM-4D-1. 빠른 연속 Queue 등록 순서 검증
+- [ ] DM-4D-2. 완료/실패/취소 직후 다음 작업 시작 검증
+- [ ] DM-4D-3. Go/React 이벤트 순서 및 Task Registry 최종 일관성 검증
+- [ ] DM-4D-4. Phase 5 maxConcurrentDownloads 확장을 위한 Scheduler 구조 확정
 
 ## Phase 5 — Settings
 

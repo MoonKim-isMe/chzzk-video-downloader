@@ -12,6 +12,7 @@ const DownloadStateEvent = "download:state"
 type TaskStatus string
 
 const (
+	TaskStatusQueued    TaskStatus = "queued"
 	TaskStatusRunning   TaskStatus = "running"
 	TaskStatusCompleted TaskStatus = "completed"
 	TaskStatusFailed    TaskStatus = "failed"
@@ -41,7 +42,8 @@ type DownloadTask struct {
 	Progress          DownloadProgress `json:"progress"`
 	FinalPath         string           `json:"finalPath,omitempty"`
 	Error             string           `json:"error,omitempty"`
-	StartedAt         string           `json:"startedAt"`
+	QueuedAt          string           `json:"queuedAt"`
+	StartedAt         string           `json:"startedAt,omitempty"`
 	FinishedAt        string           `json:"finishedAt,omitempty"`
 }
 

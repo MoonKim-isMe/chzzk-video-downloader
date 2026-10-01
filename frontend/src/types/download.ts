@@ -1,4 +1,4 @@
-export type DownloadTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type DownloadTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface ToolStatus {
   name: string;
@@ -51,6 +51,7 @@ export interface DownloadTask {
   progress: DownloadProgress;
   finalPath?: string;
   error?: string;
-  startedAt: string;
+  queuedAt: string;
+  startedAt?: string;
   finishedAt?: string;
 }

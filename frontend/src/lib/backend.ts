@@ -16,6 +16,7 @@ interface BackendApp {
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
+  GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
 }
 
@@ -54,5 +55,7 @@ export const getDownloadToolchainStatus = () => app().GetDownloadToolchainStatus
 export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
 
 export const startDownload = (request: StartDownloadRequest) => app().StartDownload(request);
+
+export const getDownloadTasks = () => app().GetDownloadTasks();
 
 export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);

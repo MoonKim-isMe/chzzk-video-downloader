@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 3-C — Wails / 프론트엔드 다운로드 연결**까지 구현 중입니다.
+현재는 **Phase 4-A — Download Manager / Queue 백엔드**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -27,6 +27,10 @@
 - yt-dlp / ffmpeg / ffprobe 실행 파일 탐색 및 버전 확인
 - yt-dlp 단일 VOD 기본 명령 생성
 - stdout/stderr 라인 스트리밍 및 exit code 오류 처리
+- 메모리 기반 DownloadTask Registry 및 FIFO Queue
+- queued/running videoNo 중복 등록 방지
+- 작업 완료/실패/취소 후 다음 Queue 자동 실행
+- GetDownloadTasks 기반 전체 작업 조회
 
 Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 앱 재실행 후에도 유지되는 영속 저장은 이후 SQLite Phase에서 추가합니다.
 
@@ -148,14 +152,15 @@ Wails v2 Windows 애플리케이션은 WebView2 Runtime을 사용합니다. Wind
 
 세부 Phase와 진행 상태는 [`DEVELOPMENT_PLAN.md`](./DEVELOPMENT_PLAN.md)를 기준으로 관리합니다.
 
-## Phase 3 다운로드 동작
+## Phase 3~4 다운로드 동작
 
-Phase 3-C 기준으로 다운로드 탭에서 채널 VOD 목록에서 선택한 영상 하나를 실제 다운로드 대상으로 사용할 수 있습니다.
+Phase 4-A 기준으로 Phase 3의 단일 다운로드 엔진을 FIFO Download Queue가 감싸며 여러 VOD 작업을 순서대로 관리할 수 있습니다.
 
-- 한 번에 하나의 VOD만 실행합니다.
+- 현재 한 번에 하나의 VOD만 실행하며 이후 작업은 queued 상태로 대기합니다.
 - 다운로드 시작 전에 yt-dlp, ffmpeg, ffprobe 상태를 확인합니다.
 - 기본 저장 위치는 사용자 홈의 `Downloads/CHZZK Video Downloader`입니다.
 - 진행률, 다운로드 크기, 전체 크기, 속도, ETA를 `download:state` 이벤트로 React에 전달합니다.
 - 다운로드 중에는 취소할 수 있습니다.
 - 완료 시 ffmpeg 후처리까지 끝난 최종 파일 경로를 표시합니다.
-- Queue 및 동시 다운로드는 Phase 4에서 추가합니다.
+- Phase 4-A부터 여러 VOD를 FIFO Queue에 등록할 수 있으며 실제 동시 실행은 1개로 유지합니다.
+- queued 작업 취소와 전체 Task 목록 UI는 Phase 4-B/C에서 확장합니다.
