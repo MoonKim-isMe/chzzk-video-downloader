@@ -374,6 +374,10 @@ select {
   margin-block: 28px;
 }
 
+.channel-load-more {
+  margin-top: 12px;
+}
+
 .channel-vod-column {
   min-width: 0;
 }

@@ -1007,6 +1007,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 좌측 검색/북마크 목록과 우측 VOD 목록은 각각 `min-height: 0` + `overflow-y: auto`로 독립 스크롤한다.
 - URL 직접 입력과 다운로드 탭은 별도의 `app-scroll-view`에서 화면 단위 스크롤을 유지한다.
 - 기본 gap은 Workspace 16px, 내부 목록 8~12px로 통일해 불필요한 세로 공백을 줄인다.
+- 검색 결과 목록과 `더 보기` 액션 사이에는 12px 간격을 유지해 마지막 카드와 버튼이 붙어 보이지 않도록 한다.
 - 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
 - Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.

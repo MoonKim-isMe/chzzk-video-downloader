@@ -105,14 +105,15 @@ function ChannelSearchTab({
         )}
 
         {result.hasNext && (
-          <Button
-            block
-            className="mt-3"
-            loading={loadingMore}
-            onClick={() => void runSearch(result.nextOffset, true)}
-          >
-            더 보기
-          </Button>
+          <div className="channel-load-more">
+            <Button
+              block
+              loading={loadingMore}
+              onClick={() => void runSearch(result.nextOffset, true)}
+            >
+              더 보기
+            </Button>
+          </div>
         )}
       </div>
     </div>
