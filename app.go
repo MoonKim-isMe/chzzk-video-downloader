@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
+)
 
 const (
 	appName    = "CHZZK Video Downloader"
@@ -8,7 +12,9 @@ const (
 )
 
 type App struct {
-	ctx context.Context
+	ctx          context.Context
+	chzzkClient  *chzzk.Client
+	channelStore *chzzk.Store
 }
 
 type AppInfo struct {
@@ -18,11 +24,21 @@ type AppInfo struct {
 }
 
 func NewApp() *App {
-	return &App{}
+	return &App{
+		chzzkClient:  chzzk.NewClient(),
+		channelStore: chzzk.NewStore(),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+func (a *App) appContext() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
 }
 
 func (a *App) GetAppInfo() AppInfo {
@@ -31,4 +47,28 @@ func (a *App) GetAppInfo() AppInfo {
 		Version: appVersion,
 		Runtime: "Wails v2",
 	}
+}
+
+func (a *App) SearchChannels(keyword string, offset, size int) (chzzk.ChannelSearchResult, error) {
+	return a.chzzkClient.SearchChannels(a.appContext(), keyword, offset, size)
+}
+
+func (a *App) ResolveChannelURL(rawURL string) (chzzk.Channel, error) {
+	channelID, _, err := chzzk.ParseChannelURL(rawURL)
+	if err != nil {
+		return chzzk.Channel{}, err
+	}
+	return a.chzzkClient.GetChannel(a.appContext(), channelID)
+}
+
+func (a *App) GetSavedChannels() []chzzk.Channel {
+	return a.channelStore.List()
+}
+
+func (a *App) SaveChannel(channel chzzk.Channel) ([]chzzk.Channel, error) {
+	return a.channelStore.Save(channel)
+}
+
+func (a *App) RemoveSavedChannel(channelID string) []chzzk.Channel {
+	return a.channelStore.Remove(channelID)
 }
