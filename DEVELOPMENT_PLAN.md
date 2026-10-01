@@ -165,11 +165,45 @@ https://chzzk.naver.com/{channelId}
 
 ## Phase 2 — 채널 VOD 목록
 
-- [ ] VOD-1. 비공식 `/service/v1/channels/{channelId}/videos` 기반 채널별 VOD 목록 조회 구현
-- [ ] VOD-2. VOD 메타데이터 모델 정의
-- [ ] VOD-3. VOD 목록 UI 구현
-- [ ] VOD-4. 페이지네이션 또는 연속 조회 처리
-- [ ] VOD-5. 비공식 API 응답 변경 및 오류 상태 처리
+### Phase 2-A — VOD API 및 모델
+
+- [x] VOD-1. 비공식 `/service/v1/channels/{channelId}/videos` 기반 채널별 VOD 목록 조회 구현
+- [x] VOD-2. VOD 메타데이터 모델 정의
+- [x] VOD-2A-1. page/size/totalCount/totalPages 기반 페이지 메타데이터 처리
+- [x] VOD-2A-2. VOD URL 생성 및 Phase 3 전달용 videoNo 정규화
+- [x] VOD-2A-3. 잘못된 channelId, API 오류 코드, 비정상 JSON, 예상하지 못한 VOD 응답 형태 처리
+
+#### Phase 2-A 검증 현황
+
+완료:
+
+- `gofmt` 적용
+- Phase 2-A VOD 계층을 재현한 격리 Go 테스트 하네스에서 `go test ./internal/chzzk` 성공
+- VOD 목록 요청 파라미터 및 응답 모델 변환 단위 테스트
+- 페이지/size 보정 및 다음 페이지 계산 단위 테스트
+- API 오류 코드 및 비정상 JSON 응답 단위 테스트
+- VOD 핵심 필드 누락 응답 감지 단위 테스트
+
+현재 실행 환경 제약으로 실제 Repository 전체 체크아웃 기반의 `go test ./...` 및 `wails build`는 수행하지 못했다.
+
+확인 사항:
+
+- VOD 목록은 `sortType=LATEST`, `pagingType=PAGE`, `page`, `size`를 사용한다.
+- 기본 페이지 크기는 24, 최대 페이지 크기는 50으로 제한한다.
+- `Video` 모델에 videoNo, 제목, 타입, 게시일, 썸네일, 재생시간, 조회수, 카테고리, 성인 여부, 태그, 채널 정보와 표준 치지직 VOD URL을 포함한다.
+- 실제 목록 화면과 연속 조회 UX는 Phase 2-B에서 구현한다.
+
+### Phase 2-B — VOD 목록 UI
+
+- [ ] VOD-3. 선택 채널 VOD 목록 UI 구현
+- [ ] VOD-4. 페이지네이션 또는 연속 조회 UI 구현
+
+### Phase 2-C — 상태 연결 및 안정화
+
+- [ ] VOD-5. 비공식 API 응답 변경 및 UI 오류 상태/재시도 처리
+- [ ] VOD-2C-1. 채널 전환 시 VOD 상태 초기화
+- [ ] VOD-2C-2. 페이지 병합 시 videoNo 기준 중복 제거
+- [ ] VOD-2C-3. Phase 3 다운로드에 전달할 선택 VOD 상태 확정
 
 ## Phase 3 — 단일 VOD 다운로드
 

@@ -72,3 +72,7 @@ func (a *App) SaveChannel(channel chzzk.Channel) ([]chzzk.Channel, error) {
 func (a *App) RemoveSavedChannel(channelID string) []chzzk.Channel {
 	return a.channelStore.Remove(channelID)
 }
+
+func (a *App) GetChannelVideos(channelID string, page, size int) (chzzk.VideoListResult, error) {
+	return a.chzzkClient.GetChannelVideos(a.appContext(), channelID, page, size)
+}
