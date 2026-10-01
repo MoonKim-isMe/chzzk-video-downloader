@@ -70,7 +70,12 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 		}
 	}
 
-	taskID := fmt.Sprintf("download-%d-%d", request.VideoNo, q.counter.Add(1))
+	taskID := fmt.Sprintf(
+		"download-%d-%d-%d",
+		request.VideoNo,
+		time.Now().UTC().UnixNano(),
+		q.counter.Add(1),
+	)
 	task := DownloadTask{
 		TaskID:            taskID,
 		VideoNo:           request.VideoNo,

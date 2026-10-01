@@ -766,7 +766,7 @@ Validation:
 - 저장 성공 시 성공 메시지를 표시하고 Drawer를 닫는다.
 - 백엔드 오류는 Drawer를 유지한 채 사용자 메시지로 표시한다.
 - 경로·해상도·포맷의 Queue Snapshot 정책과 동시 다운로드 수의 즉시 Scheduler 적용 정책을 Drawer 내부에 안내한다.
-- Phase 6 전까지 설정이 앱 재시작 시 초기화된다는 안내를 표시한다.
+- Phase 6-P 완료에 따라 설정이 SQLite에 저장되고 앱 재시작 후 복원된다는 안내를 표시한다.
 
 #### Phase 5-C 검증 현황
 
@@ -849,10 +849,64 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 ## Phase 6 — Persistence 및 Windows 패키징
 
-- [ ] DB-1. SQLite 초기화 및 마이그레이션 구조 구성
-- [ ] DB-2. 저장 채널 영속화
-- [ ] DB-3. 다운로드 이력 영속화
-- [ ] DB-4. 설정 영속화
+### Phase 6-P — Persistence
+
+- [ ] DB-1. SQLite 초기화 및 마이그레이션 구조 구성 — 구현 완료, 실제 Go SQLite driver 통합 검증 대기
+- [ ] DB-2. 저장 채널 영속화 — 구현 완료, 실제 Go SQLite driver 통합 검증 대기
+- [ ] DB-3. 다운로드 이력 영속화 — 구현 완료, 실제 Go SQLite driver 통합 검증 대기
+- [ ] DB-4. 설정 영속화 — 구현 완료, 실제 Go SQLite driver 통합 검증 대기
+
+#### Phase 6-P 저장 기준
+
+- SQLite는 CGO 없이 Windows 빌드가 가능한 `modernc.org/sqlite` driver를 사용한다.
+- 데이터베이스 기본 위치는 OS 사용자 설정 디렉터리 아래 `CHZZK Video Downloader/data.sqlite3`로 한다.
+- SQLite 연결은 앱 단일 로컬 DB 사용 패턴에 맞춰 최대 connection 수를 1로 제한한다.
+- `foreign_keys=ON`, `busy_timeout=5000`, `journal_mode=WAL`을 적용한다.
+- `schema_migrations` 테이블과 순차 migration version으로 schema 변경을 관리한다.
+- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성한다.
+- 저장 채널은 앱 시작 시 SQLite에서 읽어 기존 `chzzk.Store`에 복원한다.
+- 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
+- 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.
+- 앱 재시작 시 이전 queued/running 이력은 실제 프로세스가 존재하지 않으므로 cancelled로 복구하고 finishedAt과 중단 오류를 기록한다.
+- 완료/실패/취소 다운로드 이력은 앱 재시작 후에도 다운로드 탭에서 조회할 수 있다.
+- 재시작 간 download taskId 충돌을 방지하기 위해 Task ID에 UTC UnixNano와 process-local counter를 함께 사용한다.
+- Settings는 Phase 5-D의 `StorageRecord v1`을 SQLite 단일 row(id=1)에 저장한다.
+- 앱 시작 시 저장된 Settings를 복원하고 해당 `maxConcurrentDownloads`로 Queue를 생성한다.
+- Settings 저장 실패 시 메모리 Settings와 Queue 동시성 값을 이전 상태로 rollback한다.
+- Persistence 초기화 실패 시 앱은 기존 메모리 기반 동작으로 fallback하고 Wails error log를 남긴다.
+- Phase 6-P에서는 Windows 패키징, yt-dlp/ffmpeg 번들링, WebView2 배포 정책을 변경하지 않는다.
+
+#### Phase 6-P 검증 현황
+
+구현/정적 확인 완료:
+
+- `internal/persistence`에 SQLite open / migration / channel / download history / settings repository 구현
+- migration v1 SQL을 SQLite 호환 문법 기준으로 확인
+- 저장 채널 add/delete/restore 경로 구현
+- DownloadTask 전체 필드 및 Progress 필드 저장/복원 경로 구현
+- queued/running 중단 이력 cancelled 복구 경로 구현
+- Settings StorageRecord v1 저장/복원 경로 구현
+- 앱 startup에서 DB → 채널/Settings 복원 → Queue 생성 순서 연결
+- Settings 변경 시 SQLite 저장과 Scheduler rollback 경로 연결
+- 다운로드 이벤트 → SQLite upsert → Wails event 순서 연결
+- 다운로드 이력과 현재 Queue Task merge 경로 구현
+- Settings Drawer의 재시작 초기화 안내를 SQLite 영속화 안내로 갱신
+- 저장 채널 복원용 `Store.ReplaceAll` 구현 및 단위 테스트 추가
+- Persistence repository 및 App 재시작 시나리오 테스트 코드 추가
+
+현재 실행 환경 제약으로 검증 대기:
+
+- `modernc.org/sqlite` module 다운로드가 DNS/network 차단으로 불가능하여 실제 Go SQLite driver 기반 `go test ./...` 미실행
+- 실제 Repository `go mod tidy` 및 go.sum 생성 확인
+- 실제 Go SQLite driver로 migration idempotency / CRUD / interrupted recovery 테스트 실행
+- 실제 Wails 앱을 재시작해 저장 채널 / 다운로드 이력 / Settings 복원 확인
+- Node.js 24 + Yarn 기반 `yarn typecheck` / `yarn build`
+- `wails build`
+
+위 실제 SQLite driver 통합 검증이 완료되면 DB-1~DB-4를 완료 처리한다.
+
+### Phase 6-PKG — Windows 패키징
+
 - [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용
 - [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용
 - [ ] PKG-3. 최종 Windows 패키징 검증

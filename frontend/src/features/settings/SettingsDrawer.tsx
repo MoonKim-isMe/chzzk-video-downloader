@@ -125,7 +125,7 @@ function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       destroyOnHidden
       extra={
         <Text className="!text-xs !text-slate-500">
-          Phase 5-C
+          Phase 6 Persistence
         </Text>
       }
       footer={
@@ -226,10 +226,10 @@ function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
 
           <Alert
             className="mt-3"
-            type="warning"
+            type="success"
             showIcon
-            message="현재 설정은 앱 재시작 시 초기화됩니다."
-            description="설정 영속화는 Phase 6에서 SQLite로 추가합니다."
+            message="설정은 앱 재시작 후에도 유지됩니다."
+            description="저장한 설정은 SQLite에 보관되며 다음 실행 시 자동으로 복원됩니다."
           />
         </Form>
       )}

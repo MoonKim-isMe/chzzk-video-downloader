@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 5-D — Settings 통합 안정화**까지 구현 중입니다.
+현재는 **Phase 6-P — SQLite Persistence**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -136,7 +136,7 @@ Go 포맷:
 
 ```powershell
 cd ..
-gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go internal/settings/*.go
+gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go internal/settings/*.go internal/persistence/*.go
 ```
 
 전체 Wails 빌드:
@@ -179,7 +179,7 @@ Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있습니
 
 ## Phase 5 Settings 기준
 
-Phase 5에서는 설정을 앱 실행 중 메모리에 저장하며, Phase 5-B부터 새 Queue 작업의 실제 다운로드 옵션과 Scheduler에 적용합니다. 앱 재시작 후 영속화는 Phase 6에서 처리합니다.
+Settings는 SQLite에 저장되며 앱 재시작 후 자동으로 복원됩니다. 다운로드 옵션 Snapshot 및 Scheduler 적용 정책은 Phase 5-B 기준을 유지합니다.
 
 기본 설정:
 
@@ -229,3 +229,25 @@ Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
 - 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
 
 Phase 6 설정 영속화는 `internal/settings.StorageRecord` v1을 기준으로 구현합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`이며 복원 시 현재 Settings Validation을 다시 수행합니다.
+
+## Phase 6-P SQLite Persistence
+
+Phase 6의 Persistence만 먼저 구현합니다. Windows 패키징 및 외부 도구 번들링은 아직 변경하지 않습니다.
+
+데이터베이스 기본 위치:
+
+```text
+<OS 사용자 설정 디렉터리>/CHZZK Video Downloader/data.sqlite3
+```
+
+SQLite에는 다음 데이터를 저장합니다.
+
+- 저장 채널
+- 다운로드 작업/진행 상태/완료 이력
+- Settings
+
+앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. 완료/실패/취소 이력은 다운로드 탭에 계속 표시됩니다.
+
+Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v1`을 단일 row로 저장하고 복원 시 현재 Validation을 다시 수행합니다.
+
+SQLite driver는 Windows에서 CGO 없이 사용할 수 있는 `modernc.org/sqlite`를 사용합니다. 현재 실행 환경은 외부 Go module 다운로드가 차단되어 실제 driver 기반 전체 테스트와 `go mod tidy`는 Windows/네트워크 가능 환경에서 추가 확인이 필요합니다.

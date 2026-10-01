@@ -94,3 +94,40 @@ func TestStoreDeduplicatesChannelID(t *testing.T) {
 		t.Fatalf("expected 1 channel, got %d", got)
 	}
 }
+
+
+func TestStoreReplaceAllRestoresChannels(t *testing.T) {
+	store := NewStore()
+	secondID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	err := store.ReplaceAll([]Channel{
+		{ChannelID: testChannelID, ChannelName: "Z 채널"},
+		{ChannelID: secondID, ChannelName: "A 채널"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	channels := store.List()
+	if len(channels) != 2 {
+		t.Fatalf("expected 2 channels, got %d", len(channels))
+	}
+	if channels[0].ChannelID != secondID || channels[0].ChannelURL != ChannelURL(secondID) {
+		t.Fatalf("unexpected restored channels: %#v", channels)
+	}
+}
+
+func TestStoreReplaceAllRejectsInvalidChannelWithoutChangingStore(t *testing.T) {
+	store := NewStore()
+	if _, err := store.Save(Channel{ChannelID: testChannelID, ChannelName: "기존"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.ReplaceAll([]Channel{{ChannelID: "invalid", ChannelName: "잘못됨"}}); err == nil {
+		t.Fatal("expected invalid restore error")
+	}
+
+	channels := store.List()
+	if len(channels) != 1 || channels[0].ChannelID != testChannelID {
+		t.Fatalf("store changed after failed restore: %#v", channels)
+	}
+}

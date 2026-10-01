@@ -16,12 +16,21 @@ func NewStore() *Store {
 	return &Store{channels: make(map[string]Channel)}
 }
 
-func (s *Store) Save(channel Channel) ([]Channel, error) {
+func normalizeStoredChannel(channel Channel) (Channel, error) {
 	channel.ChannelID = strings.ToLower(strings.TrimSpace(channel.ChannelID))
+	channel.ChannelName = strings.TrimSpace(channel.ChannelName)
 	if err := channel.validate(); err != nil {
-		return nil, err
+		return Channel{}, err
 	}
 	channel.ChannelURL = ChannelURL(channel.ChannelID)
+	return channel, nil
+}
+
+func (s *Store) Save(channel Channel) ([]Channel, error) {
+	channel, err := normalizeStoredChannel(channel)
+	if err != nil {
+		return nil, err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -54,4 +63,23 @@ func (s *Store) listLocked() []Channel {
 		return strings.ToLower(channels[i].ChannelName) < strings.ToLower(channels[j].ChannelName)
 	})
 	return channels
+}
+
+func (s *Store) ReplaceAll(channels []Channel) error {
+	next := make(map[string]Channel, len(channels))
+	for _, channel := range channels {
+		normalized, err := normalizeStoredChannel(channel)
+		if err != nil {
+			return err
+		}
+		if _, exists := next[normalized.ChannelID]; exists {
+			return fmt.Errorf("중복된 저장 채널입니다: %s", normalized.ChannelID)
+		}
+		next[normalized.ChannelID] = normalized
+	}
+
+	s.mu.Lock()
+	s.channels = next
+	s.mu.Unlock()
+	return nil
 }
