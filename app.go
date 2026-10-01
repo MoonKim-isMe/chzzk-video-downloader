@@ -9,6 +9,7 @@ import (
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/persistence"
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -28,6 +29,12 @@ type App struct {
 	chzzkClient     *chzzk.Client
 	channelStore    *chzzk.Store
 	downloadManager downloadService
+
+	channelApplyMu sync.Mutex
+
+	persistenceMu sync.RWMutex
+	database      *persistence.Database
+	databasePath  func() (string, error)
 
 	queueMu       sync.Mutex
 	downloadQueue *downloader.Queue
@@ -57,6 +64,9 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if err := a.initializePersistence(); err != nil {
+		runtime.LogErrorf(ctx, "Persistence 초기화에 실패했습니다: %v", err)
+	}
 	a.ensureDownloadQueue()
 }
 
@@ -102,11 +112,41 @@ func (a *App) GetSavedChannels() []chzzk.Channel {
 }
 
 func (a *App) SaveChannel(channel chzzk.Channel) ([]chzzk.Channel, error) {
-	return a.channelStore.Save(channel)
+	a.channelApplyMu.Lock()
+	defer a.channelApplyMu.Unlock()
+
+	channels, err := a.channelStore.Save(channel)
+	if err != nil {
+		return nil, err
+	}
+
+	var saved chzzk.Channel
+	for _, item := range channels {
+		if strings.EqualFold(item.ChannelID, strings.TrimSpace(channel.ChannelID)) {
+			saved = item
+			break
+		}
+	}
+
+	if database := a.persistenceDatabase(); database != nil {
+		if err := database.UpsertChannel(saved); err != nil {
+			a.channelStore.Remove(saved.ChannelID)
+			return nil, err
+		}
+	}
+	return channels, nil
 }
 
-func (a *App) RemoveSavedChannel(channelID string) []chzzk.Channel {
-	return a.channelStore.Remove(channelID)
+func (a *App) RemoveSavedChannel(channelID string) ([]chzzk.Channel, error) {
+	a.channelApplyMu.Lock()
+	defer a.channelApplyMu.Unlock()
+
+	if database := a.persistenceDatabase(); database != nil {
+		if err := database.DeleteChannel(channelID); err != nil {
+			return nil, err
+		}
+	}
+	return a.channelStore.Remove(channelID), nil
 }
 
 func (a *App) GetChannelVideos(channelID string, page, size int) (chzzk.VideoListResult, error) {
@@ -178,6 +218,24 @@ func (a *App) UpdateSettings(next appsettings.AppSettings) (appsettings.AppSetti
 		}
 	}
 
+	if database := a.persistenceDatabase(); database != nil {
+		record, recordErr := appsettings.NewStorageRecord(updated)
+		if recordErr != nil {
+			if queue != nil {
+				_ = queue.SetMaxConcurrent(previous.MaxConcurrentDownloads)
+			}
+			_, _ = store.Update(previous)
+			return previous, recordErr
+		}
+		if err := database.SaveSettings(record); err != nil {
+			if queue != nil {
+				_ = queue.SetMaxConcurrent(previous.MaxConcurrentDownloads)
+			}
+			_, _ = store.Update(previous)
+			return previous, err
+		}
+	}
+
 	return updated, nil
 }
 
@@ -207,7 +265,18 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 }
 
 func (a *App) GetDownloadTasks() []downloader.DownloadTask {
-	return a.ensureDownloadQueue().List()
+	current := a.ensureDownloadQueue().List()
+	database := a.persistenceDatabase()
+	if database == nil {
+		return current
+	}
+
+	persisted, err := database.ListDownloadTasks()
+	if err != nil {
+		runtime.LogErrorf(a.appContext(), "다운로드 이력을 조회할 수 없습니다: %v", err)
+		return current
+	}
+	return mergeDownloadTasks(persisted, current)
 }
 
 func (a *App) CancelDownload(taskID string) bool {
@@ -253,7 +322,116 @@ func (a *App) ensureSettingsStore() (*appsettings.Store, error) {
 	return store, nil
 }
 
+func (a *App) initializePersistence() error {
+	pathResolver := a.databasePath
+	if pathResolver == nil {
+		pathResolver = persistence.DefaultPath
+	}
+	path, err := pathResolver()
+	if err != nil {
+		return err
+	}
+	database, err := persistence.Open(path)
+	if err != nil {
+		return err
+	}
+
+	fail := func(cause error) error {
+		_ = database.Close()
+		return cause
+	}
+
+	if err := database.RecoverInterruptedDownloads(); err != nil {
+		return fail(err)
+	}
+
+	channels, err := database.ListChannels()
+	if err != nil {
+		return fail(err)
+	}
+	if err := a.channelStore.ReplaceAll(channels); err != nil {
+		return fail(fmt.Errorf("저장 채널을 복원할 수 없습니다: %w", err))
+	}
+
+	downloadDir, err := downloader.DefaultOutputDir()
+	if err != nil {
+		return fail(err)
+	}
+	settingsValue := appsettings.Defaults(downloadDir)
+	record, found, err := database.LoadSettings()
+	if err != nil {
+		return fail(err)
+	}
+	if found {
+		settingsValue, err = record.AppSettings()
+		if err != nil {
+			return fail(fmt.Errorf("저장된 설정을 복원할 수 없습니다: %w", err))
+		}
+	} else {
+		record, err = appsettings.NewStorageRecord(settingsValue)
+		if err != nil {
+			return fail(err)
+		}
+		if err := database.SaveSettings(record); err != nil {
+			return fail(err)
+		}
+	}
+
+	store, err := appsettings.NewStore(settingsValue)
+	if err != nil {
+		return fail(err)
+	}
+
+	a.settingsMu.Lock()
+	a.settingsStore = store
+	a.settingsMu.Unlock()
+
+	a.persistenceMu.Lock()
+	a.database = database
+	a.persistenceMu.Unlock()
+	return nil
+}
+
+func (a *App) persistenceDatabase() *persistence.Database {
+	a.persistenceMu.RLock()
+	defer a.persistenceMu.RUnlock()
+	return a.database
+}
+
+func mergeDownloadTasks(
+	persisted []downloader.DownloadTask,
+	current []downloader.DownloadTask,
+) []downloader.DownloadTask {
+	currentByID := make(map[string]downloader.DownloadTask, len(current))
+	for _, task := range current {
+		currentByID[task.TaskID] = task
+	}
+
+	merged := make([]downloader.DownloadTask, 0, len(persisted)+len(current))
+	seen := make(map[string]struct{}, len(persisted)+len(current))
+	for _, task := range persisted {
+		if active, ok := currentByID[task.TaskID]; ok {
+			task = active
+		}
+		merged = append(merged, task)
+		seen[task.TaskID] = struct{}{}
+	}
+	for _, task := range current {
+		if _, ok := seen[task.TaskID]; ok {
+			continue
+		}
+		merged = append(merged, task)
+	}
+	return merged
+}
+
 func (a *App) emitDownloadState(task downloader.DownloadTask) {
+	if database := a.persistenceDatabase(); database != nil {
+		if err := database.UpsertDownloadTask(task); err != nil {
+			runtime.LogErrorf(a.appContext(), "다운로드 이력을 저장할 수 없습니다: %v", err)
+		}
+	}
+
 	if a.eventEmitter != nil {
 		a.eventEmitter(task)
 		return

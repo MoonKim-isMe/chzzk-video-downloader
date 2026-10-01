@@ -178,7 +178,7 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 5-C</Tag>
+          <Tag>Phase 6 Persistence</Tag>
         </Space>
         <Space size={10}>
           <Text className="!text-slate-400">Wails v2</Text>
