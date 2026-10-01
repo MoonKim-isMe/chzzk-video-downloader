@@ -139,3 +139,50 @@ func TestGetChannelVideosHandlesUnexpectedVideoShape(t *testing.T) {
 		t.Fatalf("expected response shape error, got %v", err)
 	}
 }
+
+
+func TestGetVideo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/service/v3/videos/12888749" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"message":null,"content":{"videoNo":12888749,"videoId":"C048BAFAB2B98EE8A9A43EB3444438AC6FC3","videoTitle":"직접 입력 VOD","videoType":"REPLAY","publishDate":"2026-09-30 20:10:00","publishDateAt":1790770200000,"thumbnailImageUrl":"https://example.com/thumb.jpg","duration":3661,"readCount":12345,"categoryType":"GAME","videoCategory":"TestGame","videoCategoryValue":"테스트 게임","exposure":true,"adult":false,"tags":["태그1"],"channel":{"channelId":"6e06f5e1907f17eff543abd06cb62891","channelName":"테스트 채널","channelImageUrl":"https://example.com/channel.png","verifiedMark":true}}}`))
+	}))
+	defer server.Close()
+
+	client := newClient(server.URL, server.Client())
+	video, err := client.GetVideo(context.Background(), 12888749)
+	if err != nil {
+		t.Fatalf("GetVideo returned error: %v", err)
+	}
+	if video.VideoNo != 12888749 ||
+		video.VideoTitle != "직접 입력 VOD" ||
+		video.VideoURL != "https://chzzk.naver.com/video/12888749" {
+		t.Fatalf("unexpected video: %#v", video)
+	}
+	if video.Channel.ChannelID != testChannelID || video.Channel.ChannelName != "테스트 채널" {
+		t.Fatalf("unexpected channel: %#v", video.Channel)
+	}
+}
+
+func TestGetVideoRejectsInvalidVideoNo(t *testing.T) {
+	client := newClient("https://example.invalid", http.DefaultClient)
+	if _, err := client.GetVideo(context.Background(), 0); err == nil {
+		t.Fatal("expected invalid videoNo error")
+	}
+}
+
+func TestGetVideoHandlesUnexpectedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"message":null,"content":{"videoNo":0,"videoTitle":""}}`))
+	}))
+	defer server.Close()
+
+	client := newClient(server.URL, server.Client())
+	_, err := client.GetVideo(context.Background(), 12888749)
+	if err == nil || !strings.Contains(err.Error(), "VOD 정보를") {
+		t.Fatalf("expected invalid video response error, got %v", err)
+	}
+}

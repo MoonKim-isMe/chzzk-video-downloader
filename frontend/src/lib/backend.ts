@@ -5,11 +5,11 @@ import type {
   ToolchainStatus,
 } from '../types/download';
 import type { AppSettings } from '../types/settings';
-import type { VideoListResult } from '../types/video';
+import type { Video, VideoListResult } from '../types/video';
 
 interface BackendApp {
   SearchChannels(keyword: string, offset: number, size: number): Promise<ChannelSearchResult>;
-  ResolveChannelURL(rawURL: string): Promise<Channel>;
+  ResolveVideoURL(rawURL: string): Promise<Video>;
   GetSavedChannels(): Promise<Channel[]>;
   SaveChannel(channel: Channel): Promise<Channel[]>;
   RemoveSavedChannel(channelId: string): Promise<Channel[]>;
@@ -43,7 +43,7 @@ function app(): BackendApp {
 export const searchChannels = (keyword: string, offset = 0, size = 20) =>
   app().SearchChannels(keyword, offset, size);
 
-export const resolveChannelURL = (rawURL: string) => app().ResolveChannelURL(rawURL);
+export const resolveVideoURL = (rawURL: string) => app().ResolveVideoURL(rawURL);
 
 export const getSavedChannels = () => app().GetSavedChannels();
 

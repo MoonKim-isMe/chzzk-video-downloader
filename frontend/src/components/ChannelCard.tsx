@@ -8,10 +8,12 @@ const followerFormatter = new Intl.NumberFormat('ko-KR');
 interface ChannelCardProps {
   channel: Channel;
   saved: boolean;
+  selected?: boolean;
+  onSelect: (channel: Channel) => void;
   onSave: (channel: Channel) => void;
 }
 
-function ChannelCard({ channel, saved, onSave }: ChannelCardProps) {
+function ChannelCard({ channel, saved, selected = false, onSelect, onSave }: ChannelCardProps) {
   return (
     <Card size="small" className="border-slate-800 bg-slate-900/80">
       <div className="flex min-w-0 items-start gap-4">
@@ -35,9 +37,14 @@ function ChannelCard({ channel, saved, onSave }: ChannelCardProps) {
             </Paragraph>
           )}
         </div>
-        <Button type={saved ? 'default' : 'primary'} disabled={saved} onClick={() => onSave(channel)}>
-          {saved ? '저장됨' : '저장'}
-        </Button>
+        <Space size={8}>
+          <Button type={selected ? 'primary' : 'default'} onClick={() => onSelect(channel)}>
+            {selected ? '선택됨' : '선택'}
+          </Button>
+          <Button disabled={saved} onClick={() => onSave(channel)}>
+            {saved ? '저장됨' : '저장'}
+          </Button>
+        </Space>
       </div>
     </Card>
   );

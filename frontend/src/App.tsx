@@ -15,10 +15,10 @@ import type { ReactNode } from 'react';
 
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
-import ChannelUrlTab from './features/channels/ChannelUrlTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
 import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
+import VideoUrlTab from './features/videos/VideoUrlTab';
 import {
   getDownloadTasks,
   getSavedChannels,
@@ -38,7 +38,7 @@ const { Text, Title } = Typography;
 function AppContent() {
   const { message } = AntdApp.useApp();
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
-  const [selectedChannelId, setSelectedChannelId] = useState<string>();
+  const [selectedChannel, setSelectedChannel] = useState<Channel>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -81,11 +81,6 @@ function AppContent() {
     [savedChannels],
   );
 
-  const selectedChannel = useMemo(
-    () => savedChannels.find((channel) => channel.channelId === selectedChannelId),
-    [savedChannels, selectedChannelId],
-  );
-
   const activeDownloadStatusByVideoNo = useMemo(() => {
     const active = new Map<number, DownloadTaskStatus>();
     downloadTasks.forEach((task) => {
@@ -97,14 +92,13 @@ function AppContent() {
   }, [downloadTasks]);
 
   const selectChannel = (channel: Channel) => {
-    setSelectedChannelId(channel.channelId);
+    setSelectedChannel(channel);
   };
 
   const handleSave = async (channel: Channel) => {
     try {
       const channels = await saveChannel(channel);
       setSavedChannels(channels);
-      setSelectedChannelId(channel.channelId);
       message.success(`${channel.channelName} 채널을 저장했습니다.`);
     } catch (cause) {
       message.warning(cause instanceof Error ? cause.message : String(cause));
@@ -115,8 +109,8 @@ function AppContent() {
     try {
       const channels = await removeSavedChannel(channelId);
       setSavedChannels(channels);
-      if (selectedChannelId === channelId) {
-        setSelectedChannelId(undefined);
+      if (selectedChannel?.channelId === channelId) {
+        setSelectedChannel(undefined);
       }
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
@@ -158,13 +152,13 @@ function AppContent() {
           />
         ) : (
           <Card className="border-slate-800 bg-slate-900/80">
-            <Empty description="저장 채널에서 채널을 선택하면 VOD 목록을 표시합니다." />
+            <Empty description="검색 결과 또는 저장 채널에서 채널을 선택하면 VOD 목록을 표시합니다." />
           </Card>
         )}
       </div>
       <SavedChannels
         channels={savedChannels}
-        selectedChannelId={selectedChannelId}
+        selectedChannelId={selectedChannel?.channelId}
         onSelect={selectChannel}
         onRemove={handleRemove}
       />
@@ -196,14 +190,24 @@ function AppContent() {
               key: 'search',
               label: '채널 검색',
               children: channelWorkspace(
-                <ChannelSearchTab savedChannelIds={savedChannelIds} onSave={handleSave} />,
+                <ChannelSearchTab
+                  savedChannelIds={savedChannelIds}
+                  selectedChannelId={selectedChannel?.channelId}
+                  onSelect={selectChannel}
+                  onSave={handleSave}
+                />,
               ),
             },
             {
               key: 'url',
               label: 'URL 직접 입력',
-              children: channelWorkspace(
-                <ChannelUrlTab savedChannelIds={savedChannelIds} onSave={handleSave} />,
+              children: (
+                <Card className="border-slate-800 bg-slate-900/80">
+                  <VideoUrlTab
+                    activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+                    onQueueVideo={handleQueueVideo}
+                  />
+                </Card>
               ),
             },
             {

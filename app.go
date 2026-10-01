@@ -99,12 +99,12 @@ func (a *App) SearchChannels(keyword string, offset, size int) (chzzk.ChannelSea
 	return a.chzzkClient.SearchChannels(a.appContext(), keyword, offset, size)
 }
 
-func (a *App) ResolveChannelURL(rawURL string) (chzzk.Channel, error) {
-	channelID, _, err := chzzk.ParseChannelURL(rawURL)
+func (a *App) ResolveVideoURL(rawURL string) (chzzk.Video, error) {
+	videoNo, _, err := chzzk.ParseVideoURL(rawURL)
 	if err != nil {
-		return chzzk.Channel{}, err
+		return chzzk.Video{}, err
 	}
-	return a.chzzkClient.GetChannel(a.appContext(), channelID)
+	return a.chzzkClient.GetVideo(a.appContext(), videoNo)
 }
 
 func (a *App) GetSavedChannels() []chzzk.Channel {

@@ -2,14 +2,14 @@
 
 ## 프로젝트 목표
 
-사용자가 치지직 채널을 이름으로 검색하거나 채널 URL을 직접 입력하여 채널을 선택하고, 해당 채널의 VOD 목록에서 원하는 영상을 yt-dlp로 다운로드할 수 있는 Windows 데스크톱 애플리케이션을 구현한다.
+사용자가 치지직 채널을 검색해 해당 채널의 VOD 목록에서 영상을 선택하거나, 치지직 VOD URL을 직접 입력하여 원하는 영상을 yt-dlp로 다운로드할 수 있는 Windows 데스크톱 애플리케이션을 구현한다.
 
 핵심 요구사항:
 
 - 치지직 채널명 검색
-- 치지직 채널 URL 직접 입력 및 검증
-- 검색/URL 입력으로 선택한 채널 저장
+- 채널 검색 결과 또는 저장 채널 선택
 - 선택한 채널의 동영상 목록 조회
+- 치지직 VOD URL 직접 입력 및 단일 VOD 조회
 - 선택한 동영상 다운로드
 - 다운로드 진행 상태 시각화
 - 다운로드 디렉터리 설정
@@ -18,23 +18,23 @@
 
 ## 화면 및 탐색 구조
 
-채널을 추가하거나 선택하는 방법은 두 가지로 제공한다.
+탐색 방식은 두 가지로 제공한다.
 
 1. **채널 검색**
-   - 채널명 또는 검색어로 치지직 채널을 조회한다.
-   - 검색 결과에서 채널을 선택하고 저장할 수 있다.
+   - 채널명 또는 검색어로 치지직 채널 사용자를 조회한다.
+   - 검색 결과 또는 저장 채널에서 채널을 선택하면 해당 채널의 VOD 목록을 조회한다.
+   - 채널 저장은 선택과 별개의 보조 기능이며 channelId를 기준으로 중복을 방지한다.
 
 2. **URL 직접 입력**
-   - 치지직 채널 URL을 직접 입력한다.
-   - URL을 정규화하고 channelId를 추출한 뒤 채널을 선택하고 저장할 수 있다.
+   - 치지직 VOD URL(`https://chzzk.naver.com/video/{videoNo}`)을 직접 입력한다.
+   - URL에서 videoNo를 추출하고 VOD 단건 정보를 조회한다.
+   - 조회된 VOD는 채널 저장이나 채널 VOD 목록을 거치지 않고 바로 Queue에 추가할 수 있다.
 
 다운로드 작업은 입력 방식과 분리된 별도 **다운로드 탭**에서 관리한다.
 
 - 채널 검색
 - URL 직접 입력
 - 다운로드
-
-저장 채널 데이터는 채널 검색과 URL 직접 입력에서 공통으로 사용하며 channelId를 기준으로 중복을 방지한다.
 
 ## API 사용 원칙
 
@@ -115,18 +115,14 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - [x] CH-3. 채널명, 프로필 이미지, 설명, 팔로워 수 등 검색 결과 모델 정의
 - [ ] CH-4. 채널 검색 탭 UI 구현
 
-### URL 직접 입력
+### 기존 채널 URL 직접 입력 — 요구사항 정정으로 제품 흐름에서 제외
 
-지원하는 기본 입력 형식:
+초기 구현에서는 URL 직접 입력을 채널 URL로 해석했으나, 요구사항 정정에 따라 URL 직접 입력은 **VOD URL 전용**으로 변경한다. 아래 CH-5~CH-8은 초기 구현 기록으로 보존하며 현재 제품 UI에서는 사용하지 않는다.
 
-```text
-https://chzzk.naver.com/{channelId}
-```
-
-- [x] CH-5. 치지직 채널 URL 파싱, 정규화 및 channelId 추출 구현
-- [x] CH-6. 잘못된 도메인, 잘못된 경로, channelId 누락 등 URL Validation 구현
-- [ ] CH-7. URL 직접 입력 탭 UI 구현
-- [x] CH-8. 추출한 channelId로 비공식 채널 정보 API를 조회하여 실제 채널 여부 검증
+- [x] CH-5. 치지직 채널 URL 파싱, 정규화 및 channelId 추출 구현 — 초기 구현 기록
+- [x] CH-6. 잘못된 도메인, 잘못된 경로, channelId 누락 등 URL Validation 구현 — 초기 구현 기록
+- [ ] CH-7. 채널 URL 직접 입력 탭 UI 구현 — 요구사항 정정으로 대체
+- [x] CH-8. 추출한 channelId로 비공식 채널 정보 API를 조회하여 실제 채널 여부 검증 — 초기 구현 기록
 
 ### 저장 채널
 
@@ -260,6 +256,24 @@ https://chzzk.naver.com/{channelId}
 - 실제 치지직 VOD API와 Wails UI 통합 동작
 
 위 전체 프론트엔드 검증이 완료되면 Phase 2-B의 VOD-3/VOD-4와 Phase 2-C 항목을 함께 완료 처리한다.
+
+### Phase 2-D — VOD URL 직접 입력 흐름 정정
+
+- [x] VOD-URL-1. `https://chzzk.naver.com/video/{videoNo}` URL 파싱 및 정규화
+- [x] VOD-URL-2. videoNo 기반 `/service/v3/videos/{videoNo}` 단일 VOD 조회
+- [x] VOD-URL-3. URL 직접 입력 탭에서 단일 VOD 메타데이터 표시
+- [x] VOD-URL-4. 조회된 VOD를 기존 Download Queue에 직접 추가
+- [x] VOD-URL-5. URL 직접 입력 탭에서 저장 채널/채널 VOD 목록 흐름 제거
+- [x] VOD-URL-6. 채널 검색 결과의 채널 선택과 채널 저장 액션 분리
+
+#### Phase 2-D 동작 기준
+
+- 채널 검색은 채널 사용자를 찾는 기능이며, 검색 결과의 채널은 저장 여부와 관계없이 선택할 수 있다.
+- 선택한 채널의 VOD 목록은 채널 검색 Workspace에서 표시한다.
+- URL 직접 입력은 채널 URL을 허용하지 않고 치지직 VOD URL만 허용한다.
+- VOD URL에서 videoNo를 추출한 뒤 단일 VOD 상세 API로 메타데이터를 확인한다.
+- URL로 조회한 VOD는 별도의 채널 저장 없이 기존 `StartDownload` Queue 흐름을 그대로 사용한다.
+- 동일 videoNo가 queued/running 상태라면 기존 Queue 중복 방지 정책을 그대로 따른다.
 
 ## Phase 3 — 단일 VOD 다운로드
 

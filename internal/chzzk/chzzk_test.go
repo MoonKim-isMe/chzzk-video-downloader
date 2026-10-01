@@ -131,3 +131,35 @@ func TestStoreReplaceAllRejectsInvalidChannelWithoutChangingStore(t *testing.T) 
 		t.Fatalf("store changed after failed restore: %#v", channels)
 	}
 }
+
+
+func TestParseVideoURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		ok   bool
+	}{
+		{name: "https", in: "https://chzzk.naver.com/video/12888749", ok: true},
+		{name: "without scheme", in: "chzzk.naver.com/video/12888749", ok: true},
+		{name: "query", in: "https://chzzk.naver.com/video/12888749?foo=bar", ok: true},
+		{name: "wrong host", in: "https://example.com/video/12888749", ok: false},
+		{name: "channel url", in: "https://chzzk.naver.com/" + testChannelID, ok: false},
+		{name: "missing video no", in: "https://chzzk.naver.com/video", ok: false},
+		{name: "invalid video no", in: "https://chzzk.naver.com/video/not-a-number", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			videoNo, normalized, err := ParseVideoURL(tt.in)
+			if tt.ok && err != nil {
+				t.Fatalf("expected success, got %v", err)
+			}
+			if !tt.ok && err == nil {
+				t.Fatalf("expected error, got videoNo=%d", videoNo)
+			}
+			if tt.ok && (videoNo != 12888749 || normalized != VideoURL(12888749)) {
+				t.Fatalf("unexpected parse result: %d %s", videoNo, normalized)
+			}
+		})
+	}
+}
