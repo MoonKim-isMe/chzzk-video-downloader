@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 6-P — SQLite Persistence**까지 구현 중입니다.
+현재는 **Phase 6 — Persistence 완료 후 UX Refinement**를 진행 중입니다.
 
 ## 현재 구현 범위
 
@@ -251,3 +251,14 @@ SQLite에는 다음 데이터를 저장합니다.
 Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v1`을 단일 row로 저장하고 복원 시 현재 Validation을 다시 수행합니다.
 
 SQLite driver는 Windows에서 CGO 없이 사용할 수 있는 `modernc.org/sqlite`를 사용합니다. 현재 실행 환경은 외부 Go module 다운로드가 차단되어 실제 driver 기반 전체 테스트와 `go mod tidy`는 Windows/네트워크 가능 환경에서 추가 확인이 필요합니다.
+
+## Phase 6 UX Refinement
+
+Persistence 다음 작업은 제품 UX 정리입니다. 기존 다운로드/API/SQLite 동작은 유지하면서 다음 순서로 화면을 다듬습니다.
+
+1. App Shell / Navigation
+2. Channel / VOD 탐색
+3. Download Manager
+4. Settings / Feedback / Accessibility
+
+Windows 패키징과 yt-dlp/ffmpeg/ffprobe 배포 전략은 Phase 7로 이동했습니다.
