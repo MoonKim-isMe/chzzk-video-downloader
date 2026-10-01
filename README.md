@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 3-B — 단일 다운로드 및 진행률**까지 구현 중입니다.
+현재는 **Phase 3-C — Wails / 프론트엔드 다운로드 연결**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -147,3 +147,15 @@ Wails v2 Windows 애플리케이션은 WebView2 Runtime을 사용합니다. Wind
 ## 개발 계획
 
 세부 Phase와 진행 상태는 [`DEVELOPMENT_PLAN.md`](./DEVELOPMENT_PLAN.md)를 기준으로 관리합니다.
+
+## Phase 3 다운로드 동작
+
+Phase 3-C 기준으로 다운로드 탭에서 채널 VOD 목록에서 선택한 영상 하나를 실제 다운로드 대상으로 사용할 수 있습니다.
+
+- 한 번에 하나의 VOD만 실행합니다.
+- 다운로드 시작 전에 yt-dlp, ffmpeg, ffprobe 상태를 확인합니다.
+- 기본 저장 위치는 사용자 홈의 `Downloads/CHZZK Video Downloader`입니다.
+- 진행률, 다운로드 크기, 전체 크기, 속도, ETA를 `download:state` 이벤트로 React에 전달합니다.
+- 다운로드 중에는 취소할 수 있습니다.
+- 완료 시 ffmpeg 후처리까지 끝난 최종 파일 경로를 표시합니다.
+- Queue 및 동시 다운로드는 Phase 4에서 추가합니다.

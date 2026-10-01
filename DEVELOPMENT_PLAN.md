@@ -359,10 +359,50 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 3-C — Wails / 프론트엔드 연결
 
-- [ ] DL-3C-1. StartDownload / CancelDownload Wails API 정의
-- [ ] DL-3C-2. Go → React 다운로드 상태 이벤트 전달
-- [ ] DL-3C-3. Phase 2 선택 VOD를 다운로드 시작 동작에 연결
-- [ ] DL-3C-4. Phase 4 Download Manager에서 재사용할 다운로드 상태 모델 확정
+- [ ] DL-3C-1. StartDownload / CancelDownload Wails API 정의 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-2. Go → React 다운로드 상태 이벤트 전달 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-3. Phase 2 선택 VOD를 다운로드 시작 동작에 연결 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-4. Phase 4 Download Manager에서 재사용할 다운로드 상태 모델 확정 — 구현 완료, Wails 통합 검증 대기
+
+#### Phase 3-C 구현 기준
+
+- Phase 3에서는 동시에 하나의 VOD만 다운로드하며 Queue/동시 다운로드 정책은 Phase 4에서 확장한다.
+- Wails `StartDownload`은 즉시 Task 상태를 반환하고 실제 yt-dlp 다운로드는 goroutine에서 실행한다.
+- Wails `CancelDownload(taskId)`는 활성 작업의 context를 취소한다.
+- Go → React 상태 전달은 `download:state` 이벤트 하나로 통일한다.
+- 이벤트 payload는 `DownloadTask` 전체 상태를 전달해 별도의 progress/completed/error 이벤트 모델을 만들지 않는다.
+- `DownloadTask`에는 taskId, videoNo, 제목, 채널명, 썸네일, URL, 출력 경로, 상태, 진행률, 최종 파일 경로, 오류, 시작/종료 시각을 포함한다.
+- 앱 종료 시 `OnShutdown`에서 활성 다운로드 context를 취소하고 종료 중에는 프론트 이벤트를 추가 전송하지 않는다.
+- Settings가 구현되기 전 기본 저장 위치는 사용자 홈의 `Downloads/CHZZK Video Downloader`를 사용한다.
+- 다운로드 시작 전 yt-dlp / ffmpeg / ffprobe 사용 가능 여부를 확인한다.
+- Phase 3에서는 활성 다운로드가 있으면 두 번째 다운로드 시작을 거부하며 Phase 4에서 Queue로 교체한다.
+
+#### Phase 3-C 검증 현황
+
+완료:
+
+- Wails runtime v2.15 문서 기준 `runtime.EventsEmit` / `window.runtime.EventsOn` API 확인
+- Wails `OnShutdown func(context.Context)` lifecycle signature 확인
+- Wails runtime을 최소 stub으로 대체한 격리 Go 모듈에서 App 다운로드 제어 코드 `go test ./...` 성공
+- 동일 격리 Go 모듈에서 `go vet ./...` 성공
+- StartDownload → progress → completed 상태 이벤트 단위 테스트
+- 활성 작업 중 두 번째 다운로드 시작 거부 테스트
+- CancelDownload → context 취소 경로 단위 테스트
+- cancelled 최종 상태 이벤트 단위 테스트
+- StartDownloadRequest validation / 기본 다운로드 경로 테스트
+- Phase 3-C 프론트 연결 구조를 재현한 TypeScript 5.8.3 격리 fixture에서 `tsc --noEmit` 성공
+- StartDownload / CancelDownload / Toolchain / DownloadTask TypeScript 시그니처 확인
+- Wails EventsOn 구독과 DownloadTask 상태 갱신 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Wails generated binding을 사용하는 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 창에서 Go EventsEmit → React EventsOn 전달
+- 실제 yt-dlp/ffmpeg 다운로드 시작·진행·취소 UI 통합 동작
+
+위 Wails/실 도구 통합 검증까지 완료되면 Phase 3-B/C의 검증 대기 항목을 완료 처리한다.
 
 ## Phase 4 — 다운로드 탭 및 Download Manager
 

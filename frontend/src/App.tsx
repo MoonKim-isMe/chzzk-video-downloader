@@ -15,19 +15,23 @@ import type { ReactNode } from 'react';
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import ChannelUrlTab from './features/channels/ChannelUrlTab';
+import DownloadPanel from './features/downloads/DownloadPanel';
 import ChannelVideoList from './features/videos/ChannelVideoList';
 import { getSavedChannels, removeSavedChannel, saveChannel } from './lib/backend';
+import { onDownloadState } from './lib/runtime';
 import type { Channel } from './types/channel';
+import type { DownloadTask } from './types/download';
 import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
-const { Paragraph, Text, Title } = Typography;
+const { Text, Title } = Typography;
 
 function AppContent() {
   const { message } = AntdApp.useApp();
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string>();
   const [selectedVideo, setSelectedVideo] = useState<Video>();
+  const [currentDownload, setCurrentDownload] = useState<DownloadTask>();
 
   useEffect(() => {
     getSavedChannels()
@@ -36,6 +40,8 @@ function AppContent() {
         message.error(cause instanceof Error ? cause.message : String(cause));
       });
   }, [message]);
+
+  useEffect(() => onDownloadState(setCurrentDownload), []);
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
@@ -79,6 +85,15 @@ function AppContent() {
     }
   };
 
+  const handleTaskStarted = (task: DownloadTask) => {
+    setCurrentDownload((current) => {
+      if (current?.taskId === task.taskId) {
+        return current;
+      }
+      return task;
+    });
+  };
+
   const channelWorkspace = (content: ReactNode) => (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-6">
@@ -112,7 +127,7 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 2-C</Tag>
+          <Tag>Phase 3-C</Tag>
         </Space>
         <Text className="!text-slate-400">Wails v2</Text>
       </Header>
@@ -139,18 +154,11 @@ function AppContent() {
               key: 'downloads',
               label: '다운로드',
               children: (
-                <Card className="border-slate-800 bg-slate-900/80">
-                  <Empty
-                    description={
-                      <div>
-                        <Text className="!text-slate-300">아직 다운로드 작업이 없습니다.</Text>
-                        <Paragraph className="!mb-0 !mt-1 !text-slate-500">
-                          VOD 다운로드와 진행률 표시는 Phase 3~4에서 연결합니다.
-                        </Paragraph>
-                      </div>
-                    }
-                  />
-                </Card>
+                <DownloadPanel
+                  selectedVideo={selectedVideo}
+                  currentTask={currentDownload}
+                  onTaskStarted={handleTaskStarted}
+                />
               ),
             },
           ]}

@@ -1,4 +1,9 @@
 import type { Channel, ChannelSearchResult } from '../types/channel';
+import type {
+  DownloadTask,
+  StartDownloadRequest,
+  ToolchainStatus,
+} from '../types/download';
 import type { VideoListResult } from '../types/video';
 
 interface BackendApp {
@@ -8,6 +13,10 @@ interface BackendApp {
   SaveChannel(channel: Channel): Promise<Channel[]>;
   RemoveSavedChannel(channelId: string): Promise<Channel[]>;
   GetChannelVideos(channelId: string, page: number, size: number): Promise<VideoListResult>;
+  GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
+  GetDefaultDownloadDir(): Promise<string>;
+  StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
+  CancelDownload(taskId: string): Promise<boolean>;
 }
 
 type WailsWindow = Window & {
@@ -39,3 +48,11 @@ export const removeSavedChannel = (channelId: string) => app().RemoveSavedChanne
 
 export const getChannelVideos = (channelId: string, page = 0, size = 24) =>
   app().GetChannelVideos(channelId, page, size);
+
+export const getDownloadToolchainStatus = () => app().GetDownloadToolchainStatus();
+
+export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
+
+export const startDownload = (request: StartDownloadRequest) => app().StartDownload(request);
+
+export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);
