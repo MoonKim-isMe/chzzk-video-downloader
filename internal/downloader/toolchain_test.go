@@ -53,3 +53,59 @@ func TestResolverReportsUnusableBinary(t *testing.T) {
 		t.Fatalf("unexpected status: %#v", status.YTDLP)
 	}
 }
+
+
+func TestResolverPrefersManagedBundleBeforeAppAndPath(t *testing.T) {
+	managed := t.TempDir()
+	appDir := t.TempDir()
+
+	managedYTDLP := filepath.Join(managed, "yt-dlp.exe")
+	if err := os.WriteFile(managedYTDLP, []byte("managed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "yt-dlp.exe"), []byte("app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	resolver := &Resolver{
+		searchDirs: []searchDir{
+			{path: managed, source: "managed-bundle"},
+			{path: appDir, source: "app"},
+		},
+		lookPath: func(string) (string, error) {
+			return filepath.Join(t.TempDir(), "path-yt-dlp.exe"), nil
+		},
+		probe: func(_ context.Context, path, arg string) (string, error) {
+			if filepath.Base(path) == "yt-dlp.exe" {
+				return "test", nil
+			}
+			return "", errors.New("not found")
+		},
+	}
+
+	status := resolver.Resolve(context.Background())
+	if !status.YTDLP.Available ||
+		status.YTDLP.Source != "managed-bundle" ||
+		status.YTDLP.Path != managedYTDLP {
+		t.Fatalf("unexpected managed resolution: %#v", status.YTDLP)
+	}
+}
+
+func TestAppendBundleErrorOnlyTouchesUnavailableTools(t *testing.T) {
+	status := ToolchainStatus{
+		YTDLP: ToolStatus{Name: "yt-dlp", Available: false, Error: "not found"},
+		FFmpeg: ToolStatus{Name: "ffmpeg", Available: true},
+		FFprobe: ToolStatus{Name: "ffprobe", Available: false},
+	}
+	result := appendBundleError(status, errors.New("bundle missing"))
+
+	if result.YTDLP.Error != "not found; bundle missing" {
+		t.Fatalf("unexpected yt-dlp error: %q", result.YTDLP.Error)
+	}
+	if result.FFmpeg.Error != "" {
+		t.Fatalf("available ffmpeg must not receive bundle error: %q", result.FFmpeg.Error)
+	}
+	if result.FFprobe.Error != "bundle missing" {
+		t.Fatalf("unexpected ffprobe error: %q", result.FFprobe.Error)
+	}
+}

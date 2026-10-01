@@ -19,7 +19,8 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) ToolchainStatus(ctx context.Context) ToolchainStatus {
-	return m.resolver.Resolve(ctx)
+	bundleErr := ensureBundledTools()
+	return appendBundleError(m.resolver.Resolve(ctx), bundleErr)
 }
 
 func (m *Manager) Prepare(ctx context.Context, request DownloadRequest) (CommandSpec, ToolchainStatus, error) {

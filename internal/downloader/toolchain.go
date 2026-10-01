@@ -55,6 +55,10 @@ func defaultSearchDirs() []searchDir {
 		dirs = append(dirs, searchDir{path: explicit, source: "environment"})
 	}
 
+	if managed, err := managedToolsDir(); err == nil {
+		dirs = append(dirs, searchDir{path: managed, source: "managed-bundle"})
+	}
+
 	executable, err := os.Executable()
 	if err == nil {
 		if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {

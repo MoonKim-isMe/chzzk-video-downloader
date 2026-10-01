@@ -15,7 +15,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 
 import { cancelDownload, getDownloadToolchainStatus } from '../../lib/backend';
-import type { DownloadTask, ToolchainStatus } from '../../types/download';
+import type { DownloadTask, ToolchainStatus, ToolStatus } from '../../types/download';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -84,18 +84,29 @@ function ToolchainAlert({ status }: { status: ToolchainStatus }) {
     );
   }
 
-  const missing = [
-    !status.ytDlp.available && 'yt-dlp',
-    !status.ffmpeg.available && 'ffmpeg',
-    !status.ffprobe.available && 'ffprobe',
-  ].filter(Boolean);
+  const unavailable = [
+    !status.ytDlp.available && status.ytDlp,
+    !status.ffmpeg.available && status.ffmpeg,
+    !status.ffprobe.available && status.ffprobe,
+  ].filter((tool): tool is ToolStatus => Boolean(tool));
 
   return (
     <Alert
       type="warning"
       showIcon
       message="다운로드 도구를 확인해 주세요"
-      description={`사용할 수 없는 도구: ${missing.join(', ')}`}
+      description={
+        <Space direction="vertical" size={2}>
+          <Text className="!text-xs">
+            사용할 수 없는 도구: {unavailable.map((tool) => tool.name).join(', ')}
+          </Text>
+          {unavailable.map((tool) => (
+            <Text key={tool.name} className="!text-xs !text-slate-500">
+              {tool.name}: {tool.error || '실행 파일을 확인할 수 없습니다.'}
+            </Text>
+          ))}
+        </Space>
+      }
     />
   );
 }
