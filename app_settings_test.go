@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
 
@@ -56,6 +58,71 @@ func TestUpdateSettingsStoresNormalizedValue(t *testing.T) {
 	}
 	if current != next {
 		t.Fatalf("settings mismatch: current=%#v next=%#v", current, next)
+	}
+}
+
+func TestUpdateSettingsAppliesQueueConcurrency(t *testing.T) {
+	app := NewApp()
+	store, err := appsettings.NewStore(appsettings.Defaults(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.settingsStore = store
+	app.downloadManager = &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			return downloader.DownloadResult{}, nil
+		},
+	}
+
+	queue := app.ensureDownloadQueue()
+	if queue.MaxConcurrent() != 1 {
+		t.Fatalf("unexpected initial concurrency: %d", queue.MaxConcurrent())
+	}
+
+	updated, err := app.UpdateSettings(appsettings.AppSettings{
+		DownloadDir:            t.TempDir(),
+		Resolution:             appsettings.Resolution1080p,
+		OutputFormat:           appsettings.OutputFormatMKV,
+		MaxConcurrentDownloads: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.MaxConcurrentDownloads != 4 || queue.MaxConcurrent() != 4 {
+		t.Fatalf("concurrency was not applied: settings=%d queue=%d", updated.MaxConcurrentDownloads, queue.MaxConcurrent())
+	}
+}
+
+func TestEnsureDownloadQueueUsesCurrentSettingsConcurrency(t *testing.T) {
+	app := NewApp()
+	store, err := appsettings.NewStore(appsettings.AppSettings{
+		DownloadDir:            t.TempDir(),
+		Resolution:             appsettings.ResolutionBest,
+		OutputFormat:           appsettings.OutputFormatMP4,
+		MaxConcurrentDownloads: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.settingsStore = store
+	app.downloadManager = &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			return downloader.DownloadResult{}, nil
+		},
+	}
+
+	if actual := app.ensureDownloadQueue().MaxConcurrent(); actual != 5 {
+		t.Fatalf("unexpected queue concurrency: %d", actual)
 	}
 }
 

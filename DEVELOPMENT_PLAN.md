@@ -683,12 +683,65 @@ Validation:
 
 ### Phase 5-B — 다운로드 엔진 설정 적용
 
-- [ ] SET-1. 다운로드 디렉터리 설정을 신규 Queue 작업에 적용
-- [ ] SET-2. 해상도 설정을 yt-dlp format selector로 변환
-- [ ] SET-3. 출력 포맷 설정을 yt-dlp/ffmpeg 옵션에 적용
-- [ ] SET-4. 동시 다운로드 수를 Queue SetMaxConcurrent에 연결
-- [ ] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
-- [ ] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
+- [x] SET-1. 다운로드 디렉터리 설정을 신규 Queue 작업에 적용
+- [x] SET-2. 해상도 설정을 yt-dlp format selector로 변환
+- [x] SET-3. 출력 포맷 설정을 yt-dlp/ffmpeg 옵션에 적용
+- [x] SET-4. 동시 다운로드 수를 Queue SetMaxConcurrent에 연결
+- [x] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
+- [x] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
+
+#### Phase 5-B 적용 기준
+
+- `StartDownload`은 Queue 등록 직전에 현재 `AppSettings` 전체를 한 번 읽어 다운로드 요청에 Snapshot으로 적용한다.
+- 호출자가 넘긴 `OutputDir`, `FormatSelector`, `OutputFormat`보다 AppSettings를 우선한다.
+- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷 Snapshot을 유지한다.
+- 설정 변경 후 이미 queued/running인 작업의 다운로드 옵션은 변경하지 않는다.
+- 설정 변경 후 새로 Queue에 등록하는 작업부터 새 설정을 사용한다.
+- 동시 다운로드 수는 개별 작업 Snapshot이 아니라 Scheduler 전역 정책으로 취급하며 `UpdateSettings` 즉시 `Queue.SetMaxConcurrent`에 반영한다.
+- Queue가 아직 생성되지 않았다면 최초 생성 시 현재 Settings의 `maxConcurrentDownloads`를 사용한다.
+- Queue 동시성 적용에 실패하면 Settings Store를 이전 값으로 복구한다.
+
+해상도 → yt-dlp format selector:
+
+- `best` → `bv*+ba/b`
+- `2160p` → `bv*[height<=2160]+ba/b[height<=2160]`
+- `1440p` → `bv*[height<=1440]+ba/b[height<=1440]`
+- `1080p` → `bv*[height<=1080]+ba/b[height<=1080]`
+- `720p` → `bv*[height<=720]+ba/b[height<=720]`
+
+출력 포맷:
+
+- `mp4 / mkv / webm`만 허용한다.
+- 병합 컨테이너 지정에는 `--merge-output-format`을 사용한다.
+- 이미 단일 컨테이너로 제공되는 영상도 최종 확장자를 설정값에 맞추기 위해 `--remux-video`를 함께 사용한다.
+- 재인코딩은 수행하지 않고 ffmpeg remux 범위로 처리한다.
+
+#### Phase 5-B 검증 현황
+
+완료:
+
+- Phase 5-B downloader/settings 실제 소스 조합을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go test -race ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- 모든 지원 해상도의 format selector 변환 검증
+- Settings 적용 시 호출자 다운로드 옵션이 Snapshot 값으로 교체되는지 검증
+- Command Builder에 `--format`, `--merge-output-format`, `--remux-video`가 함께 적용되는지 검증
+- 지원하지 않는 출력 포맷 거부 검증
+- App/Wails 의존성을 stub으로 대체한 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
+- queued 작업이 설정 변경 후에도 등록 당시 경로/1080p/MKV Snapshot을 유지하는지 검증
+- 설정 변경 후 신규 작업이 새 경로/720p/WebM 설정을 사용하는지 검증
+- maxConcurrent 1 → 2 변경 시 기존 Queue 재생성 없이 대기 작업이 즉시 시작되는지 검증
+- 최초 Queue 생성 시 현재 Settings의 maxConcurrent를 사용하는지 검증
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 yt-dlp + ffmpeg에서 각 해상도/출력 포맷 조합 다운로드
+- 실제 Wails generated binding 기반 통합 실행
+- `yarn typecheck`
+- `yarn build`
+- `wails build`
 
 ### Phase 5-C — Settings UI
 

@@ -31,8 +31,9 @@ type App struct {
 	queueMu       sync.Mutex
 	downloadQueue *downloader.Queue
 
-	settingsMu    sync.Mutex
-	settingsStore *appsettings.Store
+	settingsMu      sync.Mutex
+	settingsApplyMu sync.Mutex
+	settingsStore   *appsettings.Store
 
 	shuttingDown atomic.Bool
 	eventEmitter func(downloader.DownloadTask)
@@ -127,20 +128,44 @@ func (a *App) GetSettings() (appsettings.AppSettings, error) {
 }
 
 func (a *App) UpdateSettings(next appsettings.AppSettings) (appsettings.AppSettings, error) {
+	a.settingsApplyMu.Lock()
+	defer a.settingsApplyMu.Unlock()
+
 	store, err := a.ensureSettingsStore()
 	if err != nil {
 		return appsettings.AppSettings{}, err
 	}
-	return store.Update(next)
+
+	previous := store.Get()
+	updated, err := store.Update(next)
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+
+	a.queueMu.Lock()
+	queue := a.downloadQueue
+	a.queueMu.Unlock()
+	if queue != nil {
+		if err := queue.SetMaxConcurrent(updated.MaxConcurrentDownloads); err != nil {
+			if _, rollbackErr := store.Update(previous); rollbackErr != nil {
+				return previous, fmt.Errorf("동시 다운로드 수 적용 실패 후 설정 복구에도 실패했습니다: %v / %w", rollbackErr, err)
+			}
+			return previous, fmt.Errorf("동시 다운로드 수를 적용할 수 없습니다: %w", err)
+		}
+	}
+
+	return updated, nil
 }
 
 func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader.DownloadTask, error) {
-	if request.OutputDir == "" {
-		outputDir, err := downloader.DefaultOutputDir()
-		if err != nil {
-			return downloader.DownloadTask{}, err
-		}
-		request.OutputDir = outputDir
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return downloader.DownloadTask{}, err
+	}
+
+	request, err = downloader.ApplySettings(request, store.Get())
+	if err != nil {
+		return downloader.DownloadTask{}, err
 	}
 	if err := request.Validate(); err != nil {
 		return downloader.DownloadTask{}, err
@@ -170,7 +195,16 @@ func (a *App) ensureDownloadQueue() *downloader.Queue {
 	defer a.queueMu.Unlock()
 
 	if a.downloadQueue == nil {
-		a.downloadQueue = downloader.NewQueue(a.appContext(), a.downloadManager, a.emitDownloadState, 1)
+		maxConcurrent := appsettings.DefaultMaxConcurrentDownloads
+		if store, err := a.ensureSettingsStore(); err == nil {
+			maxConcurrent = store.Get().MaxConcurrentDownloads
+		}
+		a.downloadQueue = downloader.NewQueue(
+			a.appContext(),
+			a.downloadManager,
+			a.emitDownloadState,
+			maxConcurrent,
+		)
 	}
 	return a.downloadQueue
 }

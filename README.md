@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 5-A — Settings 모델 / 백엔드 API**까지 구현 중입니다.
+현재는 **Phase 5-B — 다운로드 엔진 설정 적용**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -179,7 +179,7 @@ Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있습니
 
 ## Phase 5 Settings 기준
 
-Phase 5-A에서는 설정을 앱 실행 중 메모리에 저장합니다. 실제 다운로드 적용은 Phase 5-B, 앱 재시작 후 영속화는 Phase 6에서 처리합니다.
+Phase 5에서는 설정을 앱 실행 중 메모리에 저장하며, Phase 5-B부터 새 Queue 작업의 실제 다운로드 옵션과 Scheduler에 적용합니다. 앱 재시작 후 영속화는 Phase 6에서 처리합니다.
 
 기본 설정:
 
@@ -189,3 +189,17 @@ Phase 5-A에서는 설정을 앱 실행 중 메모리에 저장합니다. 실제
 - 동시 다운로드 수: `1`
 
 지원 해상도는 `best / 2160p / 1440p / 1080p / 720p`, 출력 포맷은 `mp4 / mkv / webm`이며 동시 다운로드 수는 `1~8` 범위입니다.
+
+## Phase 5-B 다운로드 설정 적용
+
+Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포맷을 Snapshot으로 고정합니다. 이후 Settings를 변경해도 이미 queued/running인 작업은 기존 옵션을 유지하며 새로 등록한 작업부터 새 값을 사용합니다.
+
+해상도 선택은 yt-dlp `--format`의 최대 height 조건으로 적용합니다.
+
+- best: `bv*+ba/b`
+- 2160p: `bv*[height<=2160]+ba/b[height<=2160]`
+- 1440p: `bv*[height<=1440]+ba/b[height<=1440]`
+- 1080p: `bv*[height<=1080]+ba/b[height<=1080]`
+- 720p: `bv*[height<=720]+ba/b[height<=720]`
+
+출력 포맷은 `mp4 / mkv / webm`을 지원하며 yt-dlp의 `--merge-output-format`과 `--remux-video`를 함께 사용합니다. 동시 다운로드 수는 Snapshot이 아니라 Queue Scheduler 전역 설정으로 즉시 반영됩니다.
