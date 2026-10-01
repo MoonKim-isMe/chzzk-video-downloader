@@ -276,7 +276,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
           <Tooltip title="설정" placement="bottom">
             <Button
               aria-label="설정 열기"
-              type="text"
+              type="default"
               shape="circle"
               className="settings-icon-button"
               icon={<SettingsIcon />}

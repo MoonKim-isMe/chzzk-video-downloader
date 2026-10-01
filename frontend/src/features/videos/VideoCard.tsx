@@ -1,10 +1,10 @@
 import { Button, Card, Image, Space, Tag, Typography } from 'antd';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { DownloadTaskStatus } from '../../types/download';
 import type { Video } from '../../types/video';
 
-const { Paragraph, Text, Title } = Typography;
+const { Text, Title } = Typography;
 const countFormatter = new Intl.NumberFormat('ko-KR');
 
 function formatDuration(seconds: number) {
@@ -27,7 +27,12 @@ interface VideoCardProps {
 
 function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
   const [queueing, setQueueing] = useState(false);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const active = downloadStatus === 'queued' || downloadStatus === 'running';
+
+  useEffect(() => {
+    setThumbnailFailed(false);
+  }, [video.thumbnailImageUrl]);
 
   const handleQueue = async () => {
     if (active || queueing) {
@@ -50,17 +55,20 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
       }`}
       styles={{ body: { padding: 12 } }}
     >
-      <div className="overflow-hidden rounded-lg bg-slate-950">
-        {video.thumbnailImageUrl ? (
+      <div className="video-thumbnail">
+        {video.thumbnailImageUrl && !thumbnailFailed ? (
           <Image
             src={video.thumbnailImageUrl}
             alt={video.videoTitle}
             preview={false}
             className="aspect-video !w-full object-cover"
+            onError={() => setThumbnailFailed(true)}
           />
         ) : (
-          <div className="flex aspect-video items-center justify-center">
-            <Text className="!text-slate-600">썸네일 없음</Text>
+          <div className="video-thumbnail-placeholder">
+            <Text className="!text-center !text-xs !text-slate-500">
+              썸네일이 없거나 불러오지 못했습니다
+            </Text>
           </div>
         )}
       </div>
@@ -71,7 +79,7 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
           {video.adult && <Tag color="red">성인</Tag>}
           {video.videoCategoryValue && <Tag color="blue">{video.videoCategoryValue}</Tag>}
           {downloadStatus === 'running' && <Tag color="processing">다운로드 중</Tag>}
-          {downloadStatus === 'queued' && <Tag>Queue 대기 중</Tag>}
+          {downloadStatus === 'queued' && <Tag>다운로드 대기 중</Tag>}
         </Space>
 
         <Title level={5} ellipsis={{ rows: 2 }} className="!mb-1 !mt-2 !text-slate-100">
@@ -91,14 +99,18 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
         </div>
 
         {video.tags.length > 0 && (
-          <Paragraph ellipsis={{ rows: 1 }} className="!mb-0 !mt-2 !text-xs !text-slate-500">
-            {video.tags.map((tag) => `#${tag}`).join(' ')}
-          </Paragraph>
+          <div className="video-tag-chips">
+            {video.tags.map((tag) => (
+              <span key={tag} className="video-tag-chip">
+                #{tag}
+              </span>
+            ))}
+          </div>
         )}
 
         <Button
           block
-          className="mt-3"
+          className="video-card-action"
           type={active ? 'default' : 'primary'}
           disabled={active}
           loading={queueing}
@@ -107,8 +119,8 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
           {downloadStatus === 'running'
             ? '다운로드 중'
             : downloadStatus === 'queued'
-              ? 'Queue 대기 중'
-              : 'Queue에 추가'}
+              ? '다운로드 대기 중'
+              : '다운로드 추가'}
         </Button>
       </div>
     </Card>
