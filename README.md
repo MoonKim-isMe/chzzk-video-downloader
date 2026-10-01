@@ -332,10 +332,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer 
 
 기존 본문 Tabs와 Phase/Wails 개발 표시는 제거했습니다.
 
-채널 검색 화면은 상단을 2열로 구성합니다.
+채널 검색 화면은 헤더 아래 남은 높이를 사용하는 2열 Workspace로 구성합니다.
 
-- 좌측: 채널 검색 입력 및 검색 결과
-- 우측: 북마크 채널 목록
-- 하단: 선택한 채널의 VOD 목록
+- 좌측: `검색 / 북마크` 내부 탭
+  - 검색 탭: 검색 입력은 고정하고 검색 결과 목록만 스크롤
+  - 북마크 탭: 북마크 목록만 스크롤
+- 우측: 선택한 채널의 VOD 전용 패널
+  - 채널/VOD 요약 헤더는 고정
+  - VOD 카드 목록만 독립 스크롤
+
+앱 본문 자체가 중첩 스크롤을 만들지 않도록 채널 검색 Workspace에서는 좌·우 패널이 각각 스크롤을 담당합니다.
 
 Settings Drawer의 **화면 > 테마**에서 `라이트 / 다크`를 선택할 수 있습니다. 기본값은 Dark이며 선택값은 SQLite에 저장되어 앱 재실행 후에도 유지됩니다. 기존 Settings DB는 migration v2에서 Dark 테마로 자동 승격됩니다.

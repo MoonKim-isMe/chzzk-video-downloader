@@ -974,8 +974,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 #### Phase 6-UX-B — Channel / VOD 탐색
 
-- [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리 — 채널 검색 1차 레이아웃 완료, URL 직접 입력은 후속
-- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선 — 북마크 채널 우측 패널 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리 — 채널 검색 Workspace 재설계 완료, URL 직접 입력은 후속
+- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선 — 좌측 검색/북마크 탭 구조로 재설계 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-B3. VOD 카드의 정보 우선순위와 Queue 추가 CTA 정리
 - [ ] UX-B4. 채널 전환과 VOD 더보기 흐름의 상태 피드백 개선
 
@@ -999,8 +999,14 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 헤더는 `[앱 이름] [채널 검색 / URL 직접 입력 / 다운로드] [설정 아이콘]`의 단일 행 구조로 구성한다.
 - 기존 본문 Tabs는 제거하고 헤더 중앙 pill navigation으로 이동한다.
 - 사용자에게 불필요한 Phase / Wails 개발 표시는 제품 UI에서 제거한다.
-- 채널 검색 화면 상단은 좌측 검색/결과 영역 + 우측 북마크 채널 320px 패널로 구성한다.
-- 선택 채널 VOD 목록은 상단 탐색 영역 아래 전체 너비에 표시한다.
+- 채널 검색 화면은 좌측 채널 탐색 패널 + 우측 VOD 패널의 2열 Workspace로 구성한다.
+- 좌측 채널 탐색 패널은 `검색 / 북마크` 내부 탭으로 전환한다.
+- 우측 패널은 선택한 채널의 VOD 목록을 항상 표시하는 전용 영역으로 사용한다.
+- 채널 검색의 설명 문구는 제거하고 검색 입력과 결과에 바로 접근하도록 한다.
+- 헤더 아래 남은 높이를 Workspace가 채우며 app-content 자체는 스크롤하지 않는다.
+- 좌측 검색/북마크 목록과 우측 VOD 목록은 각각 `min-height: 0` + `overflow-y: auto`로 독립 스크롤한다.
+- URL 직접 입력과 다운로드 탭은 별도의 `app-scroll-view`에서 화면 단위 스크롤을 유지한다.
+- 기본 gap은 Workspace 16px, 내부 목록 8~12px로 통일해 불필요한 세로 공백을 줄인다.
 - 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
 - Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
@@ -1015,7 +1021,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Theme 기본값 Dark / Light 저장 / 잘못된 Theme 거부 / StorageRecord v1→Dark 호환 복원 검증
 - Python 실제 SQLite 엔진에서 migration v1 → v2 적용 및 기존 settings row의 `theme=dark`, `schema_version=2` 승격 확인
 - 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
-- 채널 검색 좌측 / 북마크 채널 우측 레이아웃 구조 확인
+- 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
+- Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
 
 현재 실행 환경 제약으로 검증 대기:

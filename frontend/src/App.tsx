@@ -34,6 +34,7 @@ import type { Video } from './types/video';
 const { Header, Content } = Layout;
 
 type AppTab = 'search' | 'url' | 'downloads';
+type ChannelPanelTab = 'search' | 'bookmarks';
 
 const navigationItems: Array<{ key: AppTab; label: string }> = [
   { key: 'search', label: '채널 검색' },
@@ -68,6 +69,7 @@ interface AppContentProps {
 function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
   const { message } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<AppTab>('search');
+  const [channelPanelTab, setChannelPanelTab] = useState<ChannelPanelTab>('search');
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
@@ -171,37 +173,63 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
   );
 
   const searchWorkspace = (
-    <div className="space-y-6">
-      <div className="channel-discovery-grid">
-        <Card bordered={false} className="app-panel search-panel">
-          <ChannelSearchTab
-            savedChannelIds={savedChannelIds}
-            selectedChannelId={selectedChannel?.channelId}
-            onSelect={selectChannel}
-            onSave={handleSave}
+    <div className="channel-workspace">
+      <Card bordered={false} className="app-panel channel-sidebar-panel">
+        <div className="channel-sidebar-tabs" role="tablist" aria-label="채널 탐색">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={channelPanelTab === 'search'}
+            className={`channel-sidebar-tab ${channelPanelTab === 'search' ? 'is-active' : ''}`}
+            onClick={() => setChannelPanelTab('search')}
+          >
+            검색
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={channelPanelTab === 'bookmarks'}
+            className={`channel-sidebar-tab ${channelPanelTab === 'bookmarks' ? 'is-active' : ''}`}
+            onClick={() => setChannelPanelTab('bookmarks')}
+          >
+            북마크
+            <span className="channel-sidebar-tab-count">{savedChannels.length}</span>
+          </button>
+        </div>
+
+        <div className="channel-sidebar-body">
+          {channelPanelTab === 'search' ? (
+            <ChannelSearchTab
+              savedChannelIds={savedChannelIds}
+              selectedChannelId={selectedChannel?.channelId}
+              onSelect={selectChannel}
+              onSave={handleSave}
+            />
+          ) : (
+            <SavedChannels
+              channels={savedChannels}
+              selectedChannelId={selectedChannel?.channelId}
+              onSelect={selectChannel}
+              onRemove={handleRemove}
+            />
+          )}
+        </div>
+      </Card>
+
+      <div className="channel-vod-column">
+        {selectedChannel ? (
+          <ChannelVideoList
+            key={selectedChannel.channelId}
+            channel={selectedChannel}
+            activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+            onQueueVideo={handleQueueVideo}
           />
-        </Card>
-
-        <SavedChannels
-          channels={savedChannels}
-          selectedChannelId={selectedChannel?.channelId}
-          onSelect={selectChannel}
-          onRemove={handleRemove}
-        />
+        ) : (
+          <Card bordered={false} className="app-panel channel-vod-empty">
+            <Empty description="검색 또는 북마크에서 채널을 선택해 주세요." />
+          </Card>
+        )}
       </div>
-
-      {selectedChannel ? (
-        <ChannelVideoList
-          key={selectedChannel.channelId}
-          channel={selectedChannel}
-          activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-          onQueueVideo={handleQueueVideo}
-        />
-      ) : (
-        <Card bordered={false} className="app-panel">
-          <Empty description="좌측 검색 결과 또는 북마크 채널에서 채널을 선택해 주세요." />
-        </Card>
-      )}
     </div>
   );
 
@@ -209,14 +237,20 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
     ? searchWorkspace
     : activeTab === 'url'
       ? (
-          <Card bordered={false} className="app-panel">
-            <VideoUrlTab
-              activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-              onQueueVideo={handleQueueVideo}
-            />
-          </Card>
+          <div className="app-scroll-view">
+            <Card bordered={false} className="app-panel">
+              <VideoUrlTab
+                activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+                onQueueVideo={handleQueueVideo}
+              />
+            </Card>
+          </div>
         )
-      : <DownloadPanel tasks={downloadTasks} />;
+      : (
+          <div className="app-scroll-view">
+            <DownloadPanel tasks={downloadTasks} />
+          </div>
+        );
 
   return (
     <Layout className="app-shell" data-theme={themeMode}>
