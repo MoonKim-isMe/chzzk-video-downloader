@@ -142,9 +142,6 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
     try {
       const channels = await removeSavedChannel(channelId);
       setSavedChannels(channels);
-      if (selectedChannel?.channelId === channelId) {
-        setSelectedChannel(undefined);
-      }
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
     }
@@ -204,6 +201,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
               selectedChannelId={selectedChannel?.channelId}
               onSelect={selectChannel}
               onSave={handleSave}
+              onRemove={handleRemove}
             />
           ) : (
             <SavedChannels

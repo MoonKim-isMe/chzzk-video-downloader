@@ -12,6 +12,7 @@ interface ChannelSearchTabProps {
   selectedChannelId?: string;
   onSelect: (channel: Channel) => void;
   onSave: (channel: Channel) => void;
+  onRemove: (channelId: string) => void;
 }
 
 function ChannelSearchTab({
@@ -19,6 +20,7 @@ function ChannelSearchTab({
   selectedChannelId,
   onSelect,
   onSave,
+  onRemove,
 }: ChannelSearchTabProps) {
   const [keyword, setKeyword] = useState('');
   const [result, setResult] = useState<ChannelSearchResult>({
@@ -95,6 +97,7 @@ function ChannelSearchTab({
                 selected={selectedChannelId === channel.channelId}
                 onSelect={onSelect}
                 onSave={onSave}
+                onRemove={onRemove}
               />
             ))}
           </div>

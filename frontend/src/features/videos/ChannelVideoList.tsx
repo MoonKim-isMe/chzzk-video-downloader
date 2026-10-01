@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Skeleton, Typography } from 'antd';
+import { Alert, Avatar, Button, Card, Empty, Skeleton, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getChannelVideos } from '../../lib/backend';
@@ -105,11 +105,16 @@ function ChannelVideoList({
   return (
     <Card bordered={false} className="app-panel channel-vod-panel">
       <div className="channel-vod-header">
-        <div className="min-w-0">
-          <Text className="app-eyebrow">VOD</Text>
-          <Title level={4} ellipsis className="app-section-title !mb-0 !mt-1">
-            {channel.channelName}
-          </Title>
+        <div className="channel-vod-identity">
+          <Avatar size={46} src={channel.channelImageUrl || undefined}>
+            {channel.channelName.slice(0, 1)}
+          </Avatar>
+          <div className="min-w-0">
+            <Text className="app-eyebrow">VOD</Text>
+            <Title level={4} ellipsis className="app-section-title !mb-0 !mt-1">
+              {channel.channelName}
+            </Title>
+          </div>
         </div>
 
         <div className="channel-vod-meta">
