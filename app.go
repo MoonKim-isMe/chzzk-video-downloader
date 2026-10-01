@@ -8,6 +8,7 @@ import (
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
+	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -29,8 +30,12 @@ type App struct {
 
 	queueMu       sync.Mutex
 	downloadQueue *downloader.Queue
-	shuttingDown  atomic.Bool
-	eventEmitter  func(downloader.DownloadTask)
+
+	settingsMu    sync.Mutex
+	settingsStore *appsettings.Store
+
+	shuttingDown atomic.Bool
+	eventEmitter func(downloader.DownloadTask)
 }
 
 type AppInfo struct {
@@ -113,6 +118,22 @@ func (a *App) GetDefaultDownloadDir() (string, error) {
 	return downloader.DefaultOutputDir()
 }
 
+func (a *App) GetSettings() (appsettings.AppSettings, error) {
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+	return store.Get(), nil
+}
+
+func (a *App) UpdateSettings(next appsettings.AppSettings) (appsettings.AppSettings, error) {
+	store, err := a.ensureSettingsStore()
+	if err != nil {
+		return appsettings.AppSettings{}, err
+	}
+	return store.Update(next)
+}
+
 func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader.DownloadTask, error) {
 	if request.OutputDir == "" {
 		outputDir, err := downloader.DefaultOutputDir()
@@ -152,6 +173,26 @@ func (a *App) ensureDownloadQueue() *downloader.Queue {
 		a.downloadQueue = downloader.NewQueue(a.appContext(), a.downloadManager, a.emitDownloadState, 1)
 	}
 	return a.downloadQueue
+}
+
+func (a *App) ensureSettingsStore() (*appsettings.Store, error) {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.settingsStore != nil {
+		return a.settingsStore, nil
+	}
+
+	downloadDir, err := downloader.DefaultOutputDir()
+	if err != nil {
+		return nil, err
+	}
+	store, err := appsettings.NewStore(appsettings.Defaults(downloadDir))
+	if err != nil {
+		return nil, err
+	}
+	a.settingsStore = store
+	return store, nil
 }
 
 func (a *App) emitDownloadState(task downloader.DownloadTask) {

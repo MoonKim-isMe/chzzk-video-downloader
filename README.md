@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 4-D — Download Manager 통합 안정화**까지 구현 중입니다.
+현재는 **Phase 5-A — Settings 모델 / 백엔드 API**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -136,7 +136,7 @@ Go 포맷:
 
 ```powershell
 cd ..
-gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go
+gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go internal/settings/*.go
 ```
 
 전체 Wails 빌드:
@@ -176,3 +176,16 @@ Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있습니
 - 값을 줄여도 이미 실행 중인 작업은 중단하지 않습니다.
 - 이후 작업부터 변경된 동시 실행 제한을 적용합니다.
 - Phase 5의 동시 다운로드 수 설정은 기존 Queue를 재생성하지 않고 이 Scheduler 설정에 연결합니다.
+
+## Phase 5 Settings 기준
+
+Phase 5-A에서는 설정을 앱 실행 중 메모리에 저장합니다. 실제 다운로드 적용은 Phase 5-B, 앱 재시작 후 영속화는 Phase 6에서 처리합니다.
+
+기본 설정:
+
+- 다운로드 경로: `Downloads/CHZZK Video Downloader`
+- 해상도: `best`
+- 출력 포맷: `mp4`
+- 동시 다운로드 수: `1`
+
+지원 해상도는 `best / 2160p / 1440p / 1080p / 720p`, 출력 포맷은 `mp4 / mkv / webm`이며 동시 다운로드 수는 `1~8` 범위입니다.

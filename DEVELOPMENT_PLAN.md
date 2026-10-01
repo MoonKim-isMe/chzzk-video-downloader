@@ -610,11 +610,101 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 
 ## Phase 5 — Settings
 
-- [ ] SET-1. 다운로드 디렉터리 선택
-- [ ] SET-2. 해상도 선택
-- [ ] SET-3. 출력 포맷 선택
-- [ ] SET-4. 동시 다운로드 수 설정
+### Phase 5-A — Settings 모델 / 백엔드 API
+
+- [x] SET-5A-1. AppSettings 모델 및 기본값 정의
+- [x] SET-5A-2. 다운로드 경로 / 해상도 / 출력 포맷 / 동시 다운로드 수 Validation 구현
+- [x] SET-5A-3. 메모리 기반 Settings Store 구현
+- [x] SET-5A-4. GetSettings / UpdateSettings Wails API 구현
+- [x] SET-5A-5. 프론트엔드 AppSettings 타입 및 backend wrapper 추가
+
+#### Phase 5-A 설정 기준
+
+기본값:
+
+- 다운로드 경로: 사용자 홈의 `Downloads/CHZZK Video Downloader`
+- 해상도: `best`
+- 출력 포맷: `mp4`
+- 동시 다운로드 수: `1`
+
+지원 해상도:
+
+- `best`
+- `2160p`
+- `1440p`
+- `1080p`
+- `720p`
+
+지원 출력 포맷:
+
+- `mp4`
+- `mkv`
+- `webm`
+
+Validation:
+
+- 다운로드 경로는 비어 있을 수 없고 NUL 문자를 허용하지 않는다.
+- 해상도와 출력 포맷은 위 허용 목록만 저장한다.
+- 동시 다운로드 수는 `1~8` 범위로 제한한다.
+- UpdateSettings는 전체 설정을 검증한 후 한 번에 교체한다.
+- 잘못된 업데이트는 기존 설정을 변경하지 않는다.
+- 문자열 enum 값은 trim/lower-case 정규화 후 저장한다.
+
+저장 정책:
+
+- Phase 5에서는 앱 실행 중 메모리에만 설정을 보관한다.
+- 앱 재시작 후 설정 영속화는 Phase 6의 SQLite `DB-4`에서 구현한다.
+- Phase 5-A에서는 설정값을 다운로드 엔진/Queue에 적용하지 않는다. 실제 적용은 Phase 5-B에서 수행한다.
+
+#### Phase 5-A 검증 현황
+
+완료:
+
+- Go 1.23 격리 Settings 모듈에서 `gofmt` 성공
+- `go test ./...` 성공
+- `go test -race ./...` 성공
+- `go vet ./...` 성공
+- 기본 다운로드 경로 입력 기반 기본 설정 생성 검증
+- 해상도/출력 포맷 대소문자 및 공백 정규화 검증
+- 지원하지 않는 해상도/포맷/동시 다운로드 수 거부 검증
+- 잘못된 Update가 기존 Store 값을 변경하지 않는지 검증
+- Settings Store 동시 Get/Update race 검증
+- Wails runtime 및 기존 App 의존성을 stub으로 대체한 App 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
+- App GetSettings / UpdateSettings 조회·정규화·실패 시 기존 값 보존 검증
+- TypeScript 5.8.3 격리 fixture에서 AppSettings 및 GetSettings / UpdateSettings backend 계약 `tsc --noEmit` 성공
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 Wails generated binding 생성 결과 확인
+- 실제 프로젝트 의존성 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+
+### Phase 5-B — 다운로드 엔진 설정 적용
+
+- [ ] SET-1. 다운로드 디렉터리 설정을 신규 Queue 작업에 적용
+- [ ] SET-2. 해상도 설정을 yt-dlp format selector로 변환
+- [ ] SET-3. 출력 포맷 설정을 yt-dlp/ffmpeg 옵션에 적용
+- [ ] SET-4. 동시 다운로드 수를 Queue SetMaxConcurrent에 연결
+- [ ] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
+- [ ] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
+
+### Phase 5-C — Settings UI
+
 - [ ] SET-5. 설정 UI 구현
+- [ ] SET-5C-1. 설정 버튼 및 우측 Drawer 구현
+- [ ] SET-5C-2. 다운로드 경로 표시/선택 UI 구현
+- [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현
+- [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현
+
+### Phase 5-D — 설정 통합 안정화
+
+- [ ] SET-5D-1. 설정 변경 후 신규 Queue 작업 적용 검증
+- [ ] SET-5D-2. 실행 중 작업의 설정 Snapshot 불변성 검증
+- [ ] SET-5D-3. maxConcurrent 증가/감소 Wails 통합 검증
+- [ ] SET-5D-4. 다운로드 경로 및 포맷/해상도 조합 검증
+- [ ] SET-5D-5. Phase 6 SQLite 설정 영속화용 Settings 구조 확정
 
 ## Phase 6 — Persistence 및 Windows 패키징
 
