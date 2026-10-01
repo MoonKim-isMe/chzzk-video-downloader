@@ -95,6 +95,29 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 	return current, nil
 }
 
+func (q *Queue) MaxConcurrent() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.maxConcurrent
+}
+
+func (q *Queue) SetMaxConcurrent(maxConcurrent int) error {
+	if maxConcurrent <= 0 {
+		return fmt.Errorf("동시 다운로드 수는 1 이상이어야 합니다")
+	}
+
+	q.mu.Lock()
+	if q.stopped {
+		q.mu.Unlock()
+		return fmt.Errorf("다운로드 Queue가 종료되었습니다")
+	}
+	q.maxConcurrent = maxConcurrent
+	q.mu.Unlock()
+
+	q.startAvailable()
+	return nil
+}
+
 func (q *Queue) List() []DownloadTask {
 	q.mu.Lock()
 	defer q.mu.Unlock()

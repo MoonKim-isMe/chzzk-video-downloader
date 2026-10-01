@@ -260,6 +260,7 @@ function DownloadPanel({ tasks }: DownloadPanelProps) {
       running: tasks.filter((task) => task.status === 'running').length,
       completed: tasks.filter((task) => task.status === 'completed').length,
       failed: tasks.filter((task) => task.status === 'failed').length,
+      cancelled: tasks.filter((task) => task.status === 'cancelled').length,
     }),
     [tasks],
   );
@@ -289,12 +290,13 @@ function DownloadPanel({ tasks }: DownloadPanelProps) {
       {toolchain && <ToolchainAlert status={toolchain} />}
 
       <Card className="border-slate-800 bg-slate-900/80">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           <Statistic title="전체" value={counts.total} />
           <Statistic title="대기" value={counts.queued} />
           <Statistic title="진행" value={counts.running} />
           <Statistic title="완료" value={counts.completed} />
           <Statistic title="실패" value={counts.failed} />
+          <Statistic title="취소" value={counts.cancelled} />
         </div>
       </Card>
 

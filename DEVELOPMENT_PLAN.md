@@ -559,11 +559,54 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 4-D — 통합 안정화 및 Phase 5 준비
 
-- [ ] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱의 다중 Task 통합 검증
-- [ ] DM-4D-1. 빠른 연속 Queue 등록 순서 검증
-- [ ] DM-4D-2. 완료/실패/취소 직후 다음 작업 시작 검증
-- [ ] DM-4D-3. Go/React 이벤트 순서 및 Task Registry 최종 일관성 검증
-- [ ] DM-4D-4. Phase 5 maxConcurrentDownloads 확장을 위한 Scheduler 구조 확정
+- [x] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱의 다중 Task 통합 검증
+- [x] DM-4D-1. 빠른 연속 Queue 등록 순서 검증
+- [x] DM-4D-2. 완료/실패/취소 직후 다음 작업 시작 검증
+- [x] DM-4D-3. Go/React 이벤트 순서 및 Task Registry 최종 일관성 검증
+- [x] DM-4D-4. Phase 5 maxConcurrentDownloads 확장을 위한 Scheduler 구조 확정
+
+#### Phase 4-D 안정화 기준
+
+- 빠르게 여러 VOD를 등록해도 `order`와 FIFO `pending` 순서를 유지한다.
+- 각 Task의 yt-dlp progress 파싱 결과는 해당 Task에만 반영되며 다른 Task의 진행률과 섞이지 않는다.
+- Queue가 emit하는 상태는 Task 단위로 `queued → running → terminal` 순서를 유지하고 이전 상태로 역행하지 않는다.
+- React의 snapshot/event 병합은 Go 이벤트 순서와 별개로 terminal 상태 및 더 높은 running 진행률을 우선한다.
+- VOD Queue 등록 실패는 사용자 메시지만 표시하고 reject를 다시 던지지 않아 unhandled promise rejection을 만들지 않는다.
+- Download Manager KPI에는 전체/대기/진행/완료/실패/취소 상태를 모두 포함한다.
+- Queue는 런타임 `SetMaxConcurrent(maxConcurrent)` / `MaxConcurrent()`를 제공한다.
+- 동시 실행 수 증가 시 빈 슬롯만큼 queued 작업을 즉시 시작한다.
+- 동시 실행 수 감소 시 현재 실행 중인 작업은 강제 취소하지 않고 이후 Scheduler부터 새 제한을 적용한다.
+- Phase 5에서는 Queue를 재생성하지 않고 설정값을 `SetMaxConcurrent`에 연결한다.
+
+#### Phase 4-D 검증 현황
+
+완료:
+
+- Phase 4-D Scheduler 로직을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go test -race ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- 12개 Task 빠른 연속 등록 후 실행 순서가 등록 FIFO와 동일한지 확인
+- maxConcurrent 1 → 2 증가 시 추가 queued Task가 즉시 실행되는지 확인
+- maxConcurrent 2 → 1 감소 시 기존 active Task는 유지하고 새 Task는 제한이 충족될 때까지 대기하는지 확인
+- 0 이하 동시성 값 및 Stop 이후 동시성 변경 거부 확인
+- 실제 `parseProgressLine`을 거친 두 Task의 downloadedBytes / totalBytes / speed / ETA / percent가 서로 독립적으로 전달되는지 확인
+- Queue event의 Task 상태가 queued → running → terminal 방향으로만 진행하는지 확인
+- TypeScript 5.8.3으로 `downloadTasks` 병합 유틸 컴파일 성공
+- 컴파일된 병합 유틸 실행 테스트에서 running progress 역행 방지, terminal 상태 우선, snapshot에 없는 이벤트 Task 보존 및 등록 순서 병합 확인
+- Queue 등록 실패 재throw 제거로 unhandled promise rejection 경로 제거
+- Download Manager KPI에 cancelled 개수 추가
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 이벤트 전송 계층에서 다중 Task snapshot/event 경합 검증
+- 실제 yt-dlp 여러 건 다운로드에서 progress/속도/ETA 분리 확인
+
+Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목은 실제 Wails/외부 도구 환경 통합 검증으로 유지한다.
 
 ## Phase 5 — Settings
 

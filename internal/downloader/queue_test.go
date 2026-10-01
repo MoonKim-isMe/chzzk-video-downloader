@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -302,5 +303,234 @@ func TestQueueStopCancelsQueuedAndRunningTasks(t *testing.T) {
 	}
 	if _, err := queue.Enqueue(queueRequest(7003)); err == nil {
 		t.Fatal("expected stopped queue error")
+	}
+}
+
+
+func TestQueueRapidEnqueuePreservesFIFOOrder(t *testing.T) {
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, nil, 1)
+
+	const count = 12
+	tasks := make([]DownloadTask, 0, count)
+	for index := 0; index < count; index++ {
+		task, err := queue.Enqueue(queueRequest(int64(8000 + index)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tasks = append(tasks, task)
+	}
+
+	waitForStartedCount(t, executor, 1)
+	for index, task := range tasks {
+		if index == 0 {
+			waitForTaskStatus(t, queue, task.TaskID, TaskStatusRunning)
+		} else {
+			waitForTaskStatus(t, queue, task.TaskID, TaskStatusQueued)
+		}
+	}
+
+	for index, task := range tasks {
+		if index > 0 {
+			waitForTaskStatus(t, queue, task.TaskID, TaskStatusRunning)
+		}
+		executor.release(task.URL)
+		waitForTaskStatus(t, queue, task.TaskID, TaskStatusCompleted)
+	}
+
+	executor.mu.Lock()
+	started := append([]string(nil), executor.started...)
+	executor.mu.Unlock()
+	if len(started) != count {
+		t.Fatalf("expected %d started tasks, got %d", count, len(started))
+	}
+	for index, task := range tasks {
+		if started[index] != task.URL {
+			t.Fatalf("FIFO order mismatch at %d: got %s want %s", index, started[index], task.URL)
+		}
+	}
+}
+
+func TestQueueSetMaxConcurrentStartsAdditionalPendingTasks(t *testing.T) {
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, nil, 1)
+
+	first, _ := queue.Enqueue(queueRequest(9001))
+	second, _ := queue.Enqueue(queueRequest(9002))
+	third, _ := queue.Enqueue(queueRequest(9003))
+	waitForStartedCount(t, executor, 1)
+
+	if queue.MaxConcurrent() != 1 {
+		t.Fatalf("unexpected initial maxConcurrent: %d", queue.MaxConcurrent())
+	}
+	if err := queue.SetMaxConcurrent(2); err != nil {
+		t.Fatal(err)
+	}
+	if queue.MaxConcurrent() != 2 {
+		t.Fatalf("unexpected updated maxConcurrent: %d", queue.MaxConcurrent())
+	}
+
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusRunning)
+	waitForStartedCount(t, executor, 2)
+
+	if err := queue.SetMaxConcurrent(1); err != nil {
+		t.Fatal(err)
+	}
+	executor.release(first.URL)
+	waitForTaskStatus(t, queue, first.TaskID, TaskStatusCompleted)
+
+	time.Sleep(20 * time.Millisecond)
+	if executor.hasStarted(third.URL) {
+		t.Fatal("third task must stay queued while active count equals reduced limit")
+	}
+
+	executor.release(second.URL)
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusCompleted)
+	waitForTaskStatus(t, queue, third.TaskID, TaskStatusRunning)
+	queue.Stop()
+}
+
+func TestQueueSetMaxConcurrentRejectsInvalidValue(t *testing.T) {
+	queue := NewQueue(context.Background(), &immediateErrorExecutor{}, nil, 1)
+	if err := queue.SetMaxConcurrent(0); err == nil {
+		t.Fatal("expected invalid concurrency error")
+	}
+	if queue.MaxConcurrent() != 1 {
+		t.Fatalf("invalid update changed maxConcurrent: %d", queue.MaxConcurrent())
+	}
+	queue.Stop()
+	if err := queue.SetMaxConcurrent(2); err == nil {
+		t.Fatal("expected stopped queue update error")
+	}
+}
+
+type parsedProgressExecutor struct{}
+
+func (*parsedProgressExecutor) Download(
+	ctx context.Context,
+	request DownloadRequest,
+	handler ProgressHandler,
+) (DownloadResult, error) {
+	line := progressPrefix + "downloading\t" + strconv.FormatInt(requestProgressBytes(request.URL), 10) +
+		"\t1000\tNA\t250\t2\t50.0%"
+	progress, ok := parseProgressLine(line)
+	if !ok {
+		return DownloadResult{}, errors.New("progress parse failed")
+	}
+	handler(progress)
+
+	select {
+	case <-ctx.Done():
+		return DownloadResult{}, ctx.Err()
+	default:
+	}
+
+	return DownloadResult{
+		FinalPath: request.URL + ".mp4",
+		LastProgress: DownloadProgress{
+			Status:          "completed",
+			Percent:         100,
+			DownloadedBytes: 1000,
+			TotalBytes:      1000,
+		},
+	}, nil
+}
+
+func requestProgressBytes(url string) int64 {
+	if strings.HasSuffix(url, "/10001") {
+		return 111
+	}
+	return 222
+}
+
+func TestQueueKeepsParsedProgressIsolatedPerTask(t *testing.T) {
+	var mu sync.Mutex
+	events := make(map[int64][]DownloadTask)
+	queue := NewQueue(context.Background(), &parsedProgressExecutor{}, func(task DownloadTask) {
+		mu.Lock()
+		events[task.VideoNo] = append(events[task.VideoNo], task)
+		mu.Unlock()
+	}, 2)
+
+	first, err := queue.Enqueue(queueRequest(10001))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := queue.Enqueue(queueRequest(10002))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	waitForTaskStatus(t, queue, first.TaskID, TaskStatusCompleted)
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusCompleted)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	var firstSaw111, secondSaw222 bool
+	for _, event := range events[10001] {
+		if event.Status == TaskStatusRunning &&
+			event.Progress.DownloadedBytes == 111 &&
+			event.Progress.TotalBytes == 1000 &&
+			event.Progress.SpeedBytesPerSecond == 250 &&
+			event.Progress.ETASeconds == 2 &&
+			event.Progress.Percent == 50 {
+			firstSaw111 = true
+		}
+	}
+	for _, event := range events[10002] {
+		if event.Status == TaskStatusRunning &&
+			event.Progress.DownloadedBytes == 222 &&
+			event.Progress.TotalBytes == 1000 &&
+			event.Progress.SpeedBytesPerSecond == 250 &&
+			event.Progress.ETASeconds == 2 &&
+			event.Progress.Percent == 50 {
+			secondSaw222 = true
+		}
+	}
+	if !firstSaw111 || !secondSaw222 {
+		t.Fatalf("progress leaked or was not delivered: first=%#v second=%#v", events[10001], events[10002])
+	}
+}
+
+func TestQueueEventStatusNeverRegresses(t *testing.T) {
+	var mu sync.Mutex
+	events := make(map[string][]TaskStatus)
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, func(task DownloadTask) {
+		mu.Lock()
+		events[task.TaskID] = append(events[task.TaskID], task.Status)
+		mu.Unlock()
+	}, 1)
+
+	first, _ := queue.Enqueue(queueRequest(11001))
+	second, _ := queue.Enqueue(queueRequest(11002))
+	waitForStartedCount(t, executor, 1)
+
+	executor.release(first.URL)
+	waitForTaskStatus(t, queue, first.TaskID, TaskStatusCompleted)
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusRunning)
+	queue.Cancel(second.TaskID)
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusCancelled)
+
+	rank := map[TaskStatus]int{
+		TaskStatusQueued:    0,
+		TaskStatusRunning:   1,
+		TaskStatusCompleted: 2,
+		TaskStatusFailed:    2,
+		TaskStatusCancelled: 2,
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for taskID, statuses := range events {
+		previous := -1
+		for _, status := range statuses {
+			current := rank[status]
+			if current < previous {
+				t.Fatalf("task %s status regressed: %#v", taskID, statuses)
+			}
+			previous = current
+		}
 	}
 }

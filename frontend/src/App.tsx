@@ -137,7 +137,6 @@ function AppContent() {
         );
       } catch (cause) {
         message.error(cause instanceof Error ? cause.message : String(cause));
-        throw cause;
       }
     },
     [message],
