@@ -745,11 +745,57 @@ Validation:
 
 ### Phase 5-C — Settings UI
 
-- [ ] SET-5. 설정 UI 구현
-- [ ] SET-5C-1. 설정 버튼 및 우측 Drawer 구현
-- [ ] SET-5C-2. 다운로드 경로 표시/선택 UI 구현
-- [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현
-- [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현
+- [ ] SET-5. 설정 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-1. 설정 버튼 및 우측 Drawer 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-2. 다운로드 경로 표시/선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+
+#### Phase 5-C UI 기준
+
+- 앱 헤더 우측에 `설정` 버튼을 표시한다.
+- 설정은 우측 Drawer로 열고 Ant Design `destroyOnHidden`을 사용한다.
+- Drawer가 열릴 때마다 `GetSettings()`를 다시 호출해 현재 백엔드 설정값으로 Form을 초기화한다.
+- 다운로드 폴더는 직접 입력 대신 읽기 전용 경로 + `폴더 선택` 버튼을 제공한다.
+- 폴더 선택은 Wails Go Runtime의 `OpenDirectoryDialog`를 사용한다.
+- 폴더 선택 취소는 현재 Form 값을 변경하지 않는다.
+- 해상도는 `최고 화질 / 2160p 이하 / 1440p 이하 / 1080p 이하 / 720p 이하`를 제공한다.
+- 출력 포맷은 `MP4 / MKV / WebM`을 제공한다.
+- 동시 다운로드 수는 정수 `1~8`만 허용한다.
+- 저장 전 프론트 Form Validation을 수행하고, 최종 Validation은 기존 `UpdateSettings` 백엔드가 다시 수행한다.
+- 저장 성공 시 성공 메시지를 표시하고 Drawer를 닫는다.
+- 백엔드 오류는 Drawer를 유지한 채 사용자 메시지로 표시한다.
+- 경로·해상도·포맷의 Queue Snapshot 정책과 동시 다운로드 수의 즉시 Scheduler 적용 정책을 Drawer 내부에 안내한다.
+- Phase 6 전까지 설정이 앱 재시작 시 초기화된다는 안내를 표시한다.
+
+#### Phase 5-C 검증 현황
+
+완료:
+
+- Wails v2.15 공식 Runtime 문서에서 Go `OpenDirectoryDialog(ctx, OpenDialogOptions)` API와 취소 시 빈 문자열 반환 동작 확인
+- 네이티브 폴더 선택 메서드를 재현한 Go 1.23.2 격리 fixture에서 `gofmt` 성공
+- 동일 fixture에서 `go test ./...` 성공
+- 동일 fixture에서 `go test -race ./...` 성공
+- 동일 fixture에서 `go vet ./...` 성공
+- 현재 Form 경로가 native dialog의 DefaultDirectory로 전달되는지 검증
+- 현재 경로가 비어 있으면 Settings의 downloadDir을 native dialog 기본 경로로 사용하는지 검증
+- 폴더 선택 취소 시 빈 문자열을 정상 처리하는지 검증
+- native dialog 오류를 Wails API 오류로 래핑하는지 검증
+- TypeScript 5.8.3 격리 fixture에서 SettingsDrawer `tsc --noEmit` 성공
+- AppSettings Form, 다운로드 경로 선택, Select/InputNumber 값 타입, 저장 호출 타입 확인
+- Header 설정 버튼 / 우측 Drawer 연결 구조 확인
+- backend wrapper의 SelectDownloadDirectory 계약 추가
+
+현재 실행 환경 제약으로 검증 대기:
+
+- Node.js 24 + 실제 Yarn 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- 실제 Wails generated binding에서 SelectDownloadDirectory 생성 결과
+- Windows 네이티브 OpenDirectoryDialog 실제 동작
+- `wails build`
+- 실제 앱에서 설정 저장 후 maxConcurrent / 신규 Queue 다운로드 옵션 반영 UI 통합
+
+위 실제 프론트엔드/Wails 검증 완료 후 Phase 5-C 체크 항목을 완료 처리한다.
 
 ### Phase 5-D — 설정 통합 안정화
 

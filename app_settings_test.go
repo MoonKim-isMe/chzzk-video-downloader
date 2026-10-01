@@ -7,6 +7,7 @@ import (
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func TestGetSettingsReturnsDefaults(t *testing.T) {
@@ -151,5 +152,68 @@ func TestUpdateSettingsRejectsInvalidValueWithoutChangingStore(t *testing.T) {
 	}
 	if after != before {
 		t.Fatalf("invalid update changed settings: before=%#v after=%#v", before, after)
+	}
+}
+
+
+func TestSelectDownloadDirectoryUsesCurrentDirectory(t *testing.T) {
+	app := NewApp()
+	expected := filepath.Join(t.TempDir(), "selected")
+	var gotDefault string
+
+	app.directoryPicker = func(ctx context.Context, options runtime.OpenDialogOptions) (string, error) {
+		gotDefault = options.DefaultDirectory
+		if options.Title != "다운로드 폴더 선택" {
+			t.Fatalf("unexpected title: %s", options.Title)
+		}
+		return expected, nil
+	}
+
+	current := filepath.Join(t.TempDir(), "current")
+	selected, err := app.SelectDownloadDirectory(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotDefault != current {
+		t.Fatalf("unexpected default directory: got %s want %s", gotDefault, current)
+	}
+	if selected != expected {
+		t.Fatalf("unexpected selected directory: got %s want %s", selected, expected)
+	}
+}
+
+func TestSelectDownloadDirectoryFallsBackToSettingsAndAllowsCancel(t *testing.T) {
+	app := NewApp()
+	defaultDir := filepath.Join(t.TempDir(), "downloads")
+	store, err := appsettings.NewStore(appsettings.Defaults(defaultDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.settingsStore = store
+
+	app.directoryPicker = func(ctx context.Context, options runtime.OpenDialogOptions) (string, error) {
+		if options.DefaultDirectory != defaultDir {
+			t.Fatalf("unexpected settings fallback: got %s want %s", options.DefaultDirectory, defaultDir)
+		}
+		return "", nil
+	}
+
+	selected, err := app.SelectDownloadDirectory("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected != "" {
+		t.Fatalf("cancel should return empty selection: %q", selected)
+	}
+}
+
+func TestSelectDownloadDirectoryWrapsDialogError(t *testing.T) {
+	app := NewApp()
+	app.directoryPicker = func(context.Context, runtime.OpenDialogOptions) (string, error) {
+		return "", errors.New("dialog failed")
+	}
+
+	if _, err := app.SelectDownloadDirectory(t.TempDir()); err == nil {
+		t.Fatal("expected dialog error")
 	}
 }

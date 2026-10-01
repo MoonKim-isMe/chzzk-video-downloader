@@ -16,6 +16,7 @@ interface BackendApp {
   GetChannelVideos(channelId: string, page: number, size: number): Promise<VideoListResult>;
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
+  SelectDownloadDirectory(currentDirectory: string): Promise<string>;
   GetSettings(): Promise<AppSettings>;
   UpdateSettings(settings: AppSettings): Promise<AppSettings>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
@@ -56,6 +57,9 @@ export const getChannelVideos = (channelId: string, page = 0, size = 24) =>
 export const getDownloadToolchainStatus = () => app().GetDownloadToolchainStatus();
 
 export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
+
+export const selectDownloadDirectory = (currentDirectory: string) =>
+  app().SelectDownloadDirectory(currentDirectory);
 
 export const getSettings = () => app().GetSettings();
 

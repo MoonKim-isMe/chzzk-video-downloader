@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 5-B — 다운로드 엔진 설정 적용**까지 구현 중입니다.
+현재는 **Phase 5-C — Settings Drawer UI**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -203,3 +203,16 @@ Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포�
 - 720p: `bv*[height<=720]+ba/b[height<=720]`
 
 출력 포맷은 `mp4 / mkv / webm`을 지원하며 yt-dlp의 `--merge-output-format`과 `--remux-video`를 함께 사용합니다. 동시 다운로드 수는 Snapshot이 아니라 Queue Scheduler 전역 설정으로 즉시 반영됩니다.
+
+## Phase 5-C Settings UI
+
+앱 헤더 우측의 `설정` 버튼에서 우측 Drawer를 열 수 있습니다.
+
+Drawer에서는 다음 값을 편집합니다.
+
+- 다운로드 폴더: Wails native directory dialog로 선택
+- 해상도: 최고 화질 / 2160p / 1440p / 1080p / 720p 이하
+- 출력 포맷: MP4 / MKV / WebM
+- 동시 다운로드 수: 1~8
+
+Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 설정 영속화 전인 Phase 5에서는 앱 재시작 시 기본값으로 초기화됩니다.

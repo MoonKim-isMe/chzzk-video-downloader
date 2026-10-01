@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -36,7 +37,8 @@ type App struct {
 	settingsStore   *appsettings.Store
 
 	shuttingDown atomic.Bool
-	eventEmitter func(downloader.DownloadTask)
+	eventEmitter    func(downloader.DownloadTask)
+	directoryPicker func(context.Context, runtime.OpenDialogOptions) (string, error)
 }
 
 type AppInfo struct {
@@ -117,6 +119,28 @@ func (a *App) GetDownloadToolchainStatus() downloader.ToolchainStatus {
 
 func (a *App) GetDefaultDownloadDir() (string, error) {
 	return downloader.DefaultOutputDir()
+}
+
+func (a *App) SelectDownloadDirectory(currentDirectory string) (string, error) {
+	defaultDirectory := strings.TrimSpace(currentDirectory)
+	if defaultDirectory == "" {
+		if current, err := a.GetSettings(); err == nil {
+			defaultDirectory = current.DownloadDir
+		}
+	}
+
+	picker := a.directoryPicker
+	if picker == nil {
+		picker = runtime.OpenDirectoryDialog
+	}
+	selected, err := picker(a.appContext(), runtime.OpenDialogOptions{
+		Title:            "다운로드 폴더 선택",
+		DefaultDirectory: defaultDirectory,
+	})
+	if err != nil {
+		return "", fmt.Errorf("다운로드 폴더를 선택할 수 없습니다: %w", err)
+	}
+	return strings.TrimSpace(selected), nil
 }
 
 func (a *App) GetSettings() (appsettings.AppSettings, error) {
