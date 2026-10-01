@@ -306,7 +306,6 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
             <Button
               aria-label="설정 열기"
               type="default"
-              shape="circle"
               className="settings-icon-button"
               icon={<SettingsIcon />}
               onClick={() => setSettingsOpen(true)}
