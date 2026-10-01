@@ -1016,7 +1016,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 - [ ] UX-D0. Light / Dark 테마 선택, 즉시 UI 적용 및 SQLite 영속화 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-D1. Settings Drawer의 섹션 구조와 설명 문구 간결화 — 화면/다운로드 섹션 1차 정리 완료, 후속 UX 점검 대기
-- [ ] UX-D2. 저장/취소/폴더 선택 액션의 상태 피드백 통일
+- [ ] UX-D2. 저장/취소/폴더 선택 액션의 상태 피드백 통일 — 공통 Message를 헤더 아래에서 표시하도록 위치 보정 완료, 실제 Wails 시각 검증 대기
 - [ ] UX-D3. 키보드 포커스, 버튼 상태, 텍스트 대비 등 기본 접근성 점검
 - [ ] UX-D4. 전체 UI에서 버튼/Tag/Alert/Empty/Skeleton 표현 일관성 점검
 
@@ -1027,6 +1027,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 사용자에게 불필요한 Phase / Wails 개발 표시는 제품 UI에서 제거한다.
 - 헤더 설정 아이콘은 34×34px rounded 사각형 outlined 버튼으로 표시해 탐색 탭과 시각적으로 분리한다.
 - 설정 아이콘은 Ant Design의 `.ant-btn-icon` 래퍼와 SVG까지 flex/block으로 정렬해 버튼 내부에서 시각적으로 정중앙에 배치한다.
+- 공통 Ant Design Message는 헤더 높이 68px과 본문 상단 여백 16px을 반영해 `top: 84px`에서 시작하고, 헤더 중앙 탭을 가리지 않는다.
 - 채널 검색 화면은 좌측 채널 탐색 패널 + 우측 VOD 패널의 2열 Workspace로 구성한다.
 - 좌측 채널 탐색 패널은 `검색 / 북마크` 내부 탭으로 전환한다.
 - 우측 패널은 선택한 채널의 VOD 목록을 항상 표시하는 전용 영역으로 사용한다.
@@ -1083,6 +1084,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
 - 설정 버튼의 `shape="circle"` 제거 및 34×34px / `border-radius: 10px` rounded 사각형 스타일 정적 확인
 - 설정 버튼 `.ant-btn-icon`의 flex 중앙 정렬, `line-height: 0`, SVG `display: block` 적용 확인
+- `AntdApp message={{ top: 84 }}` 설정과 기존 `AntdApp.useApp()` Message 호출 경로 연결 정적 확인
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
 - 북마크 목록의 텍스트 삭제 버튼 제거, 채워진 별 아이콘 및 `onRemove` 해제 경로 연결 정적 확인
 - 북마크 별 위치 selector 우선순위 확인: 공용 `top: 9px`보다 북마크 전용 `top: 50% + translateY(-50%)`가 우선 적용되도록 확인
