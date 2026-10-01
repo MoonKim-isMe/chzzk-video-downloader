@@ -75,6 +75,7 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - [x] FND-4. 개발/빌드 명령과 저장소 기본 설정 구성
 - [x] FND-5. 최소 앱 Shell과 Go 애플리케이션 바인딩 기반 구성
 - [ ] FND-6. 가능한 범위의 포맷/정적 검증 및 빌드 절차 확인
+- [x] FND-7. Wails/Yarn 개발 과정에서 생성되는 로컬 산출물 Git ignore 정리
 
 ### Phase 0 검증 현황
 
