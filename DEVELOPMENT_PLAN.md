@@ -984,7 +984,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-C1. 다운로드 탭의 활성 작업과 완료 이력 시각적 구분 — 섹션형 Workspace 구현 완료, 실제 Wails 검증 대기
 - [ ] UX-C2. Task 상태/진행률/속도/ETA/저장 위치 정보 밀도 개선 — compact row UI 구현 완료, 실제 Wails 검증 대기
 - [ ] UX-C3. Queue 대기 순서와 취소 액션의 가시성 개선 — 취소 즉시 제거 및 상태 전이 안정화 구현 완료, 실제 다운로드 검증 대기
-- [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리 — 기능 중심 상태 문구 및 compact 오류 표시 구현 완료, 실제 Wails 검증 대기
+- [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리 — 기능 중심 상태 문구, 401 인증 필요/부분 데이터 충돌 오류 분류 구현 완료, 실제 Wails 검증 대기
 - [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 및 실패 다운로드의 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
@@ -1034,6 +1034,9 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 다운로드 탭은 헤더 아래 남은 높이를 채우는 단일 Workspace로 구성하고 `진행 중 / 완료 / 실패` 섹션을 내부 스크롤 영역에서 분리한다.
 - 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
+- 취소 후 동일 VOD 재시도 시 이전 `.part`/fragment 상태를 이어받아 손상되지 않도록 다운로드 명령은 `--no-continue`를 사용하고 fragment 보존을 비활성화한다.
+- HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`를 표시한다.
+- `initialization fragment found after media fragments`는 `partial_data_conflict`로 분류해 내부 실행 도구명/원문 로그 대신 재시도 안내를 표시한다.
 - cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
 - 완료 Task에는 `폴더 열기`와 `목록에서 삭제`를 제공하고, 실패 Task에는 `목록에서 삭제`를 제공한다. 삭제는 파일이 아니라 앱의 다운로드 이력만 제거한다.
 - 다운로드 도구 상태 UI에는 외부 프로그램명을 직접 노출하지 않고 `영상 다운로드`, `파일 저장/영상 처리`처럼 사용자가 이해할 기능 수준으로만 표현한다.

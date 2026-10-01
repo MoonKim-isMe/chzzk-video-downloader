@@ -39,7 +39,7 @@ func (m *Manager) runPreparedDownload(ctx context.Context, spec CommandSpec, han
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return result, fmt.Errorf("다운로드가 취소되었습니다: %w", err)
 		}
-		return result, sanitizeDownloadError(err)
+		return result, classifyDownloadFailure(sanitizeDownloadError(err))
 	}
 	if result.FinalPath == "" {
 		return result, fmt.Errorf("다운로드는 완료되었지만 최종 파일 경로를 확인할 수 없습니다")

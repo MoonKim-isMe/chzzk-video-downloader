@@ -34,6 +34,8 @@ func TestBuildDownloadCommand(t *testing.T) {
 		"--no-simulate",
 		"--progress",
 		"--newline",
+		"--no-continue",
+		"--no-keep-fragments",
 		"--progress-template",
 		"download:" + progressTemplate,
 		"--print",
@@ -122,5 +124,26 @@ func TestBuildDownloadCommandRejectsSplitToolDirectories(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected ffmpeg location error")
+	}
+}
+
+
+func TestBuildDownloadCommandDoesNotResumeCancelledPartialData(t *testing.T) {
+	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/12345",
+		OutputDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(spec.Args, "--no-continue") {
+		t.Fatalf("retry safety flag missing: %#v", spec.Args)
+	}
+	if slices.Contains(spec.Args, "--continue") {
+		t.Fatalf("partial resume must be disabled after cancellation: %#v", spec.Args)
+	}
+	if !slices.Contains(spec.Args, "--no-keep-fragments") {
+		t.Fatalf("fragment cleanup flag missing: %#v", spec.Args)
 	}
 }
