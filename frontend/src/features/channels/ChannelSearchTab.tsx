@@ -9,10 +9,17 @@ const { Paragraph, Title } = Typography;
 
 interface ChannelSearchTabProps {
   savedChannelIds: Set<string>;
+  selectedChannelId?: string;
+  onSelect: (channel: Channel) => void;
   onSave: (channel: Channel) => void;
 }
 
-function ChannelSearchTab({ savedChannelIds, onSave }: ChannelSearchTabProps) {
+function ChannelSearchTab({
+  savedChannelIds,
+  selectedChannelId,
+  onSelect,
+  onSave,
+}: ChannelSearchTabProps) {
   const [keyword, setKeyword] = useState('');
   const [result, setResult] = useState<ChannelSearchResult>({ channels: [], nextOffset: 0, hasNext: false });
   const [searched, setSearched] = useState(false);
@@ -77,6 +84,8 @@ function ChannelSearchTab({ savedChannelIds, onSave }: ChannelSearchTabProps) {
             key={channel.channelId}
             channel={channel}
             saved={savedChannelIds.has(channel.channelId)}
+            selected={selectedChannelId === channel.channelId}
+            onSelect={onSelect}
             onSave={onSave}
           />
         ))}

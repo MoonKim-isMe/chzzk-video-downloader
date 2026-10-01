@@ -91,6 +91,22 @@ func VideoURL(videoNo int64) string {
 	return "https://chzzk.naver.com/video/" + strconv.FormatInt(videoNo, 10)
 }
 
+func (c *Client) GetVideo(ctx context.Context, videoNo int64) (Video, error) {
+	if videoNo <= 0 {
+		return Video{}, fmt.Errorf("유효하지 않은 videoNo입니다")
+	}
+
+	var response apiEnvelope[apiVideo]
+	path := "/service/v3/videos/" + strconv.FormatInt(videoNo, 10)
+	if err := c.get(ctx, path, &response); err != nil {
+		return Video{}, err
+	}
+	if response.Content.VideoNo <= 0 || strings.TrimSpace(response.Content.VideoTitle) == "" {
+		return Video{}, fmt.Errorf("치지직 VOD 정보를 확인할 수 없습니다")
+	}
+	return normalizeVideo(response.Content), nil
+}
+
 func (c *Client) GetChannelVideos(ctx context.Context, channelID string, page, size int) (VideoListResult, error) {
 	channelID = strings.ToLower(strings.TrimSpace(channelID))
 	if !channelIDPattern.MatchString(channelID) {

@@ -8,12 +8,12 @@
 
 - 비공식 치지직 JSON API 기반 채널 검색
 - 검색 결과 offset 기반 추가 조회
-- 치지직 채널 URL 파싱 및 channelId 추출
-- channelId 기반 실제 채널 정보 조회
-- 검색/URL 입력 결과를 공통 Channel 모델로 처리
+- 치지직 VOD URL 파싱 및 videoNo 추출
+- videoNo 기반 단일 VOD 정보 조회
+- 채널 검색 결과 선택과 저장 액션 분리
 - 채널 저장/삭제 및 channelId 중복 방지
 - 저장 채널 선택 UI
-- 채널 검색 / URL 직접 입력 / 다운로드 탭 Shell
+- 채널 검색 / VOD URL 직접 입력 / 다운로드 탭 Shell
 - 비공식 치지직 API 기반 채널 VOD 목록 조회
 - VOD 메타데이터 및 페이지 정보 정규화
 - videoNo 기반 표준 VOD URL 생성
@@ -262,3 +262,14 @@ Persistence 다음 작업은 제품 UX 정리입니다. 기존 다운로드/API/
 4. Settings / Feedback / Accessibility
 
 Windows 패키징과 yt-dlp/ffmpeg/ffprobe 배포 전략은 Phase 7로 이동했습니다.
+
+
+## URL 직접 입력 동작
+
+`URL 직접 입력` 탭은 채널 URL이 아니라 치지직 VOD URL 전용입니다.
+
+```text
+https://chzzk.naver.com/video/{videoNo}
+```
+
+URL을 확인하면 videoNo 기반으로 VOD 메타데이터 한 건을 조회하고, 해당 영상 카드를 바로 Download Queue에 추가할 수 있습니다. 채널 검색은 별도로 채널 사용자를 검색하고 선택한 채널의 VOD 목록을 표시합니다.
