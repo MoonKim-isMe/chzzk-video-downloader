@@ -11,6 +11,7 @@ func TestStorageRecordRoundTrip(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "video"),
 		Resolution:             Resolution1440p,
 		OutputFormat:           OutputFormatMKV,
+		DownloadAcceleration:   DownloadAccelerationUltra,
 		MaxConcurrentDownloads: 3,
 		Theme:                  ThemeLight,
 	}
@@ -84,5 +85,30 @@ func TestStorageRecordV1DefaultsToDarkTheme(t *testing.T) {
 	}
 	if value.Theme != ThemeDark {
 		t.Fatalf("legacy theme should default to dark: %#v", value)
+	}
+	if value.DownloadAcceleration != DefaultDownloadAcceleration {
+		t.Fatalf("legacy acceleration should use default: %#v", value)
+	}
+}
+
+func TestStorageRecordV2DefaultsDownloadAcceleration(t *testing.T) {
+	record := StorageRecord{
+		SchemaVersion:          2,
+		DownloadDir:            t.TempDir(),
+		Resolution:             ResolutionBest,
+		OutputFormat:           OutputFormatMP4,
+		MaxConcurrentDownloads: 2,
+		Theme:                  ThemeLight,
+	}
+
+	value, err := record.AppSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Theme != ThemeLight {
+		t.Fatalf("v2 theme should be preserved: %#v", value)
+	}
+	if value.DownloadAcceleration != DefaultDownloadAcceleration {
+		t.Fatalf("v2 acceleration should use default: %#v", value)
 	}
 }

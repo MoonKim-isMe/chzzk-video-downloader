@@ -97,6 +97,19 @@ var migrations = []migration{
 			`ALTER TABLE download_tasks ADD COLUMN log_path TEXT NOT NULL DEFAULT ''`,
 		},
 	},
+	{
+		version: 5,
+		statements: []string{
+			`ALTER TABLE app_settings ADD COLUMN download_acceleration TEXT NOT NULL DEFAULT 'standard'`,
+			`UPDATE app_settings
+				SET schema_version = 3,
+					download_acceleration = CASE
+						WHEN download_acceleration IN ('stable', 'standard', 'fast', 'ultra') THEN download_acceleration
+						ELSE 'standard'
+					END
+				WHERE id = 1`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

@@ -29,6 +29,9 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if spec.Path != toolchain.YTDLP.Path {
 		t.Fatalf("unexpected path: %s", spec.Path)
 	}
+	if !hasArgumentPair(spec.Args, "--concurrent-fragments", "2") {
+		t.Fatalf("default acceleration missing: %#v", spec.Args)
+	}
 	expectedTempDir, err := TemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
 	if err != nil {
 		t.Fatal(err)
@@ -62,10 +65,11 @@ func TestBuildDownloadCommand(t *testing.T) {
 
 func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.T) {
 	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
-		URL:            "https://chzzk.naver.com/video/12345",
-		OutputDir:      t.TempDir(),
-		FormatSelector: "bv*[height<=1080]+ba/b[height<=1080]",
-		OutputFormat:   "MKV",
+		URL:                 "https://chzzk.naver.com/video/12345",
+		OutputDir:           t.TempDir(),
+		FormatSelector:      "bv*[height<=1080]+ba/b[height<=1080]",
+		OutputFormat:        "MKV",
+		ConcurrentFragments: 8,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +79,7 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 		{"--format", "bv*[height<=1080]+ba/b[height<=1080]"},
 		{"--merge-output-format", "mkv"},
 		{"--remux-video", "mkv"},
+		{"--concurrent-fragments", "8"},
 	}
 	for _, pair := range expectedPairs {
 		found := false
@@ -87,6 +92,17 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 		if !found {
 			t.Fatalf("missing argument pair %#v in %#v", pair, spec.Args)
 		}
+	}
+}
+
+func TestBuildDownloadCommandRejectsUnsupportedConcurrentFragments(t *testing.T) {
+	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:                 "https://chzzk.naver.com/video/12345",
+		OutputDir:           t.TempDir(),
+		ConcurrentFragments: 3,
+	})
+	if err == nil {
+		t.Fatal("expected concurrent fragments validation error")
 	}
 }
 

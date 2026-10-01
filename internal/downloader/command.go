@@ -5,23 +5,26 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 const (
-	DefaultFormatSelector = "bv*+ba/b"
-	DefaultOutputTemplate = "%(title)s [%(id)s].%(ext)s"
-	progressTemplate      = progressPrefix + "%(progress.status)s\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t%(progress.speed)s\t%(progress.eta)s\t%(progress._percent_str)s"
+	DefaultFormatSelector      = "bv*+ba/b"
+	DefaultOutputTemplate      = "%(title)s [%(id)s].%(ext)s"
+	DefaultConcurrentFragments = 2
+	progressTemplate           = progressPrefix + "%(progress.status)s\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t%(progress.speed)s\t%(progress.eta)s\t%(progress._percent_str)s"
 )
 
 var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
 
 type DownloadRequest struct {
-	URL            string `json:"url"`
-	OutputDir      string `json:"outputDir"`
-	FormatSelector string `json:"formatSelector,omitempty"`
-	OutputTemplate string `json:"outputTemplate,omitempty"`
-	OutputFormat   string `json:"outputFormat,omitempty"`
+	URL                 string `json:"url"`
+	OutputDir           string `json:"outputDir"`
+	FormatSelector      string `json:"formatSelector,omitempty"`
+	OutputTemplate      string `json:"outputTemplate,omitempty"`
+	OutputFormat        string `json:"outputFormat,omitempty"`
+	ConcurrentFragments int    `json:"concurrentFragments,omitempty"`
 }
 
 type CommandSpec struct {
@@ -69,6 +72,10 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	if err != nil {
 		return CommandSpec{}, err
 	}
+	concurrentFragments, err := normalizeConcurrentFragments(request.ConcurrentFragments)
+	if err != nil {
+		return CommandSpec{}, err
+	}
 
 	args := []string{
 		"--ignore-config",
@@ -81,6 +88,7 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--no-overwrites",
 		"--continue",
 		"--no-keep-fragments",
+		"--concurrent-fragments", strconv.Itoa(concurrentFragments),
 		"--progress-delta", "0.5",
 		"--progress-template", "download:" + progressTemplate,
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
@@ -141,6 +149,18 @@ func normalizeOutputFormat(raw string) (string, error) {
 		return value, nil
 	default:
 		return "", fmt.Errorf("지원하지 않는 출력 포맷입니다: %s", value)
+	}
+}
+
+func normalizeConcurrentFragments(value int) (int, error) {
+	if value == 0 {
+		return DefaultConcurrentFragments, nil
+	}
+	switch value {
+	case 1, 2, 4, 8:
+		return value, nil
+	default:
+		return 0, fmt.Errorf("지원하지 않는 다운로드 가속 값입니다: %d", value)
 	}
 }
 

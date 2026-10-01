@@ -33,6 +33,7 @@ func TestInitializePersistenceRestoresChannelsSettingsAndHistory(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "persisted-downloads"),
 		Resolution:             appsettings.Resolution1440p,
 		OutputFormat:           appsettings.OutputFormatMKV,
+		DownloadAcceleration:   appsettings.DownloadAccelerationUltra,
 		MaxConcurrentDownloads: 3,
 		Theme:                  appsettings.ThemeLight,
 	}
@@ -151,6 +152,7 @@ func TestUpdateSettingsPersistsStorageRecord(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "new-downloads"),
 		Resolution:             appsettings.Resolution720p,
 		OutputFormat:           appsettings.OutputFormatWebM,
+		DownloadAcceleration:   appsettings.DownloadAccelerationStable,
 		MaxConcurrentDownloads: 2,
 		Theme:                  appsettings.ThemeLight,
 	}

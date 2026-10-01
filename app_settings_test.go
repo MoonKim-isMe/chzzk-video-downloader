@@ -25,7 +25,8 @@ func TestGetSettingsReturnsDefaults(t *testing.T) {
 	}
 	if value.Resolution != appsettings.ResolutionBest ||
 		value.OutputFormat != appsettings.OutputFormatMP4 ||
-		value.MaxConcurrentDownloads != 1 ||
+		value.DownloadAcceleration != appsettings.DownloadAccelerationStandard ||
+		value.MaxConcurrentDownloads != 3 ||
 		value.Theme != appsettings.ThemeDark {
 		t.Fatalf("unexpected settings: %#v", value)
 	}
@@ -43,6 +44,7 @@ func TestUpdateSettingsStoresNormalizedValue(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "video"),
 		Resolution:             appsettings.Resolution(" 1440P "),
 		OutputFormat:           appsettings.OutputFormat(" WEBM "),
+		DownloadAcceleration:   appsettings.DownloadAcceleration(" FAST "),
 		MaxConcurrentDownloads: 3,
 		Theme:                  appsettings.ThemeLight,
 	})
@@ -52,6 +54,7 @@ func TestUpdateSettingsStoresNormalizedValue(t *testing.T) {
 
 	if next.Resolution != appsettings.Resolution1440p ||
 		next.OutputFormat != appsettings.OutputFormatWebM ||
+		next.DownloadAcceleration != appsettings.DownloadAccelerationFast ||
 		next.MaxConcurrentDownloads != 3 ||
 		next.Theme != appsettings.ThemeLight {
 		t.Fatalf("unexpected normalized settings: %#v", next)
@@ -85,7 +88,7 @@ func TestUpdateSettingsAppliesQueueConcurrency(t *testing.T) {
 	}
 
 	queue := app.ensureDownloadQueue()
-	if queue.MaxConcurrent() != 1 {
+	if queue.MaxConcurrent() != 3 {
 		t.Fatalf("unexpected initial concurrency: %d", queue.MaxConcurrent())
 	}
 

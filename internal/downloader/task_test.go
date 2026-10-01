@@ -10,14 +10,17 @@ func TestStartDownloadRequestValidate(t *testing.T) {
 		VideoNo:    12345,
 		VideoTitle: "테스트 VOD",
 		URL:        "https://chzzk.naver.com/video/12345",
-		OutputDir:  t.TempDir(),
+		OutputDir:           t.TempDir(),
+		ConcurrentFragments: 4,
 	}
 	if err := request.Validate(); err != nil {
 		t.Fatalf("Validate returned error: %v", err)
 	}
 
 	command := request.DownloadRequest()
-	if command.URL != request.URL || command.OutputDir != request.OutputDir {
+	if command.URL != request.URL ||
+		command.OutputDir != request.OutputDir ||
+		command.ConcurrentFragments != request.ConcurrentFragments {
 		t.Fatalf("unexpected download request: %#v", command)
 	}
 }

@@ -25,6 +25,17 @@ const (
 	OutputFormatWebM OutputFormat = "webm"
 )
 
+type DownloadAcceleration string
+
+const (
+	DownloadAccelerationStable   DownloadAcceleration = "stable"
+	DownloadAccelerationStandard DownloadAcceleration = "standard"
+	DownloadAccelerationFast     DownloadAcceleration = "fast"
+	DownloadAccelerationUltra    DownloadAcceleration = "ultra"
+)
+
+const DefaultDownloadAcceleration = DownloadAccelerationStandard
+
 type ThemeMode string
 
 const (
@@ -33,16 +44,17 @@ const (
 )
 
 const (
-	DefaultMaxConcurrentDownloads = 1
+	DefaultMaxConcurrentDownloads = 3
 	MaxConcurrentDownloads        = 8
 )
 
 type AppSettings struct {
-	DownloadDir            string       `json:"downloadDir"`
-	Resolution             Resolution   `json:"resolution"`
-	OutputFormat           OutputFormat `json:"outputFormat"`
-	MaxConcurrentDownloads int          `json:"maxConcurrentDownloads"`
-	Theme                  ThemeMode    `json:"theme"`
+	DownloadDir            string               `json:"downloadDir"`
+	Resolution             Resolution           `json:"resolution"`
+	OutputFormat           OutputFormat         `json:"outputFormat"`
+	DownloadAcceleration   DownloadAcceleration `json:"downloadAcceleration"`
+	MaxConcurrentDownloads int                  `json:"maxConcurrentDownloads"`
+	Theme                  ThemeMode            `json:"theme"`
 }
 
 func Defaults(downloadDir string) AppSettings {
@@ -50,6 +62,7 @@ func Defaults(downloadDir string) AppSettings {
 		DownloadDir:            filepath.Clean(strings.TrimSpace(downloadDir)),
 		Resolution:             ResolutionBest,
 		OutputFormat:           OutputFormatMP4,
+		DownloadAcceleration:   DefaultDownloadAcceleration,
 		MaxConcurrentDownloads: DefaultMaxConcurrentDownloads,
 		Theme:                  ThemeDark,
 	}
@@ -59,6 +72,10 @@ func Normalize(value AppSettings) AppSettings {
 	value.DownloadDir = filepath.Clean(strings.TrimSpace(value.DownloadDir))
 	value.Resolution = Resolution(strings.ToLower(strings.TrimSpace(string(value.Resolution))))
 	value.OutputFormat = OutputFormat(strings.ToLower(strings.TrimSpace(string(value.OutputFormat))))
+	value.DownloadAcceleration = DownloadAcceleration(strings.ToLower(strings.TrimSpace(string(value.DownloadAcceleration))))
+	if value.DownloadAcceleration == "" {
+		value.DownloadAcceleration = DefaultDownloadAcceleration
+	}
 	value.Theme = ThemeMode(strings.ToLower(strings.TrimSpace(string(value.Theme))))
 	if value.Theme == "" {
 		value.Theme = ThemeDark
@@ -85,6 +102,12 @@ func Validate(value AppSettings) error {
 	case OutputFormatMP4, OutputFormatMKV, OutputFormatWebM:
 	default:
 		return fmt.Errorf("지원하지 않는 출력 포맷입니다: %s", value.OutputFormat)
+	}
+
+	switch value.DownloadAcceleration {
+	case DownloadAccelerationStable, DownloadAccelerationStandard, DownloadAccelerationFast, DownloadAccelerationUltra:
+	default:
+		return fmt.Errorf("지원하지 않는 다운로드 가속 설정입니다: %s", value.DownloadAcceleration)
 	}
 
 	if value.MaxConcurrentDownloads < 1 || value.MaxConcurrentDownloads > MaxConcurrentDownloads {

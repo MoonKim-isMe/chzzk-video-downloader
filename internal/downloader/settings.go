@@ -16,11 +16,31 @@ func ApplySettings(request StartDownloadRequest, value appsettings.AppSettings) 
 	if err != nil {
 		return StartDownloadRequest{}, err
 	}
+	concurrentFragments, err := ConcurrentFragmentsForAcceleration(value.DownloadAcceleration)
+	if err != nil {
+		return StartDownloadRequest{}, err
+	}
 
 	request.OutputDir = value.DownloadDir
 	request.FormatSelector = formatSelector
 	request.OutputFormat = string(value.OutputFormat)
+	request.ConcurrentFragments = concurrentFragments
 	return request, nil
+}
+
+func ConcurrentFragmentsForAcceleration(acceleration appsettings.DownloadAcceleration) (int, error) {
+	switch acceleration {
+	case appsettings.DownloadAccelerationStable:
+		return 1, nil
+	case appsettings.DownloadAccelerationStandard:
+		return 2, nil
+	case appsettings.DownloadAccelerationFast:
+		return 4, nil
+	case appsettings.DownloadAccelerationUltra:
+		return 8, nil
+	default:
+		return 0, fmt.Errorf("지원하지 않는 다운로드 가속 설정입니다: %s", acceleration)
+	}
 }
 
 func FormatSelectorForResolution(resolution appsettings.Resolution) (string, error) {
