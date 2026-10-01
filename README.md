@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 4-A — Download Manager / Queue 백엔드**까지 구현 중입니다.
+현재는 **Phase 4-B — Queue 제어 및 취소 안정화**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -31,6 +31,9 @@
 - queued/running videoNo 중복 등록 방지
 - 작업 완료/실패/취소 후 다음 Queue 자동 실행
 - GetDownloadTasks 기반 전체 작업 조회
+- queued/running 작업 취소 및 pending Queue 제거
+- 실패/취소 후 다음 Queue 자동 지속 실행
+- 취소/완료 경합 시 cancelled 상태 우선 보장
 
 Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 앱 재실행 후에도 유지되는 영속 저장은 이후 SQLite Phase에서 추가합니다.
 
@@ -163,4 +166,4 @@ Phase 4-A 기준으로 Phase 3의 단일 다운로드 엔진을 FIFO Download Qu
 - 다운로드 중에는 취소할 수 있습니다.
 - 완료 시 ffmpeg 후처리까지 끝난 최종 파일 경로를 표시합니다.
 - Phase 4-A부터 여러 VOD를 FIFO Queue에 등록할 수 있으며 실제 동시 실행은 1개로 유지합니다.
-- queued 작업 취소와 전체 Task 목록 UI는 Phase 4-B/C에서 확장합니다.
+- queued/running 작업 취소를 지원하며 전체 Task 목록 UI는 Phase 4-C에서 확장합니다.

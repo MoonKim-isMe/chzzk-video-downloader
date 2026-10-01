@@ -117,6 +117,75 @@ func TestStartDownloadQueuesAndListsTasks(t *testing.T) {
 	release <- struct{}{}
 }
 
+func TestCancelQueuedDownloadKeepsTaskCancelled(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{}, 1)
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			started <- request.URL
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	first, err := app.StartDownload(testStartRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected queued task, got %s", second.Status)
+	}
+	if !app.CancelDownload(second.TaskID) {
+		t.Fatal("expected queued cancellation")
+	}
+
+	tasks := app.GetDownloadTasks()
+	if len(tasks) != 2 || tasks[1].Status != downloader.TaskStatusCancelled || tasks[1].FinishedAt == "" {
+		t.Fatalf("unexpected cancelled task: %#v", tasks)
+	}
+
+	release <- struct{}{}
+	deadline := time.After(100 * time.Millisecond)
+	for {
+		select {
+		case url := <-started:
+			if url == secondRequest.URL {
+				t.Fatal("cancelled queued task started")
+			}
+		case <-deadline:
+			return
+		}
+	}
+
+	_ = first
+}
+
 func TestStartDownloadReportsCancellationAndStartsNext(t *testing.T) {
 	cancelled := make(chan downloader.DownloadTask, 1)
 	secondStarted := make(chan struct{}, 1)

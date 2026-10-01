@@ -198,7 +198,7 @@ function DownloadPanel({ selectedVideo, currentTask, onTaskStarted }: DownloadPa
   };
 
   const handleCancel = async () => {
-    if (!currentTask || currentTask.status !== 'running') {
+    if (!currentTask || (currentTask.status !== 'queued' && currentTask.status !== 'running')) {
       return;
     }
 

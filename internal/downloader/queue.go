@@ -21,14 +21,15 @@ type Queue struct {
 	onState       TaskStateHandler
 	maxConcurrent int
 
-	mu       sync.Mutex
-	tasks    map[string]DownloadTask
-	requests map[string]DownloadRequest
-	order    []string
-	pending  []string
-	active   map[string]context.CancelFunc
-	counter  atomic.Uint64
-	stopped  bool
+	mu              sync.Mutex
+	tasks           map[string]DownloadTask
+	requests        map[string]DownloadRequest
+	order           []string
+	pending         []string
+	active          map[string]context.CancelFunc
+	cancelRequested map[string]struct{}
+	counter         atomic.Uint64
+	stopped         bool
 }
 
 func NewQueue(parent context.Context, executor DownloadExecutor, onState TaskStateHandler, maxConcurrent int) *Queue {
@@ -39,13 +40,14 @@ func NewQueue(parent context.Context, executor DownloadExecutor, onState TaskSta
 		maxConcurrent = 1
 	}
 	return &Queue{
-		parent:        parent,
-		executor:      executor,
-		onState:       onState,
-		maxConcurrent: maxConcurrent,
-		tasks:         make(map[string]DownloadTask),
-		requests:      make(map[string]DownloadRequest),
-		active:        make(map[string]context.CancelFunc),
+		parent:          parent,
+		executor:        executor,
+		onState:         onState,
+		maxConcurrent:   maxConcurrent,
+		tasks:           make(map[string]DownloadTask),
+		requests:        make(map[string]DownloadRequest),
+		active:          make(map[string]context.CancelFunc),
+		cancelRequested: make(map[string]struct{}),
 	}
 }
 
@@ -115,24 +117,74 @@ func (q *Queue) Get(taskID string) (DownloadTask, bool) {
 
 func (q *Queue) Cancel(taskID string) bool {
 	q.mu.Lock()
-	cancel, ok := q.active[taskID]
-	q.mu.Unlock()
+	task, ok := q.tasks[taskID]
 	if !ok {
+		q.mu.Unlock()
 		return false
 	}
-	cancel()
-	return true
+
+	switch task.Status {
+	case TaskStatusQueued:
+		task.Status = TaskStatusCancelled
+		task.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		q.tasks[taskID] = task
+		delete(q.requests, taskID)
+		q.removePendingLocked(taskID)
+		q.mu.Unlock()
+		q.emit(task)
+		q.startAvailable()
+		return true
+
+	case TaskStatusRunning:
+		cancel, active := q.active[taskID]
+		if !active {
+			q.mu.Unlock()
+			return false
+		}
+		q.cancelRequested[taskID] = struct{}{}
+		q.mu.Unlock()
+		cancel()
+		return true
+
+	default:
+		q.mu.Unlock()
+		return false
+	}
 }
 
 func (q *Queue) Stop() {
 	q.mu.Lock()
+	if q.stopped {
+		q.mu.Unlock()
+		return
+	}
 	q.stopped = true
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	cancelledQueued := make([]DownloadTask, 0, len(q.pending))
+	for _, taskID := range q.pending {
+		task, ok := q.tasks[taskID]
+		if !ok || task.Status != TaskStatusQueued {
+			continue
+		}
+		task.Status = TaskStatusCancelled
+		task.FinishedAt = now
+		q.tasks[taskID] = task
+		delete(q.requests, taskID)
+		cancelledQueued = append(cancelledQueued, task)
+	}
+	q.pending = nil
+
 	cancels := make([]context.CancelFunc, 0, len(q.active))
-	for _, cancel := range q.active {
+	for taskID, cancel := range q.active {
+		q.cancelRequested[taskID] = struct{}{}
 		cancels = append(cancels, cancel)
 	}
 	q.mu.Unlock()
 
+	for _, task := range cancelledQueued {
+		q.emit(task)
+	}
 	for _, cancel := range cancels {
 		cancel()
 	}
@@ -148,7 +200,11 @@ func (q *Queue) startAvailable() {
 
 		taskID := q.pending[0]
 		q.pending = q.pending[1:]
-		task := q.tasks[taskID]
+		task, ok := q.tasks[taskID]
+		if !ok || task.Status != TaskStatusQueued {
+			q.mu.Unlock()
+			continue
+		}
 		request := q.requests[taskID]
 		task.Status = TaskStatusRunning
 		task.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -172,13 +228,20 @@ func (q *Queue) run(ctx context.Context, taskID string, request DownloadRequest)
 	task, ok := q.tasks[taskID]
 	if !ok {
 		delete(q.active, taskID)
+		delete(q.cancelRequested, taskID)
 		q.mu.Unlock()
 		q.startAvailable()
 		return
 	}
 
+	_, cancellationRequested := q.cancelRequested[taskID]
 	task.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if err != nil {
+	if cancellationRequested {
+		task.Status = TaskStatusCancelled
+		if err != nil {
+			task.Error = err.Error()
+		}
+	} else if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			task.Status = TaskStatusCancelled
 		} else {
@@ -193,6 +256,7 @@ func (q *Queue) run(ctx context.Context, taskID string, request DownloadRequest)
 	q.tasks[taskID] = task
 	delete(q.requests, taskID)
 	delete(q.active, taskID)
+	delete(q.cancelRequested, taskID)
 	q.mu.Unlock()
 
 	q.emit(task)
@@ -202,7 +266,8 @@ func (q *Queue) run(ctx context.Context, taskID string, request DownloadRequest)
 func (q *Queue) updateProgress(taskID string, progress DownloadProgress) {
 	q.mu.Lock()
 	task, ok := q.tasks[taskID]
-	if !ok || task.Status != TaskStatusRunning {
+	_, cancellationRequested := q.cancelRequested[taskID]
+	if !ok || task.Status != TaskStatusRunning || cancellationRequested {
 		q.mu.Unlock()
 		return
 	}
@@ -211,6 +276,16 @@ func (q *Queue) updateProgress(taskID string, progress DownloadProgress) {
 	q.mu.Unlock()
 
 	q.emit(task)
+}
+
+func (q *Queue) removePendingLocked(taskID string) {
+	for index, pendingTaskID := range q.pending {
+		if pendingTaskID != taskID {
+			continue
+		}
+		q.pending = append(q.pending[:index], q.pending[index+1:]...)
+		return
+	}
 }
 
 func (q *Queue) emit(task DownloadTask) {

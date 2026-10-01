@@ -470,10 +470,46 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 4-B — Queue 제어 및 취소 안정화
 
-- [ ] DM-6. queued/running 작업 취소 처리
-- [ ] DM-4B-1. 실행 중 작업 실패/취소 후 다음 Queue 지속 실행 검증
-- [ ] DM-4B-2. 대기 작업 취소 시 Queue에서 제거하고 cancelled 상태 유지
-- [ ] DM-4B-3. 종료/취소 경합 시 Task 상태 일관성 보장
+- [x] DM-6. queued/running 작업 취소 처리
+- [x] DM-4B-1. 실행 중 작업 실패/취소 후 다음 Queue 지속 실행 검증
+- [x] DM-4B-2. 대기 작업 취소 시 Queue에서 제거하고 cancelled 상태 유지
+- [x] DM-4B-3. 종료/취소 경합 시 Task 상태 일관성 보장
+
+#### Phase 4-B 동작 기준
+
+- `CancelDownload(taskId)`는 queued와 running 작업 모두 처리한다.
+- queued 작업은 실제 executor 실행 전에 pending Queue에서 제거하고 즉시 `cancelled` 상태와 `finishedAt`을 기록한다.
+- running 작업은 `cancelRequested`를 먼저 기록한 뒤 context를 취소한다.
+- 취소 요청 이후 executor가 거의 동시에 성공 반환하더라도 `cancelRequested`가 있으면 최종 상태는 `cancelled`를 우선한다.
+- 취소 요청 이후 도착한 progress callback은 Task 상태에 반영하지 않는다.
+- failed/cancelled 작업 종료 후 Scheduler는 남은 queued 작업을 계속 실행한다.
+- terminal 상태(completed/failed/cancelled)에 대한 재취소는 false를 반환하고 상태를 변경하지 않는다.
+- Queue Stop 시 queued 작업은 실행하지 않고 cancelled로 확정하며, running 작업에는 취소 요청을 기록한 뒤 context를 취소한다.
+- 기존 단일 다운로드 패널에서도 queued/running 상태 모두 취소 요청을 전달할 수 있도록 최소 호환 처리한다.
+
+#### Phase 4-B 검증 현황
+
+완료:
+
+- Phase 4-B Queue 상태 머신을 재현한 Go 1.23.2 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- queued 작업 취소 후 pending Queue에서 제거되고 실제 executor가 시작되지 않는지 확인
+- running 작업 취소 후 다음 queued 작업 자동 시작 확인
+- 실행 작업 실패 후 다음 queued 작업 자동 시작 확인
+- context 취소를 무시하고 성공 반환하는 executor에서도 취소 요청이 최종 `cancelled` 상태를 우선하는 경합 테스트
+- Queue Stop 시 running/queued 작업이 모두 cancelled로 수렴하는지 확인
+- terminal 작업 재취소가 상태를 변경하지 않는지 확인
+- Wails `CancelDownload` App 경로에 queued 취소 회귀 테스트 추가
+- 기존 DownloadPanel에서 queued 작업에 `대기 취소` 액션을 노출하도록 최소 호환 처리
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...`
+- 실제 Wails generated binding 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 yt-dlp 프로세스 종료 시점과 취소 요청이 겹치는 Windows 통합 동작
 
 ### Phase 4-C — Download Manager UI
 
