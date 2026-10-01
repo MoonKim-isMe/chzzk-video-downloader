@@ -1017,13 +1017,13 @@ select {
   cursor: pointer;
 }
 
-.bookmark-favorite-button {
+.channel-favorite-button.bookmark-favorite-button {
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
 }
 
-.bookmark-favorite-button:active {
+.channel-favorite-button.bookmark-favorite-button:active {
   transform: translateY(-50%) scale(0.94);
 }
 

@@ -1029,6 +1029,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 검색 결과 목록과 `더 보기` 액션 사이에는 12px 간격을 유지해 마지막 카드와 버튼이 붙어 보이지 않도록 한다.
 - 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
 - 북마크 목록에서는 텍스트 `삭제` 버튼 대신 채워진 별 아이콘을 표시하고, 별 클릭 시 북마크를 해제해 해당 항목을 목록에서 즉시 제거한다.
+- 북마크 목록의 별 아이콘은 검색 결과용 공용 즐겨찾기 버튼 위치 규칙과 분리해 카드 우측 세로 중앙에 고정한다.
 - Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
 - `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
@@ -1053,6 +1054,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
 - 북마크 목록의 텍스트 삭제 버튼 제거, 채워진 별 아이콘 및 `onRemove` 해제 경로 연결 정적 확인
+- 북마크 별 위치 selector 우선순위 확인: 공용 `top: 9px`보다 북마크 전용 `top: 50% + translateY(-50%)`가 우선 적용되도록 확인
 - Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
 - Download Manager의 cancelled 숨김 / 완료 액션 / 기능 중심 tool 상태 문구 구조 정적 확인
