@@ -208,6 +208,17 @@ select {
   color: var(--app-text) !important;
 }
 
+.settings-icon-button .ant-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.settings-icon-button svg {
+  display: block;
+}
+
 .app-content {
   flex: 1 1 auto;
   min-height: 0;

@@ -1003,6 +1003,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 기존 본문 Tabs는 제거하고 헤더 중앙 pill navigation으로 이동한다.
 - 사용자에게 불필요한 Phase / Wails 개발 표시는 제품 UI에서 제거한다.
 - 헤더 설정 아이콘은 34×34px rounded 사각형 outlined 버튼으로 표시해 탐색 탭과 시각적으로 분리한다.
+- 설정 아이콘은 Ant Design의 `.ant-btn-icon` 래퍼와 SVG까지 flex/block으로 정렬해 버튼 내부에서 시각적으로 정중앙에 배치한다.
 - 채널 검색 화면은 좌측 채널 탐색 패널 + 우측 VOD 패널의 2열 Workspace로 구성한다.
 - 좌측 채널 탐색 패널은 `검색 / 북마크` 내부 탭으로 전환한다.
 - 우측 패널은 선택한 채널의 VOD 목록을 항상 표시하는 전용 영역으로 사용한다.
@@ -1058,6 +1059,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Python 실제 SQLite 엔진에서 migration v1 → v2 적용 및 기존 settings row의 `theme=dark`, `schema_version=2` 승격 확인
 - 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
 - 설정 버튼의 `shape="circle"` 제거 및 34×34px / `border-radius: 10px` rounded 사각형 스타일 정적 확인
+- 설정 버튼 `.ant-btn-icon`의 flex 중앙 정렬, `line-height: 0`, SVG `display: block` 적용 확인
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
 - 북마크 목록의 텍스트 삭제 버튼 제거, 채워진 별 아이콘 및 `onRemove` 해제 경로 연결 정적 확인
 - 북마크 별 위치 selector 우선순위 확인: 공용 `top: 9px`보다 북마크 전용 `top: 50% + translateY(-50%)`가 우선 적용되도록 확인
