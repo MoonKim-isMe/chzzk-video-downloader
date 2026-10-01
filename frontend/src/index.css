@@ -189,9 +189,13 @@ select {
 
 .settings-icon-button {
   display: inline-flex !important;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
+  padding: 0 !important;
   border: 1px solid var(--app-border) !important;
+  border-radius: 10px !important;
   background: transparent !important;
   color: var(--app-text-secondary) !important;
   box-shadow: none !important;
