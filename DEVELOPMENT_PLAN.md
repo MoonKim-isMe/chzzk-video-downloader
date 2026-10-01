@@ -110,9 +110,9 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 
 ### 채널 검색
 
-- [ ] CH-1. 비공식 채널 검색 API Client 구현
-- [ ] CH-2. 검색어, offset, size 기반 검색 및 페이지 처리 구현
-- [ ] CH-3. 채널명, 프로필 이미지, 설명, 팔로워 수 등 검색 결과 모델 정의
+- [x] CH-1. 비공식 채널 검색 API Client 구현
+- [x] CH-2. 검색어, offset, size 기반 검색 및 페이지 처리 구현
+- [x] CH-3. 채널명, 프로필 이미지, 설명, 팔로워 수 등 검색 결과 모델 정의
 - [ ] CH-4. 채널 검색 탭 UI 구현
 
 ### URL 직접 입력
@@ -123,16 +123,37 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 https://chzzk.naver.com/{channelId}
 ```
 
-- [ ] CH-5. 치지직 채널 URL 파싱, 정규화 및 channelId 추출 구현
-- [ ] CH-6. 잘못된 도메인, 잘못된 경로, channelId 누락 등 URL Validation 구현
+- [x] CH-5. 치지직 채널 URL 파싱, 정규화 및 channelId 추출 구현
+- [x] CH-6. 잘못된 도메인, 잘못된 경로, channelId 누락 등 URL Validation 구현
 - [ ] CH-7. URL 직접 입력 탭 UI 구현
-- [ ] CH-8. 추출한 channelId로 비공식 채널 정보 API를 조회하여 실제 채널 여부 검증
+- [x] CH-8. 추출한 channelId로 비공식 채널 정보 API를 조회하여 실제 채널 여부 검증
 
 ### 저장 채널
 
-- [ ] CH-9. 검색/URL 입력 결과를 공통 Channel 모델로 정규화
-- [ ] CH-10. 저장 채널 추가/삭제 및 channelId 기준 중복 방지 구현
+- [x] CH-9. 검색/URL 입력 결과를 공통 Channel 모델로 정규화
+- [x] CH-10. 저장 채널 추가/삭제 및 channelId 기준 중복 방지 구현
 - [ ] CH-11. 저장 채널 목록 및 선택 UI 구현
+
+### Phase 1 검증 현황
+
+완료:
+
+- `go test ./internal/chzzk`
+- 채널 URL 정상/비정상 입력 단위 테스트
+- 검색 API 응답 → 내부 Channel 모델 변환 단위 테스트
+- channelId 기반 채널 조회 단위 테스트
+- channelId 중복 저장 방지 단위 테스트
+
+구현되었으나 현재 실행 환경 제약으로 검증 대기:
+
+- CH-4 채널 검색 탭 UI
+- CH-7 URL 직접 입력 탭 UI
+- CH-11 저장 채널 목록 및 선택 UI
+- 다운로드 탭 기본 탐색 Shell
+
+현재 환경은 npm registry에 연결할 수 없어 `yarn install`, `yarn typecheck`, `yarn build`, `wails build`를 실행하지 못했다. 프론트엔드 검증 완료 후 위 UI 항목을 완료 처리한다.
+
+저장 채널 Store는 Phase 1에서는 앱 실행 중 메모리 기반으로 동작하며, 앱 재시작 후 영속화는 Phase 6의 SQLite 작업에서 교체한다.
 
 ### Phase 1 API 기준
 

@@ -1,8 +1,21 @@
 # CHZZK Video Downloader
 
-치지직 채널과 VOD를 탐색하고 yt-dlp를 통해 영상을 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
+치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 Phase 0 프로젝트 기반 구성 단계입니다.
+현재는 **Phase 1 — 채널 탐색 및 저장**까지 구현 중입니다.
+
+## 현재 구현 범위
+
+- 비공식 치지직 JSON API 기반 채널 검색
+- 검색 결과 offset 기반 추가 조회
+- 치지직 채널 URL 파싱 및 channelId 추출
+- channelId 기반 실제 채널 정보 조회
+- 검색/URL 입력 결과를 공통 Channel 모델로 처리
+- 채널 저장/삭제 및 channelId 중복 방지
+- 저장 채널 선택 UI
+- 채널 검색 / URL 직접 입력 / 다운로드 탭 Shell
+
+Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 앱 재실행 후에도 유지되는 영속 저장은 이후 SQLite Phase에서 추가합니다.
 
 ## 기술 스택
 
@@ -59,6 +72,12 @@ Wails가 Vite 개발 서버와 Go 애플리케이션을 함께 실행합니다.
 
 ## 검증
 
+치지직 API 계층 단위 테스트:
+
+```powershell
+go test ./internal/chzzk
+```
+
 프론트엔드 타입 검사:
 
 ```powershell
@@ -72,16 +91,16 @@ yarn typecheck
 yarn build
 ```
 
-Go 포맷 확인:
+Go 포맷:
 
 ```powershell
-gofmt -w app.go main.go
+cd ..
+gofmt -w app.go main.go internal/chzzk/*.go
 ```
 
 전체 Wails 빌드:
 
 ```powershell
-cd ..
 wails build
 ```
 
