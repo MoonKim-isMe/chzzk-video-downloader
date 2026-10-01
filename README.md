@@ -86,9 +86,9 @@ cd ..
 
 ## 다운로드 도구 준비 및 탐색
 
-Windows amd64에서는 사용자가 yt-dlp / ffmpeg / ffprobe를 별도로 설치할 필요가 없도록 다운로드 도구를 앱 executable에 bundle합니다.
+Windows amd64에서는 사용자가 yt-dlp / ffmpeg / ffprobe를 별도로 설치할 필요가 없도록 다운로드 도구를 앱 executable에 bundle합니다. Wails build hook의 작업 디렉터리에 의존하지 않도록 도구 준비는 프로젝트 wrapper script에서 수행합니다.
 
-`wails dev` 또는 Windows build 전에 Wails pre-build hook이 `scripts/prepare-windows-tools.ps1`을 실행합니다. 스크립트는 다음 파일을 준비합니다.
+`scripts/dev.ps1` 또는 `scripts/build-windows.ps1`이 실행 전에 `scripts/prepare-windows-tools.ps1`을 절대경로로 호출합니다. 스크립트는 다음 파일을 준비합니다.
 
 - yt-dlp 공식 Windows standalone `yt-dlp.exe`
 - FFmpeg Windows x64 LGPL static build의 `ffmpeg.exe`
@@ -124,7 +124,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 
 최초 실행에서는 Windows 다운로드 도구를 내려받고 checksum을 검증하므로 시간이 걸릴 수 있습니다. 이후에는 준비된 bundle을 재사용합니다.
 
-직접 `wails dev`를 실행해도 Windows amd64 pre-build hook이 같은 준비 스크립트를 실행합니다.
+직접 `wails dev`를 실행하려면 먼저 프로젝트 루트에서 `powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-windows-tools.ps1`을 한 번 실행해야 합니다. 일반 개발에서는 `scripts/dev.ps1`을 단일 진입점으로 사용합니다.
 
 도구를 최신 release로 강제 갱신하려면:
 

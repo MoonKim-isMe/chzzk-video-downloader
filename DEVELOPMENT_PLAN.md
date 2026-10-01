@@ -426,7 +426,7 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - [ ] DL-3D-3. Windows 빌드 시 다운로드 도구를 Go executable에 embed — 구현 완료, 실제 Wails build 검증 대기
 - [x] DL-3D-4. 앱 최초 실행 시 embedded 도구를 사용자 LocalAppData 관리 디렉터리로 자동 추출
 - [x] DL-3D-5. Resolver에 managed bundled tools 경로를 추가해 PATH 없이 실행 가능하게 구성
-- [ ] DL-3D-6. Wails Windows build hook 및 NSIS build helper를 bundle 준비 단계와 연결 — 구현 완료, Windows Wails/NSIS 실행 검증 대기
+- [ ] DL-3D-6. Windows dev/build wrapper 및 NSIS build helper를 bundle 준비 단계와 연결 — 구현 완료, Windows Wails/NSIS 실행 검증 대기
 - [x] DL-3D-7. 기존 환경변수 / app-tools / PATH fallback 호환성 유지
 
 #### Phase 3-D 배포 기준
@@ -438,6 +438,7 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - 앱 실행 시 `%LOCALAPPDATA%/CHZZK Video Downloader/tools`에 필요한 도구를 자동 materialize한다.
 - Program Files 등 설치 디렉터리에 런타임 쓰기를 시도하지 않는다.
 - Resolver 탐색 우선순위는 환경변수 override → managed bundle → 앱 옆 tools → 앱 디렉터리 → PATH 순으로 유지한다.
+- Windows 개발/빌드는 `scripts/dev.ps1`, `scripts/build-windows.ps1`을 단일 진입점으로 사용하고 `$PSScriptRoot` 기반 절대경로로 tool 준비 스크립트를 호출한다.
 - Wails NSIS installer는 앱 executable 안에 다운로드 도구가 포함되므로 별도 외부 tool 파일 설치 규칙 없이 동일하게 동작한다.
 - Windows arm64 bundle은 현재 범위에 포함하지 않고 amd64 패키징을 기준으로 한다.
 
@@ -451,13 +452,13 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - 기존 환경변수 / app-tools / PATH fallback 구조 유지
 - Linux Go 1.23 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
 - placeholder-only bundle 상태에서 `GOOS=windows GOARCH=amd64 go test -c` cross-compile 성공
-- `wails.json` Windows amd64 preBuild hook JSON 구조 확인
+- Wails preBuild hook의 상대경로 작업 디렉터리 문제를 제거하고 dev/build wrapper에서 tool 준비를 선행하도록 수정
 - 다운로드 도구 오류 UI가 ToolStatus.error 세부 원인을 표시하도록 보강
 
 Windows 검증 대기:
 
 - `scripts/prepare-windows-tools.ps1` 실제 실행 및 SHA-256 검증
-- `scripts/dev.ps1` 또는 직접 `wails dev` 실행 후 managed bundle Toolchain Ready 확인
+- `scripts/dev.ps1` 실행 후 managed bundle Toolchain Ready 확인
 - `scripts/build-windows.ps1` 실행 후 executable 내부 bundle materialize 확인
 - NSIS 설치본에서 PATH에 yt-dlp/ffmpeg가 없는 환경의 Toolchain Ready 확인
 
