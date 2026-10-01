@@ -7,6 +7,25 @@ import (
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
 
+func TestConcurrentFragmentsForAcceleration(t *testing.T) {
+	cases := map[appsettings.DownloadAcceleration]int{
+		appsettings.DownloadAccelerationStable:   1,
+		appsettings.DownloadAccelerationStandard: 2,
+		appsettings.DownloadAccelerationFast:     4,
+		appsettings.DownloadAccelerationUltra:    8,
+	}
+
+	for acceleration, expected := range cases {
+		actual, err := ConcurrentFragmentsForAcceleration(acceleration)
+		if err != nil {
+			t.Fatalf("%s: %v", acceleration, err)
+		}
+		if actual != expected {
+			t.Fatalf("%s: got %d want %d", acceleration, actual, expected)
+		}
+	}
+}
+
 func TestFormatSelectorForResolution(t *testing.T) {
 	cases := map[appsettings.Resolution]string{
 		appsettings.ResolutionBest:  DefaultFormatSelector,
@@ -30,15 +49,16 @@ func TestFormatSelectorForResolution(t *testing.T) {
 func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "configured")
 	request, err := ApplySettings(StartDownloadRequest{
-		VideoNo:     12345,
-		VideoTitle:  "VOD",
-		URL:         "https://chzzk.naver.com/video/12345",
-		OutputDir:   "caller-value",
+		VideoNo:      12345,
+		VideoTitle:   "VOD",
+		URL:          "https://chzzk.naver.com/video/12345",
+		OutputDir:    "caller-value",
 		OutputFormat: "caller-format",
 	}, appsettings.AppSettings{
 		DownloadDir:            outputDir,
 		Resolution:             appsettings.Resolution1080p,
 		OutputFormat:           appsettings.OutputFormatMKV,
+		DownloadAcceleration:   appsettings.DownloadAccelerationFast,
 		MaxConcurrentDownloads: 3,
 	})
 	if err != nil {
@@ -53,6 +73,9 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	}
 	if request.OutputFormat != "mkv" {
 		t.Fatalf("unexpected output format: %s", request.OutputFormat)
+	}
+	if request.ConcurrentFragments != 4 {
+		t.Fatalf("unexpected concurrent fragments: %d", request.ConcurrentFragments)
 	}
 }
 
@@ -95,6 +118,7 @@ func TestSettingsBuildDownloadCommandMatrix(t *testing.T) {
 					DownloadDir:            outputDir,
 					Resolution:             resolution,
 					OutputFormat:           outputFormat,
+					DownloadAcceleration:   appsettings.DownloadAccelerationStandard,
 					MaxConcurrentDownloads: 1,
 				})
 				if err != nil {
@@ -121,6 +145,9 @@ func TestSettingsBuildDownloadCommandMatrix(t *testing.T) {
 				}
 				if !hasArgumentPair(spec.Args, "--paths", outputDir) {
 					t.Fatalf("missing output path %q in %#v", outputDir, spec.Args)
+				}
+				if !hasArgumentPair(spec.Args, "--concurrent-fragments", "2") {
+					t.Fatalf("missing standard acceleration in %#v", spec.Args)
 				}
 			})
 		}

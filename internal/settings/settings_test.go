@@ -12,7 +12,8 @@ func TestDefaults(t *testing.T) {
 	if value.DownloadDir != dir ||
 		value.Resolution != ResolutionBest ||
 		value.OutputFormat != OutputFormatMP4 ||
-		value.MaxConcurrentDownloads != 1 ||
+		value.DownloadAcceleration != DownloadAccelerationStandard ||
+		value.MaxConcurrentDownloads != 3 ||
 		value.Theme != ThemeDark {
 		t.Fatalf("unexpected defaults: %#v", value)
 	}
@@ -31,6 +32,7 @@ func TestStoreUpdateNormalizesValues(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "video"),
 		Resolution:             Resolution(" 1080P "),
 		OutputFormat:           OutputFormat(" MKV "),
+		DownloadAcceleration:   DownloadAcceleration(" FAST "),
 		MaxConcurrentDownloads: 4,
 	})
 	if err != nil {
@@ -38,6 +40,7 @@ func TestStoreUpdateNormalizesValues(t *testing.T) {
 	}
 	if next.Resolution != Resolution1080p ||
 		next.OutputFormat != OutputFormatMKV ||
+		next.DownloadAcceleration != DownloadAccelerationFast ||
 		next.MaxConcurrentDownloads != 4 ||
 		next.Theme != ThemeDark {
 		t.Fatalf("unexpected normalized settings: %#v", next)
@@ -74,6 +77,7 @@ func TestValidateRejectsUnsupportedValues(t *testing.T) {
 		func() AppSettings { value := base; value.DownloadDir = ""; return value }(),
 		func() AppSettings { value := base; value.Resolution = "480p"; return value }(),
 		func() AppSettings { value := base; value.OutputFormat = "avi"; return value }(),
+		func() AppSettings { value := base; value.DownloadAcceleration = "warp"; return value }(),
 		func() AppSettings { value := base; value.MaxConcurrentDownloads = 0; return value }(),
 		func() AppSettings { value := base; value.Theme = "system"; return value }(),
 	}

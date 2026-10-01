@@ -22,6 +22,7 @@ import {
 } from '../../lib/backend';
 import type {
   AppSettings,
+  DownloadAcceleration,
   DownloadResolution,
   OutputFormat,
   ThemeMode,
@@ -41,6 +42,13 @@ const formatOptions: Array<{ label: string; value: OutputFormat }> = [
   { label: 'MP4', value: 'mp4' },
   { label: 'MKV', value: 'mkv' },
   { label: 'WebM', value: 'webm' },
+];
+
+const accelerationOptions: Array<{ label: string; value: DownloadAcceleration }> = [
+  { label: '안정 (1)', value: 'stable' },
+  { label: '기본 (2)', value: 'standard' },
+  { label: '고속 (4)', value: 'fast' },
+  { label: '초고속 (8)', value: 'ultra' },
 ];
 
 const themeOptions: Array<{ label: string; value: ThemeMode }> = [
@@ -217,6 +225,10 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
               <Select options={formatOptions} />
             </Form.Item>
 
+            <Form.Item name="downloadAcceleration" label="다운로드 가속" rules={[{ required: true }]}>
+              <Select options={accelerationOptions} />
+            </Form.Item>
+
             <Form.Item
               name="maxConcurrentDownloads"
               label="동시 다운로드 수"
@@ -240,7 +252,7 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
                   테마는 저장 즉시 전체 화면에 적용됩니다.
                 </Text>
                 <Text className="!text-xs">
-                  경로·해상도·포맷은 새 Queue 작업부터, 동시 다운로드 수는 Scheduler에 즉시 적용됩니다.
+                  경로·해상도·포맷·다운로드 가속은 새 Queue 작업부터, 동시 다운로드 수는 Scheduler에 즉시 적용됩니다.
                 </Text>
               </Space>
             }

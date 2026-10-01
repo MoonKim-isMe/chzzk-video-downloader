@@ -27,8 +27,9 @@ type StartDownloadRequest struct {
 	URL               string `json:"url"`
 	OutputDir         string `json:"outputDir"`
 	FormatSelector    string `json:"formatSelector,omitempty"`
-	OutputTemplate    string `json:"outputTemplate,omitempty"`
-	OutputFormat      string `json:"outputFormat,omitempty"`
+	OutputTemplate      string `json:"outputTemplate,omitempty"`
+	OutputFormat        string `json:"outputFormat,omitempty"`
+	ConcurrentFragments int    `json:"concurrentFragments,omitempty"`
 }
 
 type DownloadTask struct {
@@ -71,8 +72,9 @@ func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 		URL:            r.URL,
 		OutputDir:      r.OutputDir,
 		FormatSelector: r.FormatSelector,
-		OutputTemplate: r.OutputTemplate,
-		OutputFormat:   r.OutputFormat,
+		OutputTemplate:      r.OutputTemplate,
+		OutputFormat:        r.OutputFormat,
+		ConcurrentFragments: r.ConcurrentFragments,
 	}
 }
 

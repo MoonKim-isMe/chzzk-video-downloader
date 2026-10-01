@@ -675,6 +675,7 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 - [x] SET-5A-3. 메모리 기반 Settings Store 구현
 - [x] SET-5A-4. GetSettings / UpdateSettings Wails API 구현
 - [x] SET-5A-5. 프론트엔드 AppSettings 타입 및 backend wrapper 추가
+- [x] SET-5A-6. 다운로드 가속 설정 모델 / 기본값 / Validation 및 저장 호환성 구현
 
 #### Phase 5-A 설정 기준
 
@@ -683,7 +684,8 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 - 다운로드 경로: 사용자 홈의 `Downloads/CHZZK Video Downloader`
 - 해상도: `best`
 - 출력 포맷: `mp4`
-- 동시 다운로드 수: `1`
+- 다운로드 가속: `standard` (fragment 동시 다운로드 수 `2`)
+- 동시 다운로드 수: `3`
 
 지원 해상도:
 
@@ -699,10 +701,18 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 - `mkv`
 - `webm`
 
+지원 다운로드 가속:
+
+- `stable` → fragment 동시 다운로드 수 `1`
+- `standard` → fragment 동시 다운로드 수 `2`
+- `fast` → fragment 동시 다운로드 수 `4`
+- `ultra` → fragment 동시 다운로드 수 `8`
+
 Validation:
 
 - 다운로드 경로는 비어 있을 수 없고 NUL 문자를 허용하지 않는다.
 - 해상도와 출력 포맷은 위 허용 목록만 저장한다.
+- 다운로드 가속은 `stable / standard / fast / ultra`만 저장하고 빈 값은 하위 호환을 위해 `standard`로 정규화한다.
 - 동시 다운로드 수는 `1~8` 범위로 제한한다.
 - UpdateSettings는 전체 설정을 검증한 후 한 번에 교체한다.
 - 잘못된 업데이트는 기존 설정을 변경하지 않는다.
@@ -724,7 +734,8 @@ Validation:
 - `go vet ./...` 성공
 - 기본 다운로드 경로 입력 기반 기본 설정 생성 검증
 - 해상도/출력 포맷 대소문자 및 공백 정규화 검증
-- 지원하지 않는 해상도/포맷/동시 다운로드 수 거부 검증
+- 지원하지 않는 해상도/포맷/다운로드 가속/동시 다운로드 수 거부 검증
+- 다운로드 가속 기본값 `standard` 및 기존 설정 저장 버전 v1/v2의 기본 가속값 복원 검증
 - 잘못된 Update가 기존 Store 값을 변경하지 않는지 검증
 - Settings Store 동시 Get/Update race 검증
 - Wails runtime 및 기존 App 의존성을 stub으로 대체한 App 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
@@ -747,12 +758,13 @@ Validation:
 - [x] SET-4. 동시 다운로드 수를 Queue SetMaxConcurrent에 연결
 - [x] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
 - [x] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
+- [x] SET-5B-3. 다운로드 가속 설정을 yt-dlp fragment 동시 다운로드 옵션에 적용
 
 #### Phase 5-B 적용 기준
 
 - `StartDownload`은 Queue 등록 직전에 현재 `AppSettings` 전체를 한 번 읽어 다운로드 요청에 Snapshot으로 적용한다.
 - 호출자가 넘긴 `OutputDir`, `FormatSelector`, `OutputFormat`보다 AppSettings를 우선한다.
-- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷 Snapshot을 유지한다.
+- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷/다운로드 가속 Snapshot을 유지한다.
 - 설정 변경 후 이미 queued/running인 작업의 다운로드 옵션은 변경하지 않는다.
 - 설정 변경 후 새로 Queue에 등록하는 작업부터 새 설정을 사용한다.
 - 동시 다운로드 수는 개별 작업 Snapshot이 아니라 Scheduler 전역 정책으로 취급하며 `UpdateSettings` 즉시 `Queue.SetMaxConcurrent`에 반영한다.
@@ -766,6 +778,14 @@ Validation:
 - `1440p` → `bv*[height<=1440]+ba/b[height<=1440]`
 - `1080p` → `bv*[height<=1080]+ba/b[height<=1080]`
 - `720p` → `bv*[height<=720]+ba/b[height<=720]`
+
+다운로드 가속 → yt-dlp concurrent fragments:
+
+- `stable` → `--concurrent-fragments 1`
+- `standard` → `--concurrent-fragments 2`
+- `fast` → `--concurrent-fragments 4`
+- `ultra` → `--concurrent-fragments 8`
+- 신규 설치 및 기존 설정 마이그레이션의 기본값은 `standard`(`2`)로 한다.
 
 출력 포맷:
 
@@ -784,7 +804,8 @@ Validation:
 - 동일 격리 모듈에서 `go vet ./...` 성공
 - 모든 지원 해상도의 format selector 변환 검증
 - Settings 적용 시 호출자 다운로드 옵션이 Snapshot 값으로 교체되는지 검증
-- Command Builder에 `--format`, `--merge-output-format`, `--remux-video`가 함께 적용되는지 검증
+- Command Builder에 `--format`, `--merge-output-format`, `--remux-video`, `--concurrent-fragments`가 함께 적용되는지 검증
+- 다운로드 가속 4단계가 각각 fragment 동시 다운로드 수 `1 / 2 / 4 / 8`로 변환되는 격리 Go 테스트 성공
 - 지원하지 않는 출력 포맷 거부 검증
 - App/Wails 의존성을 stub으로 대체한 통합 fixture에서 `go test ./...` / `go test -race ./...` / `go vet ./...` 성공
 - queued 작업이 설정 변경 후에도 등록 당시 경로/1080p/MKV Snapshot을 유지하는지 검증
@@ -808,6 +829,7 @@ Validation:
 - [ ] SET-5C-2. 다운로드 경로 표시/선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-5. 다운로드 가속 `안정 / 기본 / 고속 / 초고속` 선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 
 #### Phase 5-C UI 기준
 
@@ -819,11 +841,12 @@ Validation:
 - 폴더 선택 취소는 현재 Form 값을 변경하지 않는다.
 - 해상도는 `최고 화질 / 2160p 이하 / 1440p 이하 / 1080p 이하 / 720p 이하`를 제공한다.
 - 출력 포맷은 `MP4 / MKV / WebM`을 제공한다.
-- 동시 다운로드 수는 정수 `1~8`만 허용한다.
+- 다운로드 가속은 `안정 (1) / 기본 (2) / 고속 (4) / 초고속 (8)`을 제공한다.
+- 동시 다운로드 수는 정수 `1~8`만 허용하며 기본값은 `3`이다.
 - 저장 전 프론트 Form Validation을 수행하고, 최종 Validation은 기존 `UpdateSettings` 백엔드가 다시 수행한다.
 - 저장 성공 시 성공 메시지를 표시하고 Drawer를 닫는다.
 - 백엔드 오류는 Drawer를 유지한 채 사용자 메시지로 표시한다.
-- 경로·해상도·포맷의 Queue Snapshot 정책과 동시 다운로드 수의 즉시 Scheduler 적용 정책을 Drawer 내부에 안내한다.
+- 경로·해상도·포맷·다운로드 가속의 Queue Snapshot 정책과 동시 다운로드 수의 즉시 Scheduler 적용 정책을 Drawer 내부에 안내한다.
 - Phase 6-P 완료에 따라 설정이 SQLite에 저장되고 앱 재시작 후 복원된다는 안내를 표시한다.
 
 #### Phase 5-C 검증 현황
@@ -921,7 +944,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - SQLite 연결은 앱 단일 로컬 DB 사용 패턴에 맞춰 최대 connection 수를 1로 제한한다.
 - `foreign_keys=ON`, `busy_timeout=5000`, `journal_mode=WAL`을 적용한다.
 - `schema_migrations` 테이블과 순차 migration version으로 schema 변경을 관리한다.
-- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`, migration v3는 다운로드 `error_code`, migration v4는 실패 진단 `log_path`를 추가한다.
+- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`, migration v3는 다운로드 `error_code`, migration v4는 실패 진단 `log_path`, migration v5는 `app_settings.download_acceleration`을 추가하고 설정 저장 버전을 v3으로 올린다.
 - 저장 채널은 앱 시작 시 SQLite에서 읽어 기존 `chzzk.Store`에 복원한다.
 - 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
 - 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.

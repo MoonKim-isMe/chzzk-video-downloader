@@ -16,6 +16,7 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		download_dir,
 		resolution,
 		output_format,
+		download_acceleration,
 		max_concurrent_downloads,
 		theme
 	FROM app_settings
@@ -24,6 +25,7 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		&record.DownloadDir,
 		&record.Resolution,
 		&record.OutputFormat,
+		&record.DownloadAcceleration,
 		&record.MaxConcurrentDownloads,
 		&record.Theme,
 	)
@@ -47,15 +49,17 @@ func (d *Database) SaveSettings(record appsettings.StorageRecord) error {
 		download_dir,
 		resolution,
 		output_format,
+		download_acceleration,
 		max_concurrent_downloads,
 		theme,
 		updated_at
-	) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		schema_version = excluded.schema_version,
 		download_dir = excluded.download_dir,
 		resolution = excluded.resolution,
 		output_format = excluded.output_format,
+		download_acceleration = excluded.download_acceleration,
 		max_concurrent_downloads = excluded.max_concurrent_downloads,
 		theme = excluded.theme,
 		updated_at = excluded.updated_at`,
@@ -63,6 +67,7 @@ func (d *Database) SaveSettings(record appsettings.StorageRecord) error {
 		record.DownloadDir,
 		string(record.Resolution),
 		string(record.OutputFormat),
+		string(record.DownloadAcceleration),
 		record.MaxConcurrentDownloads,
 		string(record.Theme),
 		time.Now().UTC().Format(time.RFC3339Nano),
