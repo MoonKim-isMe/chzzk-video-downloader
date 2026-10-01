@@ -1017,18 +1017,14 @@ select {
   cursor: pointer;
 }
 
-.bookmark-remove {
-  position: absolute !important;
+.bookmark-favorite-button {
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
-  opacity: 0;
-  transition: opacity 140ms ease;
 }
 
-.bookmark-item:hover .bookmark-remove,
-.bookmark-item:focus-within .bookmark-remove {
-  opacity: 1;
+.bookmark-favorite-button:active {
+  transform: translateY(-50%) scale(0.94);
 }
 
 .channel-result-main {

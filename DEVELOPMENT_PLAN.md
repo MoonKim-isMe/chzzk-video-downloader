@@ -975,7 +975,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 #### Phase 6-UX-B — Channel / VOD 탐색
 
 - [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리 — 채널 검색 Workspace 및 URL 단건 상세 레이아웃 구현 완료, 실제 프론트엔드/Wails 검증 대기
-- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선 — 좌측 검색/북마크 탭, 전체 카드 선택, 별 북마크 토글까지 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선 — 좌측 검색/북마크 탭, 전체 카드 선택, 검색/북마크 목록의 별 북마크 토글까지 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-B3. VOD 카드의 정보 우선순위와 다운로드 추가 CTA 정리 — 태그 chip, 하단 정렬, 폰트/CTA 간격/문구, 썸네일 실패 상태 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-B4. 채널 전환과 VOD 더보기 흐름의 상태 피드백 개선
 
@@ -1028,6 +1028,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 썸네일 URL이 없거나 이미지 로드에 실패하면 `썸네일이 없거나 불러오지 못했습니다` 안내를 동일한 16:9 영역에 표시한다.
 - 검색 결과 목록과 `더 보기` 액션 사이에는 12px 간격을 유지해 마지막 카드와 버튼이 붙어 보이지 않도록 한다.
 - 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
+- 북마크 목록에서는 텍스트 `삭제` 버튼 대신 채워진 별 아이콘을 표시하고, 별 클릭 시 북마크를 해제해 해당 항목을 목록에서 즉시 제거한다.
 - Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
 - `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
@@ -1051,6 +1052,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Python 실제 SQLite 엔진에서 migration v1 → v2 적용 및 기존 settings row의 `theme=dark`, `schema_version=2` 승격 확인
 - 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
+- 북마크 목록의 텍스트 삭제 버튼 제거, 채워진 별 아이콘 및 `onRemove` 해제 경로 연결 정적 확인
 - Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
 - Download Manager의 cancelled 숨김 / 완료 액션 / 기능 중심 tool 상태 문구 구조 정적 확인

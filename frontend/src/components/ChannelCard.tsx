@@ -6,7 +6,7 @@ import type { Channel } from '../types/channel';
 const { Paragraph, Text } = Typography;
 const followerFormatter = new Intl.NumberFormat('ko-KR');
 
-function StarIcon({ filled }: { filled: boolean }) {
+export function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       aria-hidden="true"

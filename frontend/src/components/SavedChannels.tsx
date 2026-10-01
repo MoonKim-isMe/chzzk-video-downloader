@@ -1,6 +1,7 @@
-import { Avatar, Button, Empty, List, Tag, Typography } from 'antd';
+import { Avatar, Empty, List, Tag, Tooltip, Typography } from 'antd';
 
 import type { Channel } from '../types/channel';
+import { StarIcon } from './ChannelCard';
 
 const { Text } = Typography;
 
@@ -54,15 +55,20 @@ function SavedChannels({ channels, selectedChannelId, onSelect, onRemove }: Save
                       </span>
                       {selected && <Tag color="green">선택됨</Tag>}
                     </button>
-                    <Button
-                      type="text"
-                      danger
-                      size="small"
-                      className="bookmark-remove"
-                      onClick={() => onRemove(channel.channelId)}
-                    >
-                      삭제
-                    </Button>
+                    <Tooltip title="북마크 해제" placement="left">
+                      <button
+                        type="button"
+                        aria-label="북마크 해제"
+                        aria-pressed="true"
+                        className="channel-favorite-button bookmark-favorite-button is-active"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRemove(channel.channelId);
+                        }}
+                      >
+                        <StarIcon filled />
+                      </button>
+                    </Tooltip>
                   </div>
                 </List.Item>
               );
