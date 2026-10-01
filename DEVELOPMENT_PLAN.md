@@ -165,11 +165,101 @@ https://chzzk.naver.com/{channelId}
 
 ## Phase 2 — 채널 VOD 목록
 
-- [ ] VOD-1. 비공식 `/service/v1/channels/{channelId}/videos` 기반 채널별 VOD 목록 조회 구현
-- [ ] VOD-2. VOD 메타데이터 모델 정의
-- [ ] VOD-3. VOD 목록 UI 구현
-- [ ] VOD-4. 페이지네이션 또는 연속 조회 처리
-- [ ] VOD-5. 비공식 API 응답 변경 및 오류 상태 처리
+### Phase 2-A — VOD API 및 모델
+
+- [x] VOD-1. 비공식 `/service/v1/channels/{channelId}/videos` 기반 채널별 VOD 목록 조회 구현
+- [x] VOD-2. VOD 메타데이터 모델 정의
+- [x] VOD-2A-1. page/size/totalCount/totalPages 기반 페이지 메타데이터 처리
+- [x] VOD-2A-2. VOD URL 생성 및 Phase 3 전달용 videoNo 정규화
+- [x] VOD-2A-3. 잘못된 channelId, API 오류 코드, 비정상 JSON, 예상하지 못한 VOD 응답 형태 처리
+
+#### Phase 2-A 검증 현황
+
+완료:
+
+- `gofmt` 적용
+- Phase 2-A VOD 계층을 재현한 격리 Go 테스트 하네스에서 `go test ./internal/chzzk` 성공
+- VOD 목록 요청 파라미터 및 응답 모델 변환 단위 테스트
+- 페이지/size 보정 및 다음 페이지 계산 단위 테스트
+- API 오류 코드 및 비정상 JSON 응답 단위 테스트
+- VOD 핵심 필드 누락 응답 감지 단위 테스트
+
+현재 실행 환경 제약으로 실제 Repository 전체 체크아웃 기반의 `go test ./...` 및 `wails build`는 수행하지 못했다.
+
+확인 사항:
+
+- VOD 목록은 `sortType=LATEST`, `pagingType=PAGE`, `page`, `size`를 사용한다.
+- 기본 페이지 크기는 24, 최대 페이지 크기는 50으로 제한한다.
+- `Video` 모델에 videoNo, 제목, 타입, 게시일, 썸네일, 재생시간, 조회수, 카테고리, 성인 여부, 태그, 채널 정보와 표준 치지직 VOD URL을 포함한다.
+- 실제 목록 화면과 연속 조회 UX는 Phase 2-B에서 구현한다.
+
+### Phase 2-B — VOD 목록 UI
+
+- [ ] VOD-3. 선택 채널 VOD 목록 UI 구현 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-4. 페이지네이션 또는 연속 조회 UI 구현 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 2-B 구현 및 검증 현황
+
+구현 완료:
+
+- 저장 채널 선택 시 첫 VOD 페이지 자동 조회
+- VOD 썸네일, 제목, 영상 타입, 게시일, 재생시간, 조회수, 카테고리, 태그 표시
+- VOD가 없을 때 Empty 상태 표시
+- 초기 목록 조회 중 Skeleton 표시
+- API 오류 메시지 표시
+- `hasNext` / `nextPage` 기반 `더 보기` 조회 및 기존 목록 뒤에 추가
+- 채널 변경 시 ChannelVideoList를 채널 ID 기준으로 재마운트해 이전 요청/화면 상태 분리
+- Wails `GetChannelVideos` 호출용 TypeScript 타입 및 backend wrapper 추가
+
+검증 완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 격리 프론트엔드 검사
+- React/AntD 외부 타입을 최소 스텁으로 대체하여 JSX 구문, 내부 Video 타입, BackendApp 시그니처, 상태 업데이트 타입 일관성 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 치지직 VOD API와 Wails UI 통합 동작
+
+위 전체 프론트엔드 검증이 완료되면 VOD-3, VOD-4를 완료 처리한다.
+
+### Phase 2-C — 상태 연결 및 안정화
+
+- [ ] VOD-5. 비공식 API 응답 변경 및 UI 오류 상태/재시도 처리 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-1. 채널 전환 시 VOD 상태 초기화 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-2. 페이지 병합 시 videoNo 기준 중복 제거 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-3. Phase 3 다운로드에 전달할 선택 VOD 상태 확정 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 2-C 구현 및 검증 현황
+
+구현 완료:
+
+- 초기 VOD 조회 실패와 추가 페이지 조회 실패 모두 오류 Alert에 `다시 시도` 액션 제공
+- 실패한 요청의 page/append 상태를 보존해 동일 요청 단위로 재시도
+- 요청 sequence를 사용해 채널 전환 또는 재요청 이후 늦게 도착한 이전 응답 무시
+- 채널 변경 시 선택 VOD 상태 초기화
+- 선택 채널 삭제 시 선택 채널 및 선택 VOD 상태 동시 초기화
+- 페이지 병합 시 `videoNo` 기준 Map 병합으로 중복 제거
+- VOD 카드에 명시적인 `다운로드 대상으로 선택` 액션과 선택 상태 표시
+- 선택 VOD 상태를 `App` 레벨로 승격해 Phase 3 다운로드 로직에서 직접 재사용할 수 있도록 구성
+
+검증 완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 격리 프론트엔드 검사
+- 실제 React `useState<T>()` 형태를 반영한 최소 React/AntD 타입 스텁 환경에서 재검증
+- 변경된 `App.tsx`, `ChannelVideoList.tsx`, Video/Backend 타입 간 시그니처 일관성 확인
+- 채널 전환, 재시도, 중복 제거, 선택 VOD 상태 경로의 TypeScript 컴파일 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 치지직 VOD API와 Wails UI 통합 동작
+
+위 전체 프론트엔드 검증이 완료되면 Phase 2-B의 VOD-3/VOD-4와 Phase 2-C 항목을 함께 완료 처리한다.
 
 ## Phase 3 — 단일 VOD 다운로드
 

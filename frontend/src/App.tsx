@@ -15,8 +15,10 @@ import type { ReactNode } from 'react';
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import ChannelUrlTab from './features/channels/ChannelUrlTab';
+import ChannelVideoList from './features/videos/ChannelVideoList';
 import { getSavedChannels, removeSavedChannel, saveChannel } from './lib/backend';
 import type { Channel } from './types/channel';
+import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
 const { Paragraph, Text, Title } = Typography;
@@ -25,6 +27,7 @@ function AppContent() {
   const { message } = AntdApp.useApp();
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string>();
+  const [selectedVideo, setSelectedVideo] = useState<Video>();
 
   useEffect(() => {
     getSavedChannels()
@@ -39,10 +42,23 @@ function AppContent() {
     [savedChannels],
   );
 
+  const selectedChannel = useMemo(
+    () => savedChannels.find((channel) => channel.channelId === selectedChannelId),
+    [savedChannels, selectedChannelId],
+  );
+
+  const selectChannel = (channel: Channel) => {
+    if (channel.channelId !== selectedChannelId) {
+      setSelectedVideo(undefined);
+    }
+    setSelectedChannelId(channel.channelId);
+  };
+
   const handleSave = async (channel: Channel) => {
     try {
       const channels = await saveChannel(channel);
       setSavedChannels(channels);
+      setSelectedVideo(undefined);
       setSelectedChannelId(channel.channelId);
       message.success(`${channel.channelName} 채널을 저장했습니다.`);
     } catch (cause) {
@@ -54,7 +70,10 @@ function AppContent() {
     try {
       const channels = await removeSavedChannel(channelId);
       setSavedChannels(channels);
-      setSelectedChannelId((current) => (current === channelId ? undefined : current));
+      if (selectedChannelId === channelId) {
+        setSelectedChannelId(undefined);
+        setSelectedVideo(undefined);
+      }
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
     }
@@ -62,11 +81,25 @@ function AppContent() {
 
   const channelWorkspace = (content: ReactNode) => (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Card className="border-slate-800 bg-slate-900/80">{content}</Card>
+      <div className="min-w-0 space-y-6">
+        <Card className="border-slate-800 bg-slate-900/80">{content}</Card>
+        {selectedChannel ? (
+          <ChannelVideoList
+            key={selectedChannel.channelId}
+            channel={selectedChannel}
+            selectedVideoNo={selectedVideo?.videoNo}
+            onSelectVideo={setSelectedVideo}
+          />
+        ) : (
+          <Card className="border-slate-800 bg-slate-900/80">
+            <Empty description="저장 채널에서 채널을 선택하면 VOD 목록을 표시합니다." />
+          </Card>
+        )}
+      </div>
       <SavedChannels
         channels={savedChannels}
         selectedChannelId={selectedChannelId}
-        onSelect={(channel) => setSelectedChannelId(channel.channelId)}
+        onSelect={selectChannel}
         onRemove={handleRemove}
       />
     </div>
@@ -79,7 +112,7 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 1</Tag>
+          <Tag>Phase 2-C</Tag>
         </Space>
         <Text className="!text-slate-400">Wails v2</Text>
       </Header>
