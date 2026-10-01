@@ -9,17 +9,28 @@ import (
 type ProgressHandler func(DownloadProgress)
 
 type DownloadResult struct {
-	FinalPath    string           `json:"finalPath"`
-	LastProgress DownloadProgress `json:"lastProgress"`
+	FinalPath       string           `json:"finalPath"`
+	LogPath         string           `json:"logPath,omitempty"`
+	LastProgress    DownloadProgress `json:"lastProgress"`
+	DiagnosticLines []OutputLine     `json:"-"`
 }
 
 func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler ProgressHandler) (DownloadResult, error) {
 	spec, _, err := m.Prepare(ctx, request)
 	if err != nil {
-		return DownloadResult{}, err
+		result := DownloadResult{}
+		if logPath, logErr := writeDownloadFailureLog(request, spec, result, err); logErr == nil {
+			result.LogPath = logPath
+		}
+		return result, err
 	}
 	result, err := m.runPreparedDownload(ctx, spec, handler)
 	if err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			if logPath, logErr := writeDownloadFailureLog(request, spec, result, err); logErr == nil {
+				result.LogPath = logPath
+			}
+		}
 		return result, err
 	}
 	_ = cleanupTemporaryDownloadRequest(request)
@@ -29,6 +40,7 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 func (m *Manager) runPreparedDownload(ctx context.Context, spec CommandSpec, handler ProgressHandler) (DownloadResult, error) {
 	result := DownloadResult{}
 	err := m.runner.Run(ctx, spec, func(line OutputLine) {
+		result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, line)
 		if progress, ok := parseProgressLine(line.Text); ok {
 			result.LastProgress = progress
 			if handler != nil {

@@ -33,7 +33,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 3 {
+	if version != 4 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -49,7 +49,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 3 {
+	if version != 4 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -238,6 +238,7 @@ func TestDownloadHistoryPersistsErrorCode(t *testing.T) {
 		Status:      downloader.TaskStatusFailed,
 		Error:       "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
 		ErrorCode:   downloader.DownloadFailurePartialDataConflict,
+		LogPath:     filepath.Join(t.TempDir(), "failure.log"),
 		QueuedAt:    "2026-10-01T00:00:00Z",
 		FinishedAt:  "2026-10-01T00:00:01Z",
 	}
@@ -254,5 +255,8 @@ func TestDownloadHistoryPersistsErrorCode(t *testing.T) {
 	}
 	if tasks[0].ErrorCode != downloader.DownloadFailurePartialDataConflict {
 		t.Fatalf("unexpected restored error code: %q", tasks[0].ErrorCode)
+	}
+	if tasks[0].LogPath != task.LogPath {
+		t.Fatalf("unexpected restored log path: %q", tasks[0].LogPath)
 	}
 }

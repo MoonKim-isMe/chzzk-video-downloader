@@ -921,7 +921,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - SQLite 연결은 앱 단일 로컬 DB 사용 패턴에 맞춰 최대 connection 수를 1로 제한한다.
 - `foreign_keys=ON`, `busy_timeout=5000`, `journal_mode=WAL`을 적용한다.
 - `schema_migrations` 테이블과 순차 migration version으로 schema 변경을 관리한다.
-- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`을 추가해 기존 설정을 Dark로 승격한다.
+- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`, migration v3는 다운로드 `error_code`, migration v4는 실패 진단 `log_path`를 추가한다.
 - 저장 채널은 앱 시작 시 SQLite에서 읽어 기존 `chzzk.Store`에 복원한다.
 - 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
 - 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.
@@ -987,6 +987,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리 — 기능 중심 상태 문구, 401 인증 필요/부분 데이터 충돌 오류 분류 구현 완료, 실제 Wails 검증 대기
 - [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 및 실패 다운로드의 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
 - [ ] UX-C6. VOD별 임시 다운로드 경로 격리 및 임시 데이터 충돌 복구 액션 — 구현 완료, 실제 Windows 다운로드 검증 대기
+- [ ] UX-C7. 다운로드 실패 진단 로그 저장 및 실패 항목 로그 파일 열기 — 구현 완료, 실제 반복 실패 VOD 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
@@ -1039,6 +1040,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
 - 다운로드 중간 파일은 최종 저장 경로와 분리해 `.chzzk-temp/{videoNo}`에 격리하고, `--continue`로 정상적인 부분 다운로드 재개를 허용한다.
 - 임시 데이터 충돌 실패는 `errorCode=partial_data_conflict`로 영속화하며, 실패 항목의 `임시 파일 정리 후 재시도` 액션은 해당 VOD 임시 디렉터리만 삭제한 뒤 새 Queue 작업을 생성한다. 최종 영상 파일은 삭제하지 않는다.
+- 다운로드 실패 시 다운로드 폴더의 `.chzzk-logs`에 VOD별 진단 로그를 남긴다. 로그에는 UTC 시각, VOD URL, 출력 설정, 사용자 오류/원인 체인, 마지막 진행 상태, 민감 인자를 마스킹한 실행 인자, 최근 400줄의 stdout/stderr를 기록한다.
+- 실패 Task의 `logPath`를 SQLite에 영속화하고 다운로드 탭에서 `로그 파일 열기`를 제공한다. 목록 삭제/임시 파일 정리 후 재시도 시에도 기존 로그 파일 자체는 보존한다.
 - HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`를 표시한다.
 - `initialization fragment found after media fragments`는 `partial_data_conflict`로 분류해 내부 실행 도구명/원문 로그 대신 임시 파일 정리 후 재시도 안내를 표시한다.
 - cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
@@ -1068,6 +1071,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Download Manager TSX를 TypeScript 5.8.3 parser로 구문 검증
 - VOD별 temp 경로가 `.chzzk-temp/{videoNo}`로 분리되고 최종 저장 경로와 별도 `--paths temp:` 인자로 전달되는 구조 정적 확인
 - `partial_data_conflict` 오류 코드의 Queue → SQLite → Frontend 타입 연결 및 복구 API/버튼 경로 정적 확인
+- 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:
 

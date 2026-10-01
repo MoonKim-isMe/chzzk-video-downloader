@@ -157,7 +157,7 @@ func TestRunPreparedDownloadClassifiesPartialDataConflict(t *testing.T) {
 	if !ok || kind != DownloadFailurePartialDataConflict {
 		t.Fatalf("unexpected failure kind: %q %v", kind, err)
 	}
-	if got := err.Error(); got != "이전 다운로드의 임시 데이터와 충돌했습니다. 다운로드를 처음부터 다시 시도해 주세요." {
+	if got := err.Error(); got != "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요." {
 		t.Fatalf("unexpected user message: %q", got)
 	}
 }

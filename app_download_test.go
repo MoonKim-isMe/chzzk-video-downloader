@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -724,4 +725,62 @@ func TestRecoverDownloadCleansTemporaryFilesAndQueuesRetry(t *testing.T) {
 	}
 
 	release <- struct{}{}
+}
+
+
+func TestOpenDownloadLogUsesStoredFailureLog(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "failure.log")
+	if err := os.WriteFile(logPath, []byte("failure"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			return downloader.DownloadResult{LogPath: logPath}, errors.New("download failed")
+		},
+	}
+	store, err := appsettings.NewStore(appsettings.Defaults(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	var opened string
+	app.fileOpener = func(path string) error {
+		opened = path
+		return nil
+	}
+
+	task, err := app.StartDownload(testStartRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := app.ensureDownloadQueue().Get(task.TaskID)
+		if ok && current.Status == downloader.TaskStatusFailed {
+			task = current
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if task.Status != downloader.TaskStatusFailed || task.LogPath != logPath {
+		t.Fatalf("unexpected failed task: %#v", task)
+	}
+
+	if err := app.OpenDownloadLog(task.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if opened != logPath {
+		t.Fatalf("unexpected opened log path: %q", opened)
+	}
 }

@@ -51,6 +51,7 @@ export interface DownloadTask {
   status: DownloadTaskStatus;
   progress: DownloadProgress;
   finalPath?: string;
+  logPath?: string;
   error?: string;
   errorCode?: DownloadErrorCode;
   queuedAt: string;

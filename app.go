@@ -51,6 +51,7 @@ type App struct {
 	eventEmitter    func(downloader.DownloadTask)
 	directoryPicker func(context.Context, runtime.OpenDialogOptions) (string, error)
 	folderOpener    func(string) error
+	fileOpener      func(string) error
 }
 
 type AppInfo struct {
@@ -350,6 +351,39 @@ func (a *App) DeleteDownloadTask(taskID string) error {
 	return nil
 }
 
+func (a *App) OpenDownloadLog(taskID string) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return fmt.Errorf("다운로드 작업을 찾을 수 없습니다")
+	}
+
+	logPath := strings.TrimSpace(task.LogPath)
+	if logPath == "" {
+		return fmt.Errorf("저장된 오류 로그가 없습니다")
+	}
+	info, err := os.Stat(logPath)
+	if err != nil {
+		return fmt.Errorf("오류 로그 파일을 열 수 없습니다: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("오류 로그 경로가 파일이 아닙니다")
+	}
+
+	opener := a.fileOpener
+	if opener == nil {
+		opener = openFile
+	}
+	if err := opener(logPath); err != nil {
+		return fmt.Errorf("오류 로그 파일을 열 수 없습니다: %w", err)
+	}
+	return nil
+}
+
 func (a *App) OpenDownloadFolder(taskID string) error {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -421,6 +455,19 @@ func openFolder(directory string) error {
 		command = exec.Command("open", directory)
 	default:
 		command = exec.Command("xdg-open", directory)
+	}
+	return command.Start()
+}
+
+func openFile(path string) error {
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		command = exec.Command("notepad.exe", path)
+	case "darwin":
+		command = exec.Command("open", path)
+	default:
+		command = exec.Command("xdg-open", path)
 	}
 	return command.Start()
 }

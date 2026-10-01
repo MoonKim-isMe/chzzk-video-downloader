@@ -91,6 +91,12 @@ var migrations = []migration{
 					AND error = '로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.'`,
 		},
 	},
+	{
+		version: 4,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN log_path TEXT NOT NULL DEFAULT ''`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

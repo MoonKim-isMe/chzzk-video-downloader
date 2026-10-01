@@ -16,6 +16,7 @@ import {
   deleteDownloadTask,
   getDownloadToolchainStatus,
   openDownloadFolder,
+  openDownloadLog,
   recoverDownload,
 } from '../../lib/backend';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
@@ -183,6 +184,21 @@ function DownloadTaskRow({
     }
   };
 
+  const handleOpenLog = async () => {
+    if (!task.logPath || working) {
+      return;
+    }
+
+    setWorking(true);
+    try {
+      await openDownloadLog(task.taskId);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const handleOpenFolder = async () => {
     setWorking(true);
     try {
@@ -242,6 +258,11 @@ function DownloadTaskRow({
             )}
             {task.status === 'failed' && (
               <>
+                {task.logPath && (
+                  <Button size="small" disabled={working} onClick={() => void handleOpenLog()}>
+                    로그 파일 열기
+                  </Button>
+                )}
                 {task.errorCode === 'partial_data_conflict' && (
                   <Button type="primary" size="small" loading={working} onClick={() => void handleRecover()}>
                     임시 파일 정리 후 재시도
@@ -283,6 +304,9 @@ function DownloadTaskRow({
 
             {task.status === 'failed' && task.error && (
               <div className="download-task-error">{task.error}</div>
+            )}
+            {task.status === 'failed' && task.logPath && (
+              <div className="download-task-path">오류 로그: {task.logPath}</div>
             )}
           </>
         )}

@@ -25,13 +25,14 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		speed_bytes_per_second,
 		eta_seconds,
 		final_path,
+		log_path,
 		error,
 		error_code,
 		queued_at,
 		started_at,
 		finished_at,
 		updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(task_id) DO UPDATE SET
 		video_no = excluded.video_no,
 		video_title = excluded.video_title,
@@ -48,6 +49,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		speed_bytes_per_second = excluded.speed_bytes_per_second,
 		eta_seconds = excluded.eta_seconds,
 		final_path = excluded.final_path,
+		log_path = excluded.log_path,
 		error = excluded.error,
 		error_code = excluded.error_code,
 		queued_at = excluded.queued_at,
@@ -70,6 +72,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task.Progress.SpeedBytesPerSecond,
 		task.Progress.ETASeconds,
 		task.FinalPath,
+		task.LogPath,
 		task.Error,
 		string(task.ErrorCode),
 		task.QueuedAt,
@@ -112,6 +115,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		speed_bytes_per_second,
 		eta_seconds,
 		final_path,
+		log_path,
 		error,
 		error_code,
 		queued_at,
@@ -146,6 +150,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			&task.Progress.SpeedBytesPerSecond,
 			&task.Progress.ETASeconds,
 			&task.FinalPath,
+			&task.LogPath,
 			&task.Error,
 			&task.ErrorCode,
 			&task.QueuedAt,
