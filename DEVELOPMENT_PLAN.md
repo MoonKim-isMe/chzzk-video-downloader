@@ -420,14 +420,193 @@ https://chzzk.naver.com/{channelId}
 - ETA
 - 출력 경로
 
-- [ ] DM-1. 앱 주요 탐색에 다운로드 탭 추가
-- [ ] DM-2. 다운로드 Queue 구현
-- [ ] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱
-- [ ] DM-4. 진행 중 다운로드 Progress UI 구현
-- [ ] DM-5. 대기/진행/완료/실패 상태 시각화
-- [ ] DM-6. 다운로드 취소 처리
-- [ ] DM-7. 중복 다운로드 방지
-- [ ] DM-8. 다운로드 완료 후 결과 파일 경로 표시
+### Phase 4-A — Download Manager / Queue 백엔드
+
+- [x] DM-2. 다운로드 Queue 구현
+- [x] DM-7. queued/running 상태의 videoNo 기준 중복 다운로드 방지
+- [x] DM-4A-1. DownloadTask Registry 및 등록 순서 기반 전체 작업 조회 구현
+- [x] DM-4A-2. queued → running FIFO 자동 스케줄링 구현
+- [x] DM-4A-3. 완료/실패/취소 Task를 메모리 Registry에 유지
+- [x] DM-4A-4. 현재 동시 실행 수 1개 고정 및 Phase 5 확장 가능한 Executor/Queue 분리
+- [x] DM-4A-5. 기존 StartDownload API를 Queue 등록 API로 호환 확장
+- [x] DM-4A-6. GetDownloadTasks Wails API 및 프론트엔드 타입/wrapper 추가
+
+#### Phase 4-A 동작 기준
+
+- 첫 등록 작업은 즉시 `running`으로 전환하고 실제 실행은 goroutine에서 처리한다.
+- 실행 중 작업이 있으면 이후 등록 작업은 FIFO `queued` 상태로 유지한다.
+- 실행 작업이 완료/실패/취소되면 다음 queued 작업을 자동으로 시작한다.
+- queued/running 상태인 동일 `videoNo`는 중복 등록을 거부한다.
+- completed/failed/cancelled 상태 작업은 Registry에 남지만 동일 VOD의 재다운로드를 차단하지 않는다.
+- Task Registry는 현재 메모리 기반이며 SQLite 영속화는 Phase 6에서 구현한다.
+- Phase 4-A에서는 queued 작업 취소 UI/정책을 확장하지 않는다. 해당 범위는 Phase 4-B에서 처리한다.
+- 동시 실행 수는 1개로 유지하며 설정 기반 동시 실행 수 확장은 Phase 5에서 처리한다.
+
+#### Phase 4-A 검증 현황
+
+완료:
+
+- Phase 4-A Queue 소스를 재현한 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 Go 모듈에서 `go test ./internal/downloader` 성공
+- 동일 격리 Go 모듈에서 `go vet ./internal/downloader` 성공
+- 첫 작업 running / 두 번째 작업 queued 상태 검증
+- FIFO 순서 및 이전 작업 종료 후 다음 작업 자동 시작 검증
+- queued/running 동일 videoNo 중복 등록 차단 검증
+- completed 이후 동일 VOD 재등록 허용 검증
+- 실행 중 작업 취소 후 다음 queued 작업 자동 시작 회귀 검증
+- Queue Stop 이후 신규 등록 거부 검증
+- Wails runtime을 최소 stub으로 대체한 App 통합 fixture에서 `go test ./...` 성공
+- 동일 App 통합 fixture에서 `go vet ./...` 성공
+- App `StartDownload` → Queue 등록, `GetDownloadTasks`, 중복 차단, 다음 작업 자동 시작 경로 검증
+- TypeScript 5.8.3 격리 fixture에서 queued 상태, `GetDownloadTasks()` 반환 타입, DownloadPanel status map 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...`
+- 실제 Wails generated binding 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 yt-dlp 다운로드 여러 건을 등록한 FIFO 통합 동작
+
+### Phase 4-B — Queue 제어 및 취소 안정화
+
+- [x] DM-6. queued/running 작업 취소 처리
+- [x] DM-4B-1. 실행 중 작업 실패/취소 후 다음 Queue 지속 실행 검증
+- [x] DM-4B-2. 대기 작업 취소 시 Queue에서 제거하고 cancelled 상태 유지
+- [x] DM-4B-3. 종료/취소 경합 시 Task 상태 일관성 보장
+
+#### Phase 4-B 동작 기준
+
+- `CancelDownload(taskId)`는 queued와 running 작업 모두 처리한다.
+- queued 작업은 실제 executor 실행 전에 pending Queue에서 제거하고 즉시 `cancelled` 상태와 `finishedAt`을 기록한다.
+- running 작업은 `cancelRequested`를 먼저 기록한 뒤 context를 취소한다.
+- 취소 요청 이후 executor가 거의 동시에 성공 반환하더라도 `cancelRequested`가 있으면 최종 상태는 `cancelled`를 우선한다.
+- 취소 요청 이후 도착한 progress callback은 Task 상태에 반영하지 않는다.
+- failed/cancelled 작업 종료 후 Scheduler는 남은 queued 작업을 계속 실행한다.
+- terminal 상태(completed/failed/cancelled)에 대한 재취소는 false를 반환하고 상태를 변경하지 않는다.
+- Queue Stop 시 queued 작업은 실행하지 않고 cancelled로 확정하며, running 작업에는 취소 요청을 기록한 뒤 context를 취소한다.
+- 기존 단일 다운로드 패널에서도 queued/running 상태 모두 취소 요청을 전달할 수 있도록 최소 호환 처리한다.
+
+#### Phase 4-B 검증 현황
+
+완료:
+
+- Phase 4-B Queue 상태 머신을 재현한 Go 1.23.2 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- queued 작업 취소 후 pending Queue에서 제거되고 실제 executor가 시작되지 않는지 확인
+- running 작업 취소 후 다음 queued 작업 자동 시작 확인
+- 실행 작업 실패 후 다음 queued 작업 자동 시작 확인
+- context 취소를 무시하고 성공 반환하는 executor에서도 취소 요청이 최종 `cancelled` 상태를 우선하는 경합 테스트
+- Queue Stop 시 running/queued 작업이 모두 cancelled로 수렴하는지 확인
+- terminal 작업 재취소가 상태를 변경하지 않는지 확인
+- Wails `CancelDownload` App 경로에 queued 취소 회귀 테스트 추가
+- 기존 DownloadPanel에서 queued 작업에 `대기 취소` 액션을 노출하도록 최소 호환 처리
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...`
+- 실제 Wails generated binding 기반 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 yt-dlp 프로세스 종료 시점과 취소 요청이 겹치는 Windows 통합 동작
+
+### Phase 4-C — Download Manager UI
+
+- [ ] DM-1. 다운로드 탭을 다중 Task Manager 화면으로 확장 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4. 진행 중 다운로드 Progress UI를 Task 목록 단위로 확장 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-5. 대기/진행/완료/실패/취소 상태 시각화 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-8. 다운로드 완료 후 결과 파일 경로를 Task별 표시 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4C-1. VOD 화면의 다운로드 시작 동작을 Queue 추가 흐름으로 변경 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4C-2. GetDownloadTasks 초기 조회 + download:state 증분 이벤트 병합 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 4-C 구현 기준
+
+- 다운로드 탭은 단일 currentTask가 아니라 전체 `DownloadTask[]` Registry 상태를 표시한다.
+- 앱 진입 시 `GetDownloadTasks()`로 초기 작업 스냅샷을 조회한다.
+- 초기 조회 전에 `download:state` 이벤트를 먼저 구독해 초기화 중 발생하는 상태 이벤트를 놓치지 않는다.
+- 초기 스냅샷과 실시간 이벤트가 경합하면 상태 단계와 진행률을 비교해 더 최신 Task 상태를 유지한다.
+- queued → running → terminal(completed/failed/cancelled) 순으로 이전 상태가 최신 상태를 덮어쓰지 않도록 병합한다.
+- 동일 running 상태끼리는 downloadedBytes와 percent가 더 큰 상태를 우선한다.
+- VOD 카드의 기존 `다운로드 대상으로 선택` 단계를 제거하고 `Queue에 추가` 버튼에서 바로 `StartDownload`을 호출한다.
+- queued/running 상태인 VOD 카드는 현재 상태를 표시하고 Queue 중복 추가 버튼을 비활성화한다.
+- completed/failed/cancelled VOD는 다시 Queue에 추가할 수 있다.
+- Download Manager 상단에는 전체/대기/진행/완료/실패 개수 요약을 표시한다.
+- 각 Task 카드에는 썸네일, 채널명, 제목, 상태, Queue 순서, 진행률, 다운로드 크기/전체 크기, 속도, ETA, 저장 위치 또는 최종 파일 경로를 표시한다.
+- queued/running Task는 각 카드에서 개별 취소할 수 있다.
+- failed Task는 오류 메시지, cancelled Task는 취소 상태를 카드 내부에 표시한다.
+
+#### Phase 4-C 검증 현황
+
+완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 Phase 4-C 격리 프론트엔드 fixture에서 `tsc --noEmit` 성공
+- React hook/JSX key를 실제 타입 형태에 맞춘 최소 React/AntD stub 환경에서 App, ChannelVideoList, DownloadPanel, downloadTasks 병합 유틸 타입 확인
+- `GetDownloadTasks()` 초기 스냅샷과 `download:state` 이벤트 상태 병합 타입 확인
+- downloadTasks 병합 유틸을 CommonJS로 컴파일해 running 진행률 역행 방지, terminal 상태 우선, 신규 Task append, snapshot/event merge 실행 테스트 성공
+- VOD 카드 queued/running 상태 표시 및 Queue 중복 버튼 비활성화 타입 확인
+- Task별 취소 버튼과 Progress 상태 매핑 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 창에서 GetDownloadTasks 초기 조회와 download:state 이벤트 동시 수신
+- 실제 여러 VOD Queue 등록 시 다운로드 탭의 실시간 Task 목록 갱신
+
+위 실제 프론트엔드/Wails 통합 검증까지 완료되면 Phase 4-C 항목을 완료 처리한다.
+
+### Phase 4-D — 통합 안정화 및 Phase 5 준비
+
+- [x] DM-3. yt-dlp 출력 기반 진행률/속도/ETA 파싱의 다중 Task 통합 검증
+- [x] DM-4D-1. 빠른 연속 Queue 등록 순서 검증
+- [x] DM-4D-2. 완료/실패/취소 직후 다음 작업 시작 검증
+- [x] DM-4D-3. Go/React 이벤트 순서 및 Task Registry 최종 일관성 검증
+- [x] DM-4D-4. Phase 5 maxConcurrentDownloads 확장을 위한 Scheduler 구조 확정
+
+#### Phase 4-D 안정화 기준
+
+- 빠르게 여러 VOD를 등록해도 `order`와 FIFO `pending` 순서를 유지한다.
+- 각 Task의 yt-dlp progress 파싱 결과는 해당 Task에만 반영되며 다른 Task의 진행률과 섞이지 않는다.
+- Queue가 emit하는 상태는 Task 단위로 `queued → running → terminal` 순서를 유지하고 이전 상태로 역행하지 않는다.
+- React의 snapshot/event 병합은 Go 이벤트 순서와 별개로 terminal 상태 및 더 높은 running 진행률을 우선한다.
+- VOD Queue 등록 실패는 사용자 메시지만 표시하고 reject를 다시 던지지 않아 unhandled promise rejection을 만들지 않는다.
+- Download Manager KPI에는 전체/대기/진행/완료/실패/취소 상태를 모두 포함한다.
+- Queue는 런타임 `SetMaxConcurrent(maxConcurrent)` / `MaxConcurrent()`를 제공한다.
+- 동시 실행 수 증가 시 빈 슬롯만큼 queued 작업을 즉시 시작한다.
+- 동시 실행 수 감소 시 현재 실행 중인 작업은 강제 취소하지 않고 이후 Scheduler부터 새 제한을 적용한다.
+- Phase 5에서는 Queue를 재생성하지 않고 설정값을 `SetMaxConcurrent`에 연결한다.
+
+#### Phase 4-D 검증 현황
+
+완료:
+
+- Phase 4-D Scheduler 로직을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 격리 모듈에서 `go test ./...` 성공
+- 동일 격리 모듈에서 `go test -race ./...` 성공
+- 동일 격리 모듈에서 `go vet ./...` 성공
+- 12개 Task 빠른 연속 등록 후 실행 순서가 등록 FIFO와 동일한지 확인
+- maxConcurrent 1 → 2 증가 시 추가 queued Task가 즉시 실행되는지 확인
+- maxConcurrent 2 → 1 감소 시 기존 active Task는 유지하고 새 Task는 제한이 충족될 때까지 대기하는지 확인
+- 0 이하 동시성 값 및 Stop 이후 동시성 변경 거부 확인
+- 실제 `parseProgressLine`을 거친 두 Task의 downloadedBytes / totalBytes / speed / ETA / percent가 서로 독립적으로 전달되는지 확인
+- Queue event의 Task 상태가 queued → running → terminal 방향으로만 진행하는지 확인
+- TypeScript 5.8.3으로 `downloadTasks` 병합 유틸 컴파일 성공
+- 컴파일된 병합 유틸 실행 테스트에서 running progress 역행 방지, terminal 상태 우선, snapshot에 없는 이벤트 Task 보존 및 등록 순서 병합 확인
+- Queue 등록 실패 재throw 제거로 unhandled promise rejection 경로 제거
+- Download Manager KPI에 cancelled 개수 추가
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 이벤트 전송 계층에서 다중 Task snapshot/event 경합 검증
+- 실제 yt-dlp 여러 건 다운로드에서 progress/속도/ETA 분리 확인
+
+Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목은 실제 Wails/외부 도구 환경 통합 검증으로 유지한다.
 
 ## Phase 5 — Settings
 

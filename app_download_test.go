@@ -48,10 +48,9 @@ func testStartRequest(t *testing.T) downloader.StartDownloadRequest {
 	}
 }
 
-func TestStartDownloadEmitsProgressAndCompletion(t *testing.T) {
-	var mu sync.Mutex
-	var events []downloader.DownloadTask
-	done := make(chan struct{})
+func TestStartDownloadQueuesAndListsTasks(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{}, 2)
 
 	service := &fakeDownloadService{
 		status: readyDownloadStatus(),
@@ -60,100 +59,68 @@ func TestStartDownloadEmitsProgressAndCompletion(t *testing.T) {
 			request downloader.DownloadRequest,
 			handler downloader.ProgressHandler,
 		) (downloader.DownloadResult, error) {
-			progress := downloader.DownloadProgress{Status: "downloading", Percent: 50}
-			handler(progress)
-			return downloader.DownloadResult{
-				FinalPath:    `C:\\Video\\done.mp4`,
-				LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
-			}, nil
-		},
-	}
-	app := NewApp()
-	app.downloadManager = service
-	app.eventEmitter = func(task downloader.DownloadTask) {
-		mu.Lock()
-		events = append(events, task)
-		if task.Status == downloader.TaskStatusCompleted {
+			started <- request.URL
 			select {
-			case <-done:
-			default:
-				close(done)
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
 			}
-		}
-		mu.Unlock()
-	}
-
-	task, err := app.StartDownload(testStartRequest(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if task.Status != downloader.TaskStatusRunning {
-		t.Fatalf("unexpected initial status: %s", task.Status)
-	}
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("completion event timeout")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(events) < 3 {
-		t.Fatalf("expected initial, progress and completion events: %#v", events)
-	}
-	last := events[len(events)-1]
-	if last.Status != downloader.TaskStatusCompleted || last.FinalPath == "" || last.Progress.Percent != 100 {
-		t.Fatalf("unexpected completion event: %#v", last)
-	}
-}
-
-func TestStartDownloadRejectsConcurrentTaskAndCanCancel(t *testing.T) {
-	started := make(chan struct{})
-	finished := make(chan struct{})
-
-	service := &fakeDownloadService{
-		status: readyDownloadStatus(),
-		download: func(
-			ctx context.Context,
-			request downloader.DownloadRequest,
-			handler downloader.ProgressHandler,
-		) (downloader.DownloadResult, error) {
-			close(started)
-			<-ctx.Done()
-			close(finished)
-			return downloader.DownloadResult{}, ctx.Err()
 		},
 	}
 	app := NewApp()
 	app.downloadManager = service
 	app.eventEmitter = func(downloader.DownloadTask) {}
 
-	task, err := app.StartDownload(testStartRequest(t))
+	first, err := app.StartDownload(testStartRequest(t))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if first.Status != downloader.TaskStatusRunning {
+		t.Fatalf("expected first task running, got %s", first.Status)
+	}
+
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected second task queued, got %s", second.Status)
+	}
+
+	tasks := app.GetDownloadTasks()
+	if len(tasks) != 2 || tasks[0].TaskID != first.TaskID || tasks[1].TaskID != second.TaskID {
+		t.Fatalf("unexpected task registry: %#v", tasks)
+	}
+
+	if _, err := app.StartDownload(secondRequest); err == nil {
+		t.Fatal("expected duplicate VOD error")
+	}
+
 	<-started
-
-	second := testStartRequest(t)
-	second.VideoNo = 67890
-	second.URL = "https://chzzk.naver.com/video/67890"
-	if _, err := app.StartDownload(second); err == nil {
-		t.Fatal("expected concurrent download error")
-	}
-	if !app.CancelDownload(task.TaskID) {
-		t.Fatal("expected cancellation to succeed")
-	}
-
+	release <- struct{}{}
 	select {
-	case <-finished:
+	case url := <-started:
+		if url != secondRequest.URL {
+			t.Fatalf("unexpected second task URL: %s", url)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("cancellation timeout")
+		t.Fatal("queued task did not start automatically")
 	}
+
+	release <- struct{}{}
 }
 
-func TestStartDownloadReportsCancellation(t *testing.T) {
-	cancelled := make(chan downloader.DownloadTask, 1)
+func TestCancelQueuedDownloadKeepsTaskCancelled(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{}, 1)
+
 	service := &fakeDownloadService{
 		status: readyDownloadStatus(),
 		download: func(
@@ -161,6 +128,82 @@ func TestStartDownloadReportsCancellation(t *testing.T) {
 			request downloader.DownloadRequest,
 			handler downloader.ProgressHandler,
 		) (downloader.DownloadResult, error) {
+			started <- request.URL
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	first, err := app.StartDownload(testStartRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected queued task, got %s", second.Status)
+	}
+	if !app.CancelDownload(second.TaskID) {
+		t.Fatal("expected queued cancellation")
+	}
+
+	tasks := app.GetDownloadTasks()
+	if len(tasks) != 2 || tasks[1].Status != downloader.TaskStatusCancelled || tasks[1].FinishedAt == "" {
+		t.Fatalf("unexpected cancelled task: %#v", tasks)
+	}
+
+	release <- struct{}{}
+	deadline := time.After(100 * time.Millisecond)
+	for {
+		select {
+		case url := <-started:
+			if url == secondRequest.URL {
+				t.Fatal("cancelled queued task started")
+			}
+		case <-deadline:
+			return
+		}
+	}
+
+	_ = first
+}
+
+func TestStartDownloadReportsCancellationAndStartsNext(t *testing.T) {
+	cancelled := make(chan downloader.DownloadTask, 1)
+	secondStarted := make(chan struct{}, 1)
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			if request.URL == "https://chzzk.naver.com/video/67890" {
+				secondStarted <- struct{}{}
+				return downloader.DownloadResult{
+					FinalPath:    "second.mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			}
 			<-ctx.Done()
 			return downloader.DownloadResult{}, errors.Join(errors.New("cancelled"), ctx.Err())
 		},
@@ -168,17 +211,30 @@ func TestStartDownloadReportsCancellation(t *testing.T) {
 
 	app := NewApp()
 	app.downloadManager = service
+	var mu sync.Mutex
 	app.eventEmitter = func(task downloader.DownloadTask) {
+		mu.Lock()
+		defer mu.Unlock()
 		if task.Status == downloader.TaskStatusCancelled {
-			cancelled <- task
+			select {
+			case cancelled <- task:
+			default:
+			}
 		}
 	}
 
-	task, err := app.StartDownload(testStartRequest(t))
+	first, err := app.StartDownload(testStartRequest(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !app.CancelDownload(task.TaskID) {
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 67890
+	secondRequest.URL = "https://chzzk.naver.com/video/67890"
+	if _, err := app.StartDownload(secondRequest); err != nil {
+		t.Fatal(err)
+	}
+
+	if !app.CancelDownload(first.TaskID) {
 		t.Fatal("expected cancellation to succeed")
 	}
 
@@ -189,5 +245,11 @@ func TestStartDownloadReportsCancellation(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("cancelled event timeout")
+	}
+
+	select {
+	case <-secondStarted:
+	case <-time.After(time.Second):
+		t.Fatal("next queued task did not start")
 	}
 }

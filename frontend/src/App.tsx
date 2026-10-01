@@ -9,7 +9,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import SavedChannels from './components/SavedChannels';
@@ -17,10 +17,17 @@ import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import ChannelUrlTab from './features/channels/ChannelUrlTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
 import ChannelVideoList from './features/videos/ChannelVideoList';
-import { getSavedChannels, removeSavedChannel, saveChannel } from './lib/backend';
+import {
+  getDownloadTasks,
+  getSavedChannels,
+  removeSavedChannel,
+  saveChannel,
+  startDownload,
+} from './lib/backend';
+import { mergeDownloadTaskSnapshot, upsertDownloadTask } from './lib/downloadTasks';
 import { onDownloadState } from './lib/runtime';
 import type { Channel } from './types/channel';
-import type { DownloadTask } from './types/download';
+import type { DownloadTask, DownloadTaskStatus } from './types/download';
 import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
@@ -30,8 +37,7 @@ function AppContent() {
   const { message } = AntdApp.useApp();
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string>();
-  const [selectedVideo, setSelectedVideo] = useState<Video>();
-  const [currentDownload, setCurrentDownload] = useState<DownloadTask>();
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
 
   useEffect(() => {
     getSavedChannels()
@@ -41,7 +47,31 @@ function AppContent() {
       });
   }, [message]);
 
-  useEffect(() => onDownloadState(setCurrentDownload), []);
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onDownloadState((task) => {
+      if (active) {
+        setDownloadTasks((current) => upsertDownloadTask(current, task));
+      }
+    });
+
+    getDownloadTasks()
+      .then((snapshot) => {
+        if (active) {
+          setDownloadTasks((current) => mergeDownloadTaskSnapshot(current, snapshot));
+        }
+      })
+      .catch((cause) => {
+        if (active) {
+          message.error(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [message]);
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
@@ -53,10 +83,17 @@ function AppContent() {
     [savedChannels, selectedChannelId],
   );
 
+  const activeDownloadStatusByVideoNo = useMemo(() => {
+    const active = new Map<number, DownloadTaskStatus>();
+    downloadTasks.forEach((task) => {
+      if (task.status === 'queued' || task.status === 'running') {
+        active.set(task.videoNo, task.status);
+      }
+    });
+    return active;
+  }, [downloadTasks]);
+
   const selectChannel = (channel: Channel) => {
-    if (channel.channelId !== selectedChannelId) {
-      setSelectedVideo(undefined);
-    }
     setSelectedChannelId(channel.channelId);
   };
 
@@ -64,7 +101,6 @@ function AppContent() {
     try {
       const channels = await saveChannel(channel);
       setSavedChannels(channels);
-      setSelectedVideo(undefined);
       setSelectedChannelId(channel.channelId);
       message.success(`${channel.channelName} 채널을 저장했습니다.`);
     } catch (cause) {
@@ -78,21 +114,33 @@ function AppContent() {
       setSavedChannels(channels);
       if (selectedChannelId === channelId) {
         setSelectedChannelId(undefined);
-        setSelectedVideo(undefined);
       }
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
-  const handleTaskStarted = (task: DownloadTask) => {
-    setCurrentDownload((current) => {
-      if (current?.taskId === task.taskId) {
-        return current;
+  const handleQueueVideo = useCallback(
+    async (video: Video) => {
+      try {
+        const task = await startDownload({
+          videoNo: video.videoNo,
+          videoTitle: video.videoTitle,
+          channelName: video.channel.channelName,
+          thumbnailImageUrl: video.thumbnailImageUrl,
+          url: video.videoUrl,
+          outputDir: '',
+        });
+        setDownloadTasks((current) => upsertDownloadTask(current, task));
+        message.success(
+          task.status === 'running' ? '다운로드를 시작했습니다.' : '다운로드 Queue에 추가했습니다.',
+        );
+      } catch (cause) {
+        message.error(cause instanceof Error ? cause.message : String(cause));
       }
-      return task;
-    });
-  };
+    },
+    [message],
+  );
 
   const channelWorkspace = (content: ReactNode) => (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -102,8 +150,8 @@ function AppContent() {
           <ChannelVideoList
             key={selectedChannel.channelId}
             channel={selectedChannel}
-            selectedVideoNo={selectedVideo?.videoNo}
-            onSelectVideo={setSelectedVideo}
+            activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+            onQueueVideo={handleQueueVideo}
           />
         ) : (
           <Card className="border-slate-800 bg-slate-900/80">
@@ -127,7 +175,7 @@ function AppContent() {
           <Title level={4} className="!m-0 !text-slate-100">
             CHZZK Video Downloader
           </Title>
-          <Tag>Phase 3-C</Tag>
+          <Tag>Phase 4-C</Tag>
         </Space>
         <Text className="!text-slate-400">Wails v2</Text>
       </Header>
@@ -153,13 +201,7 @@ function AppContent() {
             {
               key: 'downloads',
               label: '다운로드',
-              children: (
-                <DownloadPanel
-                  selectedVideo={selectedVideo}
-                  currentTask={currentDownload}
-                  onTaskStarted={handleTaskStarted}
-                />
-              ),
+              children: <DownloadPanel tasks={downloadTasks} />,
             },
           ]}
         />
