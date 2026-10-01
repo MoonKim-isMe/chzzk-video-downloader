@@ -67,3 +67,71 @@ func TestApplySettingsRejectsInvalidSettings(t *testing.T) {
 		t.Fatal("expected settings validation error")
 	}
 }
+
+
+func TestSettingsBuildDownloadCommandMatrix(t *testing.T) {
+	resolutions := []appsettings.Resolution{
+		appsettings.ResolutionBest,
+		appsettings.Resolution2160p,
+		appsettings.Resolution1440p,
+		appsettings.Resolution1080p,
+		appsettings.Resolution720p,
+	}
+	formats := []appsettings.OutputFormat{
+		appsettings.OutputFormatMP4,
+		appsettings.OutputFormatMKV,
+		appsettings.OutputFormatWebM,
+	}
+
+	for _, resolution := range resolutions {
+		for _, outputFormat := range formats {
+			t.Run(string(resolution)+"_"+string(outputFormat), func(t *testing.T) {
+				outputDir := filepath.Join(t.TempDir(), "matrix")
+				request, err := ApplySettings(StartDownloadRequest{
+					VideoNo:    12345,
+					VideoTitle: "VOD",
+					URL:        "https://chzzk.naver.com/video/12345",
+				}, appsettings.AppSettings{
+					DownloadDir:            outputDir,
+					Resolution:             resolution,
+					OutputFormat:           outputFormat,
+					MaxConcurrentDownloads: 1,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), request.DownloadRequest())
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				expectedSelector, err := FormatSelectorForResolution(resolution)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !hasArgumentPair(spec.Args, "--format", expectedSelector) {
+					t.Fatalf("missing format selector %q in %#v", expectedSelector, spec.Args)
+				}
+				if !hasArgumentPair(spec.Args, "--merge-output-format", string(outputFormat)) {
+					t.Fatalf("missing merge format %q in %#v", outputFormat, spec.Args)
+				}
+				if !hasArgumentPair(spec.Args, "--remux-video", string(outputFormat)) {
+					t.Fatalf("missing remux format %q in %#v", outputFormat, spec.Args)
+				}
+				if !hasArgumentPair(spec.Args, "--paths", outputDir) {
+					t.Fatalf("missing output path %q in %#v", outputDir, spec.Args)
+				}
+			})
+		}
+	}
+}
+
+func hasArgumentPair(args []string, key, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == key && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}

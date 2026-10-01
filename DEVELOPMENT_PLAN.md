@@ -799,11 +799,53 @@ Validation:
 
 ### Phase 5-D — 설정 통합 안정화
 
-- [ ] SET-5D-1. 설정 변경 후 신규 Queue 작업 적용 검증
-- [ ] SET-5D-2. 실행 중 작업의 설정 Snapshot 불변성 검증
-- [ ] SET-5D-3. maxConcurrent 증가/감소 Wails 통합 검증
-- [ ] SET-5D-4. 다운로드 경로 및 포맷/해상도 조합 검증
-- [ ] SET-5D-5. Phase 6 SQLite 설정 영속화용 Settings 구조 확정
+- [x] SET-5D-1. 설정 변경 후 신규 Queue 작업 적용 검증
+- [x] SET-5D-2. 실행 중 작업의 설정 Snapshot 불변성 검증
+- [x] SET-5D-3. maxConcurrent 증가/감소 Wails 통합 검증
+- [x] SET-5D-4. 다운로드 경로 및 포맷/해상도 조합 검증
+- [x] SET-5D-5. Phase 6 SQLite 설정 영속화용 Settings 구조 확정
+
+#### Phase 5-D 안정화 기준
+
+- 실행 중 작업과 queued 작업의 다운로드 경로/해상도/출력 포맷은 Queue 등록 시점 Snapshot을 끝까지 유지한다.
+- Settings 변경 후 신규 Queue 작업부터 새 다운로드 옵션을 적용한다.
+- `maxConcurrentDownloads` 증가 시 빈 Scheduler 슬롯만큼 queued 작업을 즉시 실행한다.
+- `maxConcurrentDownloads` 감소 시 현재 실행 중인 작업을 강제 종료하지 않으며 active 수가 새 제한 미만이 될 때까지 신규 실행을 보류한다.
+- 지원하는 해상도 5종 × 출력 포맷 3종, 총 15개 조합이 동일한 다운로드 경로와 올바른 yt-dlp 인자로 변환되어야 한다.
+- Phase 6 설정 영속화 경계는 API용 `AppSettings`와 분리된 `StorageRecord`를 사용한다.
+- `StorageRecord` v1은 `schemaVersion / downloadDir / resolution / outputFormat / maxConcurrentDownloads`를 저장한다.
+- 저장 레코드를 복원할 때도 Normalize/Validate를 다시 수행하고 지원하지 않는 schemaVersion은 거부한다.
+- Phase 6 SQLite 구현에서는 단일 settings 레코드를 이 StorageRecord v1 구조로 매핑하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
+
+#### Phase 5-D 검증 현황
+
+완료:
+
+- Settings StorageRecord v1을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- 동일 모듈에서 `go test ./internal/settings` 성공
+- 동일 모듈에서 `go test -race ./internal/settings` 성공
+- 동일 모듈에서 `go vet ./internal/settings` 성공
+- StorageRecord JSON encode/decode → AppSettings round-trip 검증
+- 지원하지 않는 StorageRecord schemaVersion 거부 검증
+- 잘못된 저장 설정값 복원 거부 검증
+- downloader/settings/command 조합을 재현한 Go 1.23 격리 모듈에서 `go test`, `go test -race`, `go vet` 성공
+- 5개 해상도 × 3개 출력 포맷 = 15개 조합의 `--format / --paths / --merge-output-format / --remux-video` 검증
+- App/Queue/Settings 통합 fixture에서 `go test`, `go test -race`, `go vet` 성공
+- maxConcurrent 2 → 1 감소 시 기존 active 작업 유지 및 세 번째 작업 대기 검증
+- 실행 중 작업의 Settings Snapshot 불변성 검증
+- queued 작업의 Settings Snapshot 불변성 재검증
+- Settings 변경 이후 신규 작업에 새 경로/해상도/포맷 적용 검증
+- Phase 5-C 테스트에서 누락된 `errors` import를 발견해 수정
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 `go test ./...` / `go test -race ./...`
+- 실제 Node.js 24 + Yarn 의존성 기반 `yarn typecheck` / `yarn build`
+- `wails build`
+- 실제 Windows Wails 앱에서 Settings Drawer 저장 → Scheduler 증가/감소 통합 동작
+- 실제 yt-dlp + ffmpeg를 사용한 15개 조합 다운로드 결과 검증
+
+Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Windows/Wails/외부 도구 검증은 배포 환경 통합 검증으로 유지한다.
 
 ## Phase 6 — Persistence 및 Windows 패키징
 

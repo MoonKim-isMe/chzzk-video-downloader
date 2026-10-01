@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 5-C — Settings Drawer UI**까지 구현 중입니다.
+현재는 **Phase 5-D — Settings 통합 안정화**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -216,3 +216,16 @@ Drawer에서는 다음 값을 편집합니다.
 - 동시 다운로드 수: 1~8
 
 Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 설정 영속화 전인 Phase 5에서는 앱 재시작 시 기본값으로 초기화됩니다.
+
+## Phase 5-D Settings 안정화
+
+Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
+
+- 다운로드 경로/해상도/출력 포맷은 Queue 등록 순간 Snapshot으로 고정합니다.
+- 실행 중이거나 대기 중인 작업은 이후 Settings 변경의 영향을 받지 않습니다.
+- 변경 후 새로 등록한 작업부터 새 다운로드 옵션을 사용합니다.
+- 동시 다운로드 수는 Scheduler 전역 설정으로 즉시 반영됩니다.
+- 동시 다운로드 수를 낮춰도 현재 실행 중인 작업은 종료하지 않습니다.
+- 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
+
+Phase 6 설정 영속화는 `internal/settings.StorageRecord` v1을 기준으로 구현합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`이며 복원 시 현재 Settings Validation을 다시 수행합니다.
