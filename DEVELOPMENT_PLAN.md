@@ -513,12 +513,49 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 4-C — Download Manager UI
 
-- [ ] DM-1. 다운로드 탭을 다중 Task Manager 화면으로 확장
-- [ ] DM-4. 진행 중 다운로드 Progress UI를 Task 목록 단위로 확장
-- [ ] DM-5. 대기/진행/완료/실패/취소 상태 시각화
-- [ ] DM-8. 다운로드 완료 후 결과 파일 경로를 Task별 표시
-- [ ] DM-4C-1. VOD 화면의 다운로드 시작 동작을 Queue 추가 흐름으로 변경
-- [ ] DM-4C-2. GetDownloadTasks 초기 조회 + download:state 증분 이벤트 병합
+- [ ] DM-1. 다운로드 탭을 다중 Task Manager 화면으로 확장 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4. 진행 중 다운로드 Progress UI를 Task 목록 단위로 확장 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-5. 대기/진행/완료/실패/취소 상태 시각화 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-8. 다운로드 완료 후 결과 파일 경로를 Task별 표시 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4C-1. VOD 화면의 다운로드 시작 동작을 Queue 추가 흐름으로 변경 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4C-2. GetDownloadTasks 초기 조회 + download:state 증분 이벤트 병합 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 4-C 구현 기준
+
+- 다운로드 탭은 단일 currentTask가 아니라 전체 `DownloadTask[]` Registry 상태를 표시한다.
+- 앱 진입 시 `GetDownloadTasks()`로 초기 작업 스냅샷을 조회한다.
+- 초기 조회 전에 `download:state` 이벤트를 먼저 구독해 초기화 중 발생하는 상태 이벤트를 놓치지 않는다.
+- 초기 스냅샷과 실시간 이벤트가 경합하면 상태 단계와 진행률을 비교해 더 최신 Task 상태를 유지한다.
+- queued → running → terminal(completed/failed/cancelled) 순으로 이전 상태가 최신 상태를 덮어쓰지 않도록 병합한다.
+- 동일 running 상태끼리는 downloadedBytes와 percent가 더 큰 상태를 우선한다.
+- VOD 카드의 기존 `다운로드 대상으로 선택` 단계를 제거하고 `Queue에 추가` 버튼에서 바로 `StartDownload`을 호출한다.
+- queued/running 상태인 VOD 카드는 현재 상태를 표시하고 Queue 중복 추가 버튼을 비활성화한다.
+- completed/failed/cancelled VOD는 다시 Queue에 추가할 수 있다.
+- Download Manager 상단에는 전체/대기/진행/완료/실패 개수 요약을 표시한다.
+- 각 Task 카드에는 썸네일, 채널명, 제목, 상태, Queue 순서, 진행률, 다운로드 크기/전체 크기, 속도, ETA, 저장 위치 또는 최종 파일 경로를 표시한다.
+- queued/running Task는 각 카드에서 개별 취소할 수 있다.
+- failed Task는 오류 메시지, cancelled Task는 취소 상태를 카드 내부에 표시한다.
+
+#### Phase 4-C 검증 현황
+
+완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 Phase 4-C 격리 프론트엔드 fixture에서 `tsc --noEmit` 성공
+- React hook/JSX key를 실제 타입 형태에 맞춘 최소 React/AntD stub 환경에서 App, ChannelVideoList, DownloadPanel, downloadTasks 병합 유틸 타입 확인
+- `GetDownloadTasks()` 초기 스냅샷과 `download:state` 이벤트 상태 병합 타입 확인
+- downloadTasks 병합 유틸을 CommonJS로 컴파일해 running 진행률 역행 방지, terminal 상태 우선, 신규 Task append, snapshot/event merge 실행 테스트 성공
+- VOD 카드 queued/running 상태 표시 및 Queue 중복 버튼 비활성화 타입 확인
+- Task별 취소 버튼과 Progress 상태 매핑 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 창에서 GetDownloadTasks 초기 조회와 download:state 이벤트 동시 수신
+- 실제 여러 VOD Queue 등록 시 다운로드 탭의 실시간 Task 목록 갱신
+
+위 실제 프론트엔드/Wails 통합 검증까지 완료되면 Phase 4-C 항목을 완료 처리한다.
 
 ### Phase 4-D — 통합 안정화 및 Phase 5 준비
 

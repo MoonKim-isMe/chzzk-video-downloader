@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getChannelVideos } from '../../lib/backend';
 import type { Channel } from '../../types/channel';
+import type { DownloadTaskStatus } from '../../types/download';
 import type { Video, VideoListResult } from '../../types/video';
 
 const { Paragraph, Text, Title } = Typography;
@@ -11,8 +12,8 @@ const PAGE_SIZE = 24;
 
 interface ChannelVideoListProps {
   channel: Channel;
-  selectedVideoNo?: number;
-  onSelectVideo: (video: Video) => void;
+  activeDownloadStatusByVideoNo: Map<number, DownloadTaskStatus>;
+  onQueueVideo: (video: Video) => Promise<void>;
 }
 
 interface FailedRequest {
@@ -53,16 +54,32 @@ function mergeVideos(current: Video[], incoming: Video[]) {
 
 interface VideoCardProps {
   video: Video;
-  selected: boolean;
-  onSelect: (video: Video) => void;
+  downloadStatus?: DownloadTaskStatus;
+  onQueue: (video: Video) => Promise<void>;
 }
 
-function VideoCard({ video, selected, onSelect }: VideoCardProps) {
+function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
+  const [queueing, setQueueing] = useState(false);
+  const active = downloadStatus === 'queued' || downloadStatus === 'running';
+
+  const handleQueue = async () => {
+    if (active || queueing) {
+      return;
+    }
+
+    setQueueing(true);
+    try {
+      await onQueue(video);
+    } finally {
+      setQueueing(false);
+    }
+  };
+
   return (
     <Card
       size="small"
       className={`h-full overflow-hidden bg-slate-900/80 ${
-        selected ? 'border-emerald-500/70' : 'border-slate-800'
+        active ? 'border-emerald-500/70' : 'border-slate-800'
       }`}
       styles={{ body: { padding: 12 } }}
     >
@@ -86,7 +103,8 @@ function VideoCard({ video, selected, onSelect }: VideoCardProps) {
           {video.videoType && <Tag>{video.videoType}</Tag>}
           {video.adult && <Tag color="red">성인</Tag>}
           {video.videoCategoryValue && <Tag color="blue">{video.videoCategoryValue}</Tag>}
-          {selected && <Tag color="green">선택됨</Tag>}
+          {downloadStatus === 'running' && <Tag color="processing">다운로드 중</Tag>}
+          {downloadStatus === 'queued' && <Tag>Queue 대기 중</Tag>}
         </Space>
 
         <Title level={5} ellipsis={{ rows: 2 }} className="!mb-1 !mt-2 !text-slate-100">
@@ -109,10 +127,16 @@ function VideoCard({ video, selected, onSelect }: VideoCardProps) {
         <Button
           block
           className="mt-3"
-          type={selected ? 'primary' : 'default'}
-          onClick={() => onSelect(video)}
+          type={active ? 'default' : 'primary'}
+          disabled={active}
+          loading={queueing}
+          onClick={() => void handleQueue()}
         >
-          {selected ? '선택됨' : '다운로드 대상으로 선택'}
+          {downloadStatus === 'running'
+            ? '다운로드 중'
+            : downloadStatus === 'queued'
+              ? 'Queue 대기 중'
+              : 'Queue에 추가'}
         </Button>
       </div>
     </Card>
@@ -121,8 +145,8 @@ function VideoCard({ video, selected, onSelect }: VideoCardProps) {
 
 function ChannelVideoList({
   channel,
-  selectedVideoNo,
-  onSelectVideo,
+  activeDownloadStatusByVideoNo,
+  onQueueVideo,
 }: ChannelVideoListProps) {
   const [result, setResult] = useState<VideoListResult>(emptyResult);
   const [loading, setLoading] = useState(true);
@@ -245,8 +269,8 @@ function ChannelVideoList({
               <VideoCard
                 key={video.videoNo}
                 video={video}
-                selected={selectedVideoNo === video.videoNo}
-                onSelect={onSelectVideo}
+                downloadStatus={activeDownloadStatusByVideoNo.get(video.videoNo)}
+                onQueue={onQueueVideo}
               />
             ))}
           </div>

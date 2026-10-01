@@ -8,34 +8,30 @@ import {
   Progress,
   Skeleton,
   Space,
+  Statistic,
   Tag,
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
-import {
-  cancelDownload,
-  getDefaultDownloadDir,
-  getDownloadToolchainStatus,
-  startDownload,
-} from '../../lib/backend';
+import { cancelDownload, getDownloadToolchainStatus } from '../../lib/backend';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
-import type { Video } from '../../types/video';
 
 const { Paragraph, Text, Title } = Typography;
 
 interface DownloadPanelProps {
-  selectedVideo?: Video;
-  currentTask?: DownloadTask;
-  onTaskStarted: (task: DownloadTask) => void;
+  tasks: DownloadTask[];
 }
 
-const statusMeta: Record<DownloadTask['status'], { label: string; color?: string }> = {
-  queued: { label: '대기 중' },
-  running: { label: '다운로드 중', color: 'processing' },
-  completed: { label: '완료', color: 'success' },
-  failed: { label: '실패', color: 'error' },
-  cancelled: { label: '취소됨' },
+const statusMeta: Record<
+  DownloadTask['status'],
+  { label: string; color?: string; progressStatus: 'normal' | 'active' | 'success' | 'exception' }
+> = {
+  queued: { label: '대기 중', progressStatus: 'normal' },
+  running: { label: '다운로드 중', color: 'processing', progressStatus: 'active' },
+  completed: { label: '완료', color: 'success', progressStatus: 'success' },
+  failed: { label: '실패', color: 'error', progressStatus: 'exception' },
+  cancelled: { label: '취소됨', progressStatus: 'normal' },
 };
 
 function formatBytes(bytes: number) {
@@ -104,25 +100,142 @@ function ToolchainAlert({ status }: { status: ToolchainStatus }) {
   );
 }
 
-function DownloadPanel({ selectedVideo, currentTask, onTaskStarted }: DownloadPanelProps) {
+function DownloadTaskCard({
+  task,
+  queuePosition,
+}: {
+  task: DownloadTask;
+  queuePosition?: number;
+}) {
   const { message } = AntdApp.useApp();
-  const [outputDir, setOutputDir] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const meta = statusMeta[task.status];
+  const active = task.status === 'queued' || task.status === 'running';
+  const total = task.progress.totalBytes > 0
+    ? `${task.progress.totalBytesEstimated ? '약 ' : ''}${formatBytes(task.progress.totalBytes)}`
+    : '-';
+
+  const handleCancel = async () => {
+    if (!active || cancelling) {
+      return;
+    }
+
+    setCancelling(true);
+    try {
+      const accepted = await cancelDownload(task.taskId);
+      if (!accepted) {
+        message.warning('취소할 다운로드를 찾을 수 없습니다.');
+      }
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  return (
+    <Card className="border-slate-800 bg-slate-900/80" styles={{ body: { padding: 16 } }}>
+      <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+        <div className="overflow-hidden rounded-lg bg-slate-950">
+          {task.thumbnailImageUrl ? (
+            <Image
+              src={task.thumbnailImageUrl}
+              alt={task.videoTitle}
+              preview={false}
+              className="aspect-video !w-full object-cover"
+            />
+          ) : (
+            <div className="flex aspect-video items-center justify-center">
+              <Text className="!text-slate-600">썸네일 없음</Text>
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <Space size={8} wrap>
+                <Tag color={meta.color}>{meta.label}</Tag>
+                {queuePosition !== undefined && <Tag>대기 {queuePosition}번째</Tag>}
+                <Text className="!text-xs !text-slate-500">{task.channelName}</Text>
+              </Space>
+              <Title level={5} ellipsis={{ rows: 2 }} className="!mb-0 !mt-2 !text-slate-100">
+                {task.videoTitle}
+              </Title>
+            </div>
+
+            {active && (
+              <Button danger size="small" loading={cancelling} onClick={() => void handleCancel()}>
+                {task.status === 'queued' ? '대기 취소' : '다운로드 취소'}
+              </Button>
+            )}
+          </div>
+
+          {task.status === 'queued' ? (
+            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+              <Text className="!text-xs !text-slate-400">
+                앞선 작업이 끝나면 자동으로 다운로드를 시작합니다.
+              </Text>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <Progress
+                percent={Math.round(task.progress.percent * 10) / 10}
+                status={meta.progressStatus}
+              />
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <Text className="!text-xs !text-slate-500">
+                  {formatBytes(task.progress.downloadedBytes)} / {total}
+                </Text>
+                <Text className="!text-xs !text-slate-500">
+                  속도 {formatSpeed(task.progress.speedBytesPerSecond)}
+                </Text>
+                <Text className="!text-xs !text-slate-500">
+                  ETA {formatETA(task.progress.etaSeconds)}
+                </Text>
+              </div>
+            </div>
+          )}
+
+          {task.finalPath && (
+            <Paragraph className="!mb-0 !mt-3 !text-xs !text-slate-300">
+              완료 파일: {task.finalPath}
+            </Paragraph>
+          )}
+
+          {!task.finalPath && task.outputDir && (
+            <Paragraph className="!mb-0 !mt-3 !text-xs !text-slate-500">
+              저장 위치: {task.outputDir}
+            </Paragraph>
+          )}
+
+          {task.error && task.status === 'failed' && (
+            <Alert className="mt-3" type="error" showIcon message={task.error} />
+          )}
+
+          {task.status === 'cancelled' && (
+            <Alert className="mt-3" type="info" showIcon message="다운로드가 취소되었습니다." />
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DownloadPanel({ tasks }: DownloadPanelProps) {
+  const { message } = AntdApp.useApp();
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
   const [preparing, setPreparing] = useState(true);
-  const [starting, setStarting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     let active = true;
     setPreparing(true);
 
-    Promise.all([getDefaultDownloadDir(), getDownloadToolchainStatus()])
-      .then(([directory, status]) => {
-        if (!active) {
-          return;
+    getDownloadToolchainStatus()
+      .then((status) => {
+        if (active) {
+          setToolchain(status);
         }
-        setOutputDir(directory);
-        setToolchain(status);
       })
       .catch((cause) => {
         if (active) {
@@ -140,85 +253,33 @@ function DownloadPanel({ selectedVideo, currentTask, onTaskStarted }: DownloadPa
     };
   }, [message]);
 
-  const busy = currentTask?.status === 'queued' || currentTask?.status === 'running';
-  const canStart = Boolean(
-    selectedVideo &&
-      outputDir &&
-      toolchain?.downloadReady &&
-      toolchain.mergeReady &&
-      !busy &&
-      !starting,
+  const counts = useMemo(
+    () => ({
+      total: tasks.length,
+      queued: tasks.filter((task) => task.status === 'queued').length,
+      running: tasks.filter((task) => task.status === 'running').length,
+      completed: tasks.filter((task) => task.status === 'completed').length,
+      failed: tasks.filter((task) => task.status === 'failed').length,
+    }),
+    [tasks],
   );
 
-  const progressDescription = useMemo(() => {
-    if (!currentTask) {
-      return '';
-    }
-
-    const { progress } = currentTask;
-    const total = progress.totalBytes > 0
-      ? `${progress.totalBytesEstimated ? '약 ' : ''}${formatBytes(progress.totalBytes)}`
-      : '-';
-
-    return `${formatBytes(progress.downloadedBytes)} / ${total} · ${formatSpeed(
-      progress.speedBytesPerSecond,
-    )} · ETA ${formatETA(progress.etaSeconds)}`;
-  }, [currentTask]);
-
-  const progressStatus = currentTask?.status === 'failed'
-    ? 'exception'
-    : currentTask?.status === 'completed'
-      ? 'success'
-      : currentTask?.status === 'running'
-        ? 'active'
-        : 'normal';
-
-  const handleStart = async () => {
-    if (!selectedVideo || !canStart) {
-      return;
-    }
-
-    setStarting(true);
-    try {
-      const task = await startDownload({
-        videoNo: selectedVideo.videoNo,
-        videoTitle: selectedVideo.videoTitle,
-        channelName: selectedVideo.channel.channelName,
-        thumbnailImageUrl: selectedVideo.thumbnailImageUrl,
-        url: selectedVideo.videoUrl,
-        outputDir,
-      });
-      onTaskStarted(task);
-      message.success('다운로드를 시작했습니다.');
-    } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setStarting(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!currentTask || (currentTask.status !== 'queued' && currentTask.status !== 'running')) {
-      return;
-    }
-
-    setCancelling(true);
-    try {
-      const accepted = await cancelDownload(currentTask.taskId);
-      if (!accepted) {
-        message.warning('취소할 다운로드를 찾을 수 없습니다.');
+  const queuePositions = useMemo(() => {
+    const positions = new Map<string, number>();
+    let position = 0;
+    tasks.forEach((task) => {
+      if (task.status === 'queued') {
+        position += 1;
+        positions.set(task.taskId, position);
       }
-    } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setCancelling(false);
-    }
-  };
+    });
+    return positions;
+  }, [tasks]);
 
   if (preparing) {
     return (
       <Card className="border-slate-800 bg-slate-900/80">
-        <Skeleton active paragraph={{ rows: 5 }} />
+        <Skeleton active paragraph={{ rows: 6 }} />
       </Card>
     );
   }
@@ -228,91 +289,30 @@ function DownloadPanel({ selectedVideo, currentTask, onTaskStarted }: DownloadPa
       {toolchain && <ToolchainAlert status={toolchain} />}
 
       <Card className="border-slate-800 bg-slate-900/80">
-        <Text className="!text-xs !font-semibold !uppercase !tracking-wider !text-slate-500">
-          다운로드 대상
-        </Text>
-
-        {selectedVideo ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-lg bg-slate-950">
-              {selectedVideo.thumbnailImageUrl ? (
-                <Image
-                  src={selectedVideo.thumbnailImageUrl}
-                  alt={selectedVideo.videoTitle}
-                  preview={false}
-                  className="aspect-video !w-full object-cover"
-                />
-              ) : (
-                <div className="flex aspect-video items-center justify-center">
-                  <Text className="!text-slate-600">썸네일 없음</Text>
-                </div>
-              )}
-            </div>
-
-            <div className="min-w-0">
-              <Text className="!text-xs !text-slate-500">{selectedVideo.channel.channelName}</Text>
-              <Title level={4} className="!mb-2 !mt-1 !text-slate-100">
-                {selectedVideo.videoTitle}
-              </Title>
-              <Paragraph className="!mb-3 !text-xs !text-slate-500">
-                저장 위치: {outputDir || '확인할 수 없음'}
-              </Paragraph>
-              <Button type="primary" loading={starting} disabled={!canStart} onClick={handleStart}>
-                다운로드 시작
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Empty className="mt-4" description="채널 VOD 목록에서 다운로드할 영상을 선택해 주세요." />
-        )}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <Statistic title="전체" value={counts.total} />
+          <Statistic title="대기" value={counts.queued} />
+          <Statistic title="진행" value={counts.running} />
+          <Statistic title="완료" value={counts.completed} />
+          <Statistic title="실패" value={counts.failed} />
+        </div>
       </Card>
 
-      <Card className="border-slate-800 bg-slate-900/80">
-        <Text className="!text-xs !font-semibold !uppercase !tracking-wider !text-slate-500">
-          현재 다운로드
-        </Text>
-
-        {currentTask ? (
-          <div className="mt-4">
-            <Space size={8} wrap>
-              <Tag color={statusMeta[currentTask.status].color}>{statusMeta[currentTask.status].label}</Tag>
-              <Text className="!text-slate-400">{currentTask.channelName}</Text>
-            </Space>
-
-            <Title level={4} className="!mb-4 !mt-2 !text-slate-100">
-              {currentTask.videoTitle}
-            </Title>
-
-            <Progress
-              percent={Math.round(currentTask.progress.percent * 10) / 10}
-              status={progressStatus}
+      {tasks.length === 0 ? (
+        <Card className="border-slate-800 bg-slate-900/80">
+          <Empty description="등록된 다운로드 작업이 없습니다. VOD 목록에서 Queue에 추가해 주세요." />
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {tasks.map((task) => (
+            <DownloadTaskCard
+              key={task.taskId}
+              task={task}
+              queuePosition={queuePositions.get(task.taskId)}
             />
-            <Text className="!text-xs !text-slate-500">{progressDescription}</Text>
-
-            {currentTask.finalPath && (
-              <Paragraph className="!mb-0 !mt-4 !text-sm !text-slate-300">
-                완료 파일: {currentTask.finalPath}
-              </Paragraph>
-            )}
-
-            {currentTask.error && currentTask.status !== 'cancelled' && (
-              <Alert className="mt-4" type="error" showIcon message={currentTask.error} />
-            )}
-
-            {currentTask.status === 'cancelled' && (
-              <Alert className="mt-4" type="info" showIcon message="다운로드가 취소되었습니다." />
-            )}
-
-            {currentTask.status === 'running' && (
-              <Button danger className="mt-4" loading={cancelling} onClick={handleCancel}>
-                다운로드 취소
-              </Button>
-            )}
-          </div>
-        ) : (
-          <Empty className="mt-4" description="진행 중인 다운로드가 없습니다." />
-        )}
-      </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
