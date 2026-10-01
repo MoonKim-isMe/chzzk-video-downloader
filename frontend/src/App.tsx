@@ -42,6 +42,8 @@ const navigationItems: Array<{ key: AppTab; label: string }> = [
   { key: 'downloads', label: '다운로드' },
 ];
 
+const messageTopOffset = 84;
+
 function SettingsIcon() {
   return (
     <svg
@@ -364,7 +366,7 @@ function App() {
         },
       }}
     >
-      <AntdApp>
+      <AntdApp message={{ top: messageTopOffset }}>
         <AppContent
           themeMode={themeMode}
           onSettingsUpdated={(settings) => setThemeMode(settings.theme)}
