@@ -215,6 +215,11 @@ function DownloadTaskRow({ task, queuePosition, onTaskRemoved }: DownloadTaskRow
                 </Button>
               </>
             )}
+            {task.status === 'failed' && (
+              <Button danger size="small" loading={working} onClick={() => void handleDelete()}>
+                목록에서 삭제
+              </Button>
+            )}
           </div>
         </div>
 
