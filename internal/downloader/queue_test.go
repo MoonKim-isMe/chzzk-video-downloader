@@ -534,3 +534,88 @@ func TestQueueEventStatusNeverRegresses(t *testing.T) {
 		}
 	}
 }
+
+
+func TestQueueRunningCancellationIsImmediateButKeepsSchedulerSlotUntilExit(t *testing.T) {
+	executor := newControlledExecutor()
+	firstRequest := queueRequest(12001)
+	executor.ignoreCancellation(firstRequest.URL)
+
+	cancelledEvents := make(chan DownloadTask, 1)
+	queue := NewQueue(context.Background(), executor, func(task DownloadTask) {
+		if task.Status == TaskStatusCancelled {
+			select {
+			case cancelledEvents <- task:
+			default:
+			}
+		}
+	}, 1)
+
+	first, err := queue.Enqueue(firstRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStartedCount(t, executor, 1)
+
+	second, err := queue.Enqueue(queueRequest(12002))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != TaskStatusQueued {
+		t.Fatalf("expected queued second task, got %s", second.Status)
+	}
+
+	if !queue.Cancel(first.TaskID) {
+		t.Fatal("expected running cancellation")
+	}
+
+	current, ok := queue.Get(first.TaskID)
+	if !ok || current.Status != TaskStatusCancelled || current.FinishedAt == "" {
+		t.Fatalf("running cancellation was not visible immediately: %#v", current)
+	}
+
+	select {
+	case event := <-cancelledEvents:
+		if event.TaskID != first.TaskID || event.Status != TaskStatusCancelled {
+			t.Fatalf("unexpected immediate cancellation event: %#v", event)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("cancelled event was not emitted immediately")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	if executor.hasStarted(second.URL) {
+		t.Fatal("next task started before cancelled executor actually exited")
+	}
+
+	executor.release(first.URL)
+	waitForTaskStatus(t, queue, second.TaskID, TaskStatusRunning)
+	queue.Stop()
+}
+
+func TestQueueRemoveOnlyRemovesTerminalTasks(t *testing.T) {
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, nil, 1)
+
+	task, err := queue.Enqueue(queueRequest(13001))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStartedCount(t, executor, 1)
+	if queue.Remove(task.TaskID) {
+		t.Fatal("running task must not be removable")
+	}
+
+	executor.release(task.URL)
+	waitForTaskStatus(t, queue, task.TaskID, TaskStatusCompleted)
+
+	if !queue.Remove(task.TaskID) {
+		t.Fatal("completed task should be removable")
+	}
+	if _, ok := queue.Get(task.TaskID); ok {
+		t.Fatal("removed task still exists in registry")
+	}
+	if len(queue.List()) != 0 {
+		t.Fatalf("removed task still exists in queue order: %#v", queue.List())
+	}
+}

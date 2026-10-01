@@ -80,6 +80,17 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 	return nil
 }
 
+func (d *Database) DeleteDownloadTask(taskID string) error {
+	result, err := d.db.Exec(`DELETE FROM download_tasks WHERE task_id = ?`, taskID)
+	if err != nil {
+		return fmt.Errorf("다운로드 이력을 삭제할 수 없습니다: %w", err)
+	}
+	if _, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("다운로드 이력 삭제 결과를 확인할 수 없습니다: %w", err)
+	}
+	return nil
+}
+
 func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 	rows, err := d.db.Query(`SELECT
 		task_id,

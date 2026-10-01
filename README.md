@@ -188,7 +188,7 @@ Phase 4-A 기준으로 Phase 3의 단일 다운로드 엔진을 FIFO Download Qu
 - 다운로드 중에는 취소할 수 있습니다.
 - 완료 시 ffmpeg 후처리까지 끝난 최종 파일 경로를 표시합니다.
 - Phase 4-A부터 여러 VOD를 FIFO Queue에 등록할 수 있으며 실제 동시 실행은 1개로 유지합니다.
-- queued/running 작업을 개별 취소할 수 있으며 다운로드 탭에서 전체 Task 상태를 실시간으로 확인합니다.
+- queued/running 작업을 개별 취소할 수 있습니다. 취소가 승인되면 목록에서 즉시 제거되며, 완료 작업은 폴더 열기와 목록 삭제를 지원합니다.
 
 ## Phase 4 Scheduler 기준
 
@@ -268,7 +268,7 @@ SQLite에는 다음 데이터를 저장합니다.
 - 다운로드 작업/진행 상태/완료 이력
 - Settings
 
-앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. 완료/실패/취소 이력은 다운로드 탭에 계속 표시됩니다.
+앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. cancelled 항목은 다운로드 탭에서 숨기고, 완료/실패 이력만 표시합니다.
 
 Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v2`를 단일 row로 저장하고 Light/Dark 테마까지 복원하며 현재 Validation을 다시 수행합니다.
 
@@ -344,3 +344,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer 
 앱 본문 자체가 중첩 스크롤을 만들지 않도록 채널 검색 Workspace에서는 좌·우 패널이 각각 스크롤을 담당합니다.
 
 Settings Drawer의 **화면 > 테마**에서 `라이트 / 다크`를 선택할 수 있습니다. 기본값은 Dark이며 선택값은 SQLite에 저장되어 앱 재실행 후에도 유지됩니다. 기존 Settings DB는 migration v2에서 Dark 테마로 자동 승격됩니다.
+
+
+## Download Manager UX
+
+다운로드 탭은 헤더 아래 남은 높이를 사용하는 단일 Workspace입니다.
+
+- 상단: 기능 중심의 다운로드 준비 상태 + 진행/완료/실패 compact 요약
+- 본문: `진행 중 / 완료 / 실패` 섹션
+- 진행 중: 진행률, 다운로드 크기, 속도, 남은 시간, 취소
+- 완료: 결과 경로, `폴더 열기`, `목록에서 삭제`
+- 실패: 오류 내용을 compact하게 표시
+
+취소 요청이 승인되면 Task는 즉시 cancelled 상태로 전환되고 UI 목록에서 제거됩니다. 실제 다운로드 프로세스가 완전히 종료되기 전까지 Scheduler slot은 유지하므로 동시 다운로드 제한은 깨지지 않습니다.
+
+`목록에서 삭제`는 다운로드된 파일을 삭제하지 않고 앱의 이력만 제거합니다. 다운로드 도구 상태 메시지는 사용자에게 외부 프로그램명을 직접 노출하지 않고 영상 다운로드/파일 저장 기능의 사용 가능 여부로 표시합니다.

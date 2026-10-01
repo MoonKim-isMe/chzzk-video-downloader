@@ -242,11 +242,18 @@ func TestStartDownloadReportsCancellationAndStartsNext(t *testing.T) {
 
 	select {
 	case event := <-cancelled:
-		if event.Error == "" {
-			t.Fatal("expected cancellation error message")
+		if event.TaskID != first.TaskID ||
+			event.Status != downloader.TaskStatusCancelled ||
+			event.FinishedAt == "" {
+			t.Fatalf("unexpected immediate cancellation event: %#v", event)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("cancelled event timeout")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("cancelled event was not emitted immediately")
+	}
+
+	current, ok := app.ensureDownloadQueue().Get(first.TaskID)
+	if !ok || current.Status != downloader.TaskStatusCancelled {
+		t.Fatalf("cancelled task remained running: %#v", current)
 	}
 
 	select {

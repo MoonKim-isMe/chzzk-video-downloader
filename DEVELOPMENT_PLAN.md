@@ -926,7 +926,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
 - 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.
 - 앱 재시작 시 이전 queued/running 이력은 실제 프로세스가 존재하지 않으므로 cancelled로 복구하고 finishedAt과 중단 오류를 기록한다.
-- 완료/실패/취소 다운로드 이력은 앱 재시작 후에도 다운로드 탭에서 조회할 수 있다.
+- 완료/실패 다운로드 이력은 앱 재시작 후에도 다운로드 탭에서 조회할 수 있다. 사용자가 취소한 작업은 즉시 목록에서 제거하고 SQLite 취소 이력도 삭제하며, 비정상 종료로 복구된 cancelled 이력은 UI에서 숨긴다.
 - 재시작 간 download taskId 충돌을 방지하기 위해 Task ID에 UTC UnixNano와 process-local counter를 함께 사용한다.
 - Settings는 `StorageRecord v2`를 SQLite 단일 row(id=1)에 저장하며 theme을 함께 영속화한다.
 - 앱 시작 시 저장된 Settings를 복원하고 해당 `maxConcurrentDownloads`로 Queue를 생성한다.
@@ -981,10 +981,11 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 #### Phase 6-UX-C — Download Manager
 
-- [ ] UX-C1. 다운로드 탭의 활성 작업과 완료 이력 시각적 구분
-- [ ] UX-C2. Task 상태/진행률/속도/ETA/저장 위치 정보 밀도 개선
-- [ ] UX-C3. Queue 대기 순서와 취소 액션의 가시성 개선
-- [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리
+- [ ] UX-C1. 다운로드 탭의 활성 작업과 완료 이력 시각적 구분 — 섹션형 Workspace 구현 완료, 실제 Wails 검증 대기
+- [ ] UX-C2. Task 상태/진행률/속도/ETA/저장 위치 정보 밀도 개선 — compact row UI 구현 완료, 실제 Wails 검증 대기
+- [ ] UX-C3. Queue 대기 순서와 취소 액션의 가시성 개선 — 취소 즉시 제거 및 상태 전이 안정화 구현 완료, 실제 다운로드 검증 대기
+- [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리 — 기능 중심 상태 문구 및 compact 오류 표시 구현 완료, 실제 Wails 검증 대기
+- [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
@@ -1030,6 +1031,12 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
 - `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
+- 다운로드 탭은 헤더 아래 남은 높이를 채우는 단일 Workspace로 구성하고 `진행 중 / 완료 / 실패` 섹션을 내부 스크롤 영역에서 분리한다.
+- 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
+- Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
+- cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
+- 완료 Task에는 `폴더 열기`와 `목록에서 삭제`를 제공하고 삭제는 파일이 아니라 앱의 다운로드 이력만 제거한다.
+- 다운로드 도구 상태 UI에는 외부 프로그램명을 직접 노출하지 않고 `영상 다운로드`, `파일 저장/영상 처리`처럼 사용자가 이해할 기능 수준으로만 표현한다.
 - B2C 데스크톱 서비스 기준으로 불필요한 장식보다 명확한 위계, 충분한 여백, 낮은 대비의 surface, 일관된 radius를 우선한다.
 
 #### Phase 6-UX 검증 현황
@@ -1043,6 +1050,13 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
 - Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
+- Download Manager의 cancelled 숨김 / 완료 액션 / 기능 중심 tool 상태 문구 구조 정적 확인
+- Queue 취소/삭제 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
+- running 취소 즉시 cancelled event 발생 및 executor 종료 전 Scheduler slot 유지 검증
+- terminal Task만 Registry에서 삭제되고 running Task 삭제는 거부되는지 검증
+- Runner 취소 격리 fixture에서 `go test`, `go test -race`, `go vet` 성공
+- Runner가 context 취소 시 프로세스를 즉시 종료하는지 검증
+- Download Manager TSX를 TypeScript 5.8.3 parser로 구문 검증
 
 현재 실행 환경 제약으로 검증 대기:
 
@@ -1050,6 +1064,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - `yarn build`
 - 실제 Wails 앱에서 Light/Dark 전환 및 재실행 복원
 - 960×640 / 일반 데스크톱 창 크기에서 실제 레이아웃 시각 검증
+- 실제 Windows에서 실행 중 다운로드 취소 시 `taskkill /T /F`로 하위 프로세스까지 종료되고 다음 Queue 작업이 정상 시작되는지 검증
+- 완료 다운로드의 `폴더 열기`가 Windows Explorer에서 실제 경로를 여는지 검증
 
 #### Phase 6-UX 원칙
 

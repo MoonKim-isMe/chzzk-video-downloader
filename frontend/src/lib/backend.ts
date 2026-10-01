@@ -22,6 +22,8 @@ interface BackendApp {
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
+  DeleteDownloadTask(taskId: string): Promise<void>;
+  OpenDownloadFolder(taskId: string): Promise<void>;
 }
 
 type WailsWindow = Window & {
@@ -70,3 +72,7 @@ export const startDownload = (request: StartDownloadRequest) => app().StartDownl
 export const getDownloadTasks = () => app().GetDownloadTasks();
 
 export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);
+
+export const deleteDownloadTask = (taskId: string) => app().DeleteDownloadTask(taskId);
+
+export const openDownloadFolder = (taskId: string) => app().OpenDownloadFolder(taskId);

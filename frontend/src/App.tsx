@@ -8,7 +8,7 @@ import {
   Tooltip,
   theme as antdTheme,
 } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
@@ -73,6 +73,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
+  const hiddenDownloadTaskIds = useRef(new Set<string>());
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -86,15 +87,27 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
   useEffect(() => {
     let active = true;
     const unsubscribe = onDownloadState((task) => {
-      if (active) {
-        setDownloadTasks((current) => upsertDownloadTask(current, task));
+      if (!active) {
+        return;
       }
+      if (task.status === 'cancelled') {
+        hiddenDownloadTaskIds.current.add(task.taskId);
+        setDownloadTasks((current) => current.filter((item) => item.taskId !== task.taskId));
+        return;
+      }
+      if (hiddenDownloadTaskIds.current.has(task.taskId)) {
+        return;
+      }
+      setDownloadTasks((current) => upsertDownloadTask(current, task));
     });
 
     getDownloadTasks()
       .then((snapshot) => {
         if (active) {
-          setDownloadTasks((current) => mergeDownloadTaskSnapshot(current, snapshot));
+          const visibleSnapshot = snapshot.filter(
+            (task) => task.status !== 'cancelled' && !hiddenDownloadTaskIds.current.has(task.taskId),
+          );
+          setDownloadTasks((current) => mergeDownloadTaskSnapshot(current, visibleSnapshot));
         }
       })
       .catch((cause) => {
@@ -160,7 +173,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
         });
         setDownloadTasks((current) => upsertDownloadTask(current, task));
         message.success(
-          task.status === 'running' ? '다운로드를 시작했습니다.' : '다운로드 Queue에 추가했습니다.',
+          task.status === 'running' ? '다운로드를 시작했습니다.' : '다운로드 목록에 추가했습니다.',
         );
       } catch (cause) {
         message.error(cause instanceof Error ? cause.message : String(cause));
@@ -168,6 +181,11 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
     },
     [message],
   );
+
+  const handleDownloadTaskRemoved = useCallback((taskId: string) => {
+    hiddenDownloadTaskIds.current.add(taskId);
+    setDownloadTasks((current) => current.filter((task) => task.taskId !== taskId));
+  }, []);
 
   const searchWorkspace = (
     <div className="channel-workspace">
@@ -241,9 +259,10 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
           />
         )
       : (
-          <div className="app-scroll-view">
-            <DownloadPanel tasks={downloadTasks} />
-          </div>
+          <DownloadPanel
+            tasks={downloadTasks}
+            onTaskRemoved={handleDownloadTaskRemoved}
+          />
         );
 
   return (

@@ -89,11 +89,8 @@ func TestInitializePersistenceRestoresChannelsSettingsAndHistory(t *testing.T) {
 	}
 
 	tasks := app.GetDownloadTasks()
-	if len(tasks) != 1 ||
-		tasks[0].TaskID != running.TaskID ||
-		tasks[0].Status != downloader.TaskStatusCancelled ||
-		tasks[0].FinishedAt == "" {
-		t.Fatalf("unexpected restored history: %#v", tasks)
+	if len(tasks) != 0 {
+		t.Fatalf("recovered cancelled history must be hidden: %#v", tasks)
 	}
 	if app.ensureDownloadQueue().MaxConcurrent() != settingsValue.MaxConcurrentDownloads {
 		t.Fatalf("restored concurrency was not applied: %d", app.ensureDownloadQueue().MaxConcurrent())
@@ -216,5 +213,126 @@ func TestDownloadStateEventPersistsHistory(t *testing.T) {
 	}
 	if len(tasks) != 1 || tasks[0].TaskID != task.TaskID || tasks[0].FinalPath != task.FinalPath {
 		t.Fatalf("download history was not persisted: %#v", tasks)
+	}
+}
+
+
+func TestCancelledDownloadStateDeletesPersistedHistory(t *testing.T) {
+	database, err := persistence.Open(filepath.Join(t.TempDir(), "app.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	task := downloader.DownloadTask{
+		TaskID:      "cancelled-history",
+		VideoNo:     70001,
+		VideoTitle:  "취소 VOD",
+		ChannelName: "채널",
+		URL:         "https://chzzk.naver.com/video/70001",
+		OutputDir:   t.TempDir(),
+		Status:      downloader.TaskStatusRunning,
+		QueuedAt:    "2026-10-01T00:00:00Z",
+	}
+	if err := database.UpsertDownloadTask(task); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.database = database
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	task.Status = downloader.TaskStatusCancelled
+	task.FinishedAt = "2026-10-01T00:00:05Z"
+	app.emitDownloadState(task)
+
+	tasks, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("cancelled history should be deleted: %#v", tasks)
+	}
+}
+
+func TestDeleteDownloadTaskRemovesPersistedCompletedHistory(t *testing.T) {
+	database, err := persistence.Open(filepath.Join(t.TempDir(), "app.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	task := downloader.DownloadTask{
+		TaskID:      "completed-delete",
+		VideoNo:     70002,
+		VideoTitle:  "완료 VOD",
+		ChannelName: "채널",
+		URL:         "https://chzzk.naver.com/video/70002",
+		OutputDir:   t.TempDir(),
+		Status:      downloader.TaskStatusCompleted,
+		FinalPath:   filepath.Join(t.TempDir(), "done.mp4"),
+		QueuedAt:    "2026-10-01T00:00:00Z",
+		FinishedAt:  "2026-10-01T00:01:00Z",
+	}
+	if err := database.UpsertDownloadTask(task); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.database = database
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	if err := app.DeleteDownloadTask(task.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("completed history was not deleted: %#v", tasks)
+	}
+}
+
+func TestOpenDownloadFolderUsesFinalPathDirectory(t *testing.T) {
+	database, err := persistence.Open(filepath.Join(t.TempDir(), "app.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	directory := t.TempDir()
+	task := downloader.DownloadTask{
+		TaskID:      "completed-folder",
+		VideoNo:     70003,
+		VideoTitle:  "완료 VOD",
+		ChannelName: "채널",
+		URL:         "https://chzzk.naver.com/video/70003",
+		OutputDir:   filepath.Join(t.TempDir(), "fallback"),
+		Status:      downloader.TaskStatusCompleted,
+		FinalPath:   filepath.Join(directory, "done.mp4"),
+		QueuedAt:    "2026-10-01T00:00:00Z",
+		FinishedAt:  "2026-10-01T00:01:00Z",
+	}
+	if err := database.UpsertDownloadTask(task); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.database = database
+	var opened string
+	app.folderOpener = func(path string) error {
+		opened = path
+		return nil
+	}
+
+	if err := app.OpenDownloadFolder(task.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if opened != directory {
+		t.Fatalf("unexpected opened directory: got %q want %q", opened, directory)
 	}
 }

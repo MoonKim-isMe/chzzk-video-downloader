@@ -26,10 +26,10 @@ func (m *Manager) ToolchainStatus(ctx context.Context) ToolchainStatus {
 func (m *Manager) Prepare(ctx context.Context, request DownloadRequest) (CommandSpec, ToolchainStatus, error) {
 	toolchain := m.ToolchainStatus(ctx)
 	if !toolchain.DownloadReady {
-		return CommandSpec{}, toolchain, fmt.Errorf("yt-dlp 실행 환경이 준비되지 않았습니다")
+		return CommandSpec{}, toolchain, fmt.Errorf("영상 다운로드 실행 환경이 준비되지 않았습니다")
 	}
 	if !toolchain.MergeReady {
-		return CommandSpec{}, toolchain, fmt.Errorf("ffmpeg/ffprobe 실행 환경이 준비되지 않았습니다")
+		return CommandSpec{}, toolchain, fmt.Errorf("다운로드 후 영상 처리 환경이 준비되지 않았습니다")
 	}
 	command, err := BuildDownloadCommand(toolchain, request)
 	if err != nil {

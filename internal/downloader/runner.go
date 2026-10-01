@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -56,7 +58,11 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 		return fmt.Errorf("실행할 프로그램 경로가 비어 있습니다")
 	}
 
-	cmd := exec.CommandContext(ctx, spec.Path, spec.Args...)
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%s 실행이 취소되었습니다: %w", filepath.Base(spec.Path), err)
+	}
+
+	cmd := exec.Command(spec.Path, spec.Args...)
 	if len(spec.Env) > 0 {
 		cmd.Env = append(os.Environ(), spec.Env...)
 	}
@@ -71,6 +77,15 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s 실행을 시작할 수 없습니다: %w", filepath.Base(spec.Path), err)
 	}
+
+	stopCancelWatch := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = terminateProcessTree(cmd)
+		case <-stopCancelWatch:
+		}
+	}()
 
 	lines := make(chan OutputLine, 64)
 	errs := make(chan error, 2)
@@ -102,6 +117,7 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 	}
 
 	waitErr := cmd.Wait()
+	close(stopCancelWatch)
 	if ctx.Err() != nil {
 		return fmt.Errorf("%s 실행이 취소되었습니다: %w", filepath.Base(spec.Path), ctx.Err())
 	}
@@ -146,4 +162,28 @@ func appendTail(lines []string, line string, max int) []string {
 		return lines
 	}
 	return append(lines, line)
+}
+
+
+func terminateProcessTree(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+
+	if goruntime.GOOS == "windows" {
+		treeKill := exec.Command(
+			"taskkill.exe",
+			"/PID",
+			strconv.Itoa(cmd.Process.Pid),
+			"/T",
+			"/F",
+		)
+		treeKill.Stdout = io.Discard
+		treeKill.Stderr = io.Discard
+		if err := treeKill.Run(); err == nil {
+			return nil
+		}
+	}
+
+	return cmd.Process.Kill()
 }

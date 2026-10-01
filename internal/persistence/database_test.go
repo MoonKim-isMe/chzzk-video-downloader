@@ -194,3 +194,33 @@ func TestDownloadHistoryPersistenceAndInterruptedRecovery(t *testing.T) {
 		t.Fatalf("completed task changed during recovery: %#v", tasks[1])
 	}
 }
+
+
+func TestDeleteDownloadTaskRemovesHistory(t *testing.T) {
+	database := openTestDatabase(t)
+	task := downloader.DownloadTask{
+		TaskID:      "download-delete",
+		VideoNo:     2001,
+		VideoTitle:  "삭제 작업",
+		ChannelName: "채널",
+		URL:         "https://chzzk.naver.com/video/2001",
+		OutputDir:   t.TempDir(),
+		Status:      downloader.TaskStatusCompleted,
+		QueuedAt:    "2026-10-01T00:00:00Z",
+		FinishedAt:  "2026-10-01T00:01:00Z",
+	}
+	if err := database.UpsertDownloadTask(task); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.DeleteDownloadTask(task.TaskID); err != nil {
+		t.Fatal(err)
+	}
+
+	tasks, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("expected deleted history, got %#v", tasks)
+	}
+}
