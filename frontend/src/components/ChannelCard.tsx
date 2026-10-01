@@ -15,34 +15,40 @@ interface ChannelCardProps {
 
 function ChannelCard({ channel, saved, selected = false, onSelect, onSave }: ChannelCardProps) {
   return (
-    <Card size="small" className="border-slate-800 bg-slate-900/80">
-      <div className="flex min-w-0 items-start gap-4">
-        <Avatar size={56} src={channel.channelImageUrl || undefined}>
+    <Card
+      size="small"
+      bordered={false}
+      className={`channel-result-card ${selected ? 'is-selected' : ''}`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar size={48} src={channel.channelImageUrl || undefined}>
           {channel.channelName.slice(0, 1)}
         </Avatar>
+
         <div className="min-w-0 flex-1">
-          <Space size={8} wrap>
-            <Title level={5} className="!m-0 !text-slate-100">
+          <Space size={6} wrap>
+            <Title level={5} className="!m-0">
               {channel.channelName}
             </Title>
             {channel.verifiedMark && <Tag color="blue">인증</Tag>}
             {channel.openLive && <Tag color="green">LIVE</Tag>}
           </Space>
-          <Text className="block !text-slate-400">
+          <Text className="app-muted block !text-xs">
             팔로워 {followerFormatter.format(channel.followerCount)}
           </Text>
           {channel.channelDescription && (
-            <Paragraph ellipsis={{ rows: 2 }} className="!mb-0 !mt-2 !text-slate-400">
+            <Paragraph ellipsis={{ rows: 1 }} className="app-muted !mb-0 !mt-1 !text-xs">
               {channel.channelDescription}
             </Paragraph>
           )}
         </div>
-        <Space size={8}>
+
+        <Space size={6}>
           <Button type={selected ? 'primary' : 'default'} onClick={() => onSelect(channel)}>
             {selected ? '선택됨' : '선택'}
           </Button>
           <Button disabled={saved} onClick={() => onSave(channel)}>
-            {saved ? '저장됨' : '저장'}
+            {saved ? '북마크됨' : '북마크'}
           </Button>
         </Space>
       </div>

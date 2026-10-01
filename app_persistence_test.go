@@ -34,6 +34,7 @@ func TestInitializePersistenceRestoresChannelsSettingsAndHistory(t *testing.T) {
 		Resolution:             appsettings.Resolution1440p,
 		OutputFormat:           appsettings.OutputFormatMKV,
 		MaxConcurrentDownloads: 3,
+		Theme:                  appsettings.ThemeLight,
 	}
 	record, err := appsettings.NewStorageRecord(settingsValue)
 	if err != nil {
@@ -154,6 +155,7 @@ func TestUpdateSettingsPersistsStorageRecord(t *testing.T) {
 		Resolution:             appsettings.Resolution720p,
 		OutputFormat:           appsettings.OutputFormatWebM,
 		MaxConcurrentDownloads: 2,
+		Theme:                  appsettings.ThemeLight,
 	}
 	if _, err := app.UpdateSettings(next); err != nil {
 		t.Fatal(err)

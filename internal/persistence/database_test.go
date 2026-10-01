@@ -33,7 +33,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
+	if version != 2 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -49,7 +49,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
+	if version != 2 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -97,6 +97,7 @@ func TestSettingsPersistenceRoundTrip(t *testing.T) {
 		Resolution:             appsettings.Resolution1080p,
 		OutputFormat:           appsettings.OutputFormatMKV,
 		MaxConcurrentDownloads: 3,
+		Theme:                  appsettings.ThemeLight,
 	}
 	record, err := appsettings.NewStorageRecord(value)
 	if err != nil {

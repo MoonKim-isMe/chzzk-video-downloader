@@ -25,6 +25,13 @@ const (
 	OutputFormatWebM OutputFormat = "webm"
 )
 
+type ThemeMode string
+
+const (
+	ThemeLight ThemeMode = "light"
+	ThemeDark  ThemeMode = "dark"
+)
+
 const (
 	DefaultMaxConcurrentDownloads = 1
 	MaxConcurrentDownloads        = 8
@@ -35,6 +42,7 @@ type AppSettings struct {
 	Resolution             Resolution   `json:"resolution"`
 	OutputFormat           OutputFormat `json:"outputFormat"`
 	MaxConcurrentDownloads int          `json:"maxConcurrentDownloads"`
+	Theme                  ThemeMode    `json:"theme"`
 }
 
 func Defaults(downloadDir string) AppSettings {
@@ -43,6 +51,7 @@ func Defaults(downloadDir string) AppSettings {
 		Resolution:             ResolutionBest,
 		OutputFormat:           OutputFormatMP4,
 		MaxConcurrentDownloads: DefaultMaxConcurrentDownloads,
+		Theme:                  ThemeDark,
 	}
 }
 
@@ -50,6 +59,10 @@ func Normalize(value AppSettings) AppSettings {
 	value.DownloadDir = filepath.Clean(strings.TrimSpace(value.DownloadDir))
 	value.Resolution = Resolution(strings.ToLower(strings.TrimSpace(string(value.Resolution))))
 	value.OutputFormat = OutputFormat(strings.ToLower(strings.TrimSpace(string(value.OutputFormat))))
+	value.Theme = ThemeMode(strings.ToLower(strings.TrimSpace(string(value.Theme))))
+	if value.Theme == "" {
+		value.Theme = ThemeDark
+	}
 	return value
 }
 
@@ -76,6 +89,12 @@ func Validate(value AppSettings) error {
 
 	if value.MaxConcurrentDownloads < 1 || value.MaxConcurrentDownloads > MaxConcurrentDownloads {
 		return fmt.Errorf("동시 다운로드 수는 1~%d 사이여야 합니다", MaxConcurrentDownloads)
+	}
+
+	switch value.Theme {
+	case ThemeLight, ThemeDark:
+	default:
+		return fmt.Errorf("지원하지 않는 테마입니다: %s", value.Theme)
 	}
 	return nil
 }

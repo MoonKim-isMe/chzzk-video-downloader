@@ -250,7 +250,7 @@ Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
 - 동시 다운로드 수를 낮춰도 현재 실행 중인 작업은 종료하지 않습니다.
 - 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
 
-Phase 6 설정 영속화는 `internal/settings.StorageRecord` v1을 기준으로 구현합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`이며 복원 시 현재 Settings Validation을 다시 수행합니다.
+설정 영속화는 `internal/settings.StorageRecord` v2를 기준으로 합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`, `theme`이며 v1 설정은 Dark 테마로 호환 복원합니다.
 
 ## Phase 6-P SQLite Persistence
 
@@ -270,7 +270,7 @@ SQLite에는 다음 데이터를 저장합니다.
 
 앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. 완료/실패/취소 이력은 다운로드 탭에 계속 표시됩니다.
 
-Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v1`을 단일 row로 저장하고 복원 시 현재 Validation을 다시 수행합니다.
+Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v2`를 단일 row로 저장하고 Light/Dark 테마까지 복원하며 현재 Validation을 다시 수행합니다.
 
 SQLite driver는 Windows에서 CGO 없이 사용할 수 있는 `modernc.org/sqlite`를 사용합니다. 현재 실행 환경은 외부 Go module 다운로드가 차단되어 실제 driver 기반 전체 테스트와 `go mod tidy`는 Windows/네트워크 가능 환경에서 추가 확인이 필요합니다.
 
@@ -320,3 +320,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer 
 다운로드 도구가 Go executable에 embed되므로 Wails NSIS installer가 별도의 yt-dlp/ffmpeg 설치 프로그램을 실행할 필요가 없습니다. 설치 후 첫 Toolchain 확인 시 embedded 도구가 LocalAppData에 자동 materialize됩니다.
 
 현재 bundle 대상은 Windows amd64입니다. Windows arm64 bundle은 별도 패키징 작업으로 취급합니다. Third-party 도구 출처와 라이선스 안내는 `THIRD_PARTY_NOTICES.md`를 참고합니다.
+
+
+## Phase 6 UX — Shell / Channel Search / Theme
+
+상단 헤더는 제품 UI 기준으로 다음 3영역만 표시합니다.
+
+```text
+[CHZZK Video Downloader] [채널 검색 | URL 직접 입력 | 다운로드] [설정 아이콘]
+```
+
+기존 본문 Tabs와 Phase/Wails 개발 표시는 제거했습니다.
+
+채널 검색 화면은 상단을 2열로 구성합니다.
+
+- 좌측: 채널 검색 입력 및 검색 결과
+- 우측: 북마크 채널 목록
+- 하단: 선택한 채널의 VOD 목록
+
+Settings Drawer의 **화면 > 테마**에서 `라이트 / 다크`를 선택할 수 있습니다. 기본값은 Dark이며 선택값은 SQLite에 저장되어 앱 재실행 후에도 유지됩니다. 기존 Settings DB는 migration v2에서 Dark 테마로 자동 승격됩니다.

@@ -5,13 +5,10 @@ import {
   ConfigProvider,
   Empty,
   Layout,
-  Space,
-  Tabs,
-  Tag,
-  Typography,
+  Tooltip,
+  theme as antdTheme,
 } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 
 import SavedChannels from './components/SavedChannels';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
@@ -22,6 +19,7 @@ import VideoUrlTab from './features/videos/VideoUrlTab';
 import {
   getDownloadTasks,
   getSavedChannels,
+  getSettings,
   removeSavedChannel,
   saveChannel,
   startDownload,
@@ -30,13 +28,46 @@ import { mergeDownloadTaskSnapshot, upsertDownloadTask } from './lib/downloadTas
 import { onDownloadState } from './lib/runtime';
 import type { Channel } from './types/channel';
 import type { DownloadTask, DownloadTaskStatus } from './types/download';
+import type { AppSettings, ThemeMode } from './types/settings';
 import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
-const { Text, Title } = Typography;
 
-function AppContent() {
+type AppTab = 'search' | 'url' | 'downloads';
+
+const navigationItems: Array<{ key: AppTab; label: string }> = [
+  { key: 'search', label: '채널 검색' },
+  { key: 'url', label: 'URL 직접 입력' },
+  { key: 'downloads', label: '다운로드' },
+];
+
+function SettingsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.96 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3v-4h.04A1.7 1.7 0 0 0 4.6 8.92a1.7 1.7 0 0 0-.34-1.87L4.2 6.99l2.83-2.83.06.06a1.7 1.7 0 0 0 1.87.34A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06 2.83 2.83-.06.06a1.7 1.7 0 0 0-.34 1.87A1.7 1.7 0 0 0 20.96 10H21v4h-.04A1.7 1.7 0 0 0 19.4 15Z" />
+    </svg>
+  );
+}
+
+interface AppContentProps {
+  themeMode: ThemeMode;
+  onSettingsUpdated: (settings: AppSettings) => void;
+}
+
+function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
   const { message } = AntdApp.useApp();
+  const [activeTab, setActiveTab] = useState<AppTab>('search');
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
@@ -99,7 +130,7 @@ function AppContent() {
     try {
       const channels = await saveChannel(channel);
       setSavedChannels(channels);
-      message.success(`${channel.channelName} 채널을 저장했습니다.`);
+      message.success(`${channel.channelName} 채널을 북마크했습니다.`);
     } catch (cause) {
       message.warning(cause instanceof Error ? cause.message : String(cause));
     }
@@ -139,96 +170,145 @@ function AppContent() {
     [message],
   );
 
-  const channelWorkspace = (content: ReactNode) => (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="min-w-0 space-y-6">
-        <Card className="border-slate-800 bg-slate-900/80">{content}</Card>
-        {selectedChannel ? (
-          <ChannelVideoList
-            key={selectedChannel.channelId}
-            channel={selectedChannel}
-            activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-            onQueueVideo={handleQueueVideo}
+  const searchWorkspace = (
+    <div className="space-y-6">
+      <div className="channel-discovery-grid">
+        <Card bordered={false} className="app-panel search-panel">
+          <ChannelSearchTab
+            savedChannelIds={savedChannelIds}
+            selectedChannelId={selectedChannel?.channelId}
+            onSelect={selectChannel}
+            onSave={handleSave}
           />
-        ) : (
-          <Card className="border-slate-800 bg-slate-900/80">
-            <Empty description="검색 결과 또는 저장 채널에서 채널을 선택하면 VOD 목록을 표시합니다." />
-          </Card>
-        )}
+        </Card>
+
+        <SavedChannels
+          channels={savedChannels}
+          selectedChannelId={selectedChannel?.channelId}
+          onSelect={selectChannel}
+          onRemove={handleRemove}
+        />
       </div>
-      <SavedChannels
-        channels={savedChannels}
-        selectedChannelId={selectedChannel?.channelId}
-        onSelect={selectChannel}
-        onRemove={handleRemove}
-      />
+
+      {selectedChannel ? (
+        <ChannelVideoList
+          key={selectedChannel.channelId}
+          channel={selectedChannel}
+          activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+          onQueueVideo={handleQueueVideo}
+        />
+      ) : (
+        <Card bordered={false} className="app-panel">
+          <Empty description="좌측 검색 결과 또는 북마크 채널에서 채널을 선택해 주세요." />
+        </Card>
+      )}
     </div>
   );
 
+  const content = activeTab === 'search'
+    ? searchWorkspace
+    : activeTab === 'url'
+      ? (
+          <Card bordered={false} className="app-panel">
+            <VideoUrlTab
+              activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+              onQueueVideo={handleQueueVideo}
+            />
+          </Card>
+        )
+      : <DownloadPanel tasks={downloadTasks} />;
+
   return (
-    <Layout className="min-h-screen bg-slate-950">
-      <Header className="flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950 px-6">
-        <Space size={12}>
-          <Title level={4} className="!m-0 !text-slate-100">
-            CHZZK Video Downloader
-          </Title>
-          <Tag>Phase 6 Persistence</Tag>
-        </Space>
-        <Space size={10}>
-          <Text className="!text-slate-400">Wails v2</Text>
-          <Button size="small" onClick={() => setSettingsOpen(true)}>
-            설정
-          </Button>
-        </Space>
+    <Layout className="app-shell" data-theme={themeMode}>
+      <Header className="app-header">
+        <div className="app-brand" title="CHZZK Video Downloader">
+          <span className="app-brand-mark">C</span>
+          <span className="app-brand-name">CHZZK Video Downloader</span>
+        </div>
+
+        <nav className="app-navigation" aria-label="주요 메뉴">
+          {navigationItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`app-nav-button ${activeTab === item.key ? 'is-active' : ''}`}
+              aria-current={activeTab === item.key ? 'page' : undefined}
+              onClick={() => setActiveTab(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="app-header-actions">
+          <Tooltip title="설정" placement="bottom">
+            <Button
+              aria-label="설정 열기"
+              type="text"
+              shape="circle"
+              className="settings-icon-button"
+              icon={<SettingsIcon />}
+              onClick={() => setSettingsOpen(true)}
+            />
+          </Tooltip>
+        </div>
       </Header>
 
-      <Content className="overflow-auto p-6">
-        <Tabs
-          defaultActiveKey="search"
-          items={[
-            {
-              key: 'search',
-              label: '채널 검색',
-              children: channelWorkspace(
-                <ChannelSearchTab
-                  savedChannelIds={savedChannelIds}
-                  selectedChannelId={selectedChannel?.channelId}
-                  onSelect={selectChannel}
-                  onSave={handleSave}
-                />,
-              ),
-            },
-            {
-              key: 'url',
-              label: 'URL 직접 입력',
-              children: (
-                <Card className="border-slate-800 bg-slate-900/80">
-                  <VideoUrlTab
-                    activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-                    onQueueVideo={handleQueueVideo}
-                  />
-                </Card>
-              ),
-            },
-            {
-              key: 'downloads',
-              label: '다운로드',
-              children: <DownloadPanel tasks={downloadTasks} />,
-            },
-          ]}
-        />
+      <Content className="app-content">
+        <main className="app-content-inner">{content}</main>
       </Content>
 
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSettingsUpdated={onSettingsUpdated}
+      />
     </Layout>
   );
 }
 
 function App() {
+  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
+
+  useEffect(() => {
+    let active = true;
+    getSettings()
+      .then((settings) => {
+        if (active) {
+          setThemeMode(settings.theme);
+        }
+      })
+      .catch(() => {
+        // Backend settings are validated separately; keep the safe dark fallback here.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+  }, [themeMode]);
+
   return (
-    <ConfigProvider>
+    <ConfigProvider
+      theme={{
+        algorithm: themeMode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#00c471',
+          borderRadius: 12,
+          borderRadiusLG: 16,
+          fontFamily:
+            'Pretendard, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        },
+      }}
+    >
       <AntdApp>
-        <AppContent />
+        <AppContent
+          themeMode={themeMode}
+          onSettingsUpdated={(settings) => setThemeMode(settings.theme)}
+        />
       </AntdApp>
     </ConfigProvider>
   );

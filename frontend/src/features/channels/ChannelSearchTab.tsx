@@ -5,7 +5,7 @@ import ChannelCard from '../../components/ChannelCard';
 import { searchChannels } from '../../lib/backend';
 import type { Channel, ChannelSearchResult } from '../../types/channel';
 
-const { Paragraph, Title } = Typography;
+const { Paragraph, Text, Title } = Typography;
 
 interface ChannelSearchTabProps {
   savedChannelIds: Set<string>;
@@ -59,17 +59,20 @@ function ChannelSearchTab({
 
   return (
     <div>
-      <Title level={3} className="!mb-2 !text-slate-100">
-        채널 검색
-      </Title>
-      <Paragraph className="!text-slate-400">
-        치지직 웹 서비스의 채널 검색 API를 사용해 채널을 찾습니다.
-      </Paragraph>
+      <div className="mb-5">
+        <Text className="app-eyebrow">DISCOVER</Text>
+        <Title level={3} className="app-section-title !mb-1 !mt-1">
+          채널 검색
+        </Title>
+        <Paragraph className="app-muted !mb-0">
+          치지직 채널을 검색하고 원하는 채널의 VOD를 바로 확인하세요.
+        </Paragraph>
+      </div>
 
       <Input.Search
         value={keyword}
         onChange={(event) => setKeyword(event.target.value)}
-        onSearch={() => runSearch(0, false)}
+        onSearch={() => void runSearch(0, false)}
         enterButton="검색"
         placeholder="채널명 또는 검색어"
         size="large"
@@ -78,7 +81,14 @@ function ChannelSearchTab({
 
       {error && <Alert className="mt-4" type="error" showIcon message={error} />}
 
-      <Space direction="vertical" size={12} className="mt-5 w-full">
+      {searched && !loading && (
+        <div className="mb-2 mt-5 flex items-center justify-between">
+          <Text strong>검색 결과</Text>
+          <Text className="app-muted !text-xs">{uniqueChannels.length}개 표시</Text>
+        </div>
+      )}
+
+      <Space direction="vertical" size={10} className={searched ? 'w-full' : 'mt-5 w-full'}>
         {uniqueChannels.map((channel) => (
           <ChannelCard
             key={channel.channelId}
@@ -92,11 +102,11 @@ function ChannelSearchTab({
       </Space>
 
       {searched && !loading && uniqueChannels.length === 0 && (
-        <Empty className="mt-12" description="검색 결과가 없습니다." />
+        <Empty className="py-8" description="검색 결과가 없습니다." />
       )}
 
       {result.hasNext && (
-        <Button block className="mt-4" loading={loadingMore} onClick={() => runSearch(result.nextOffset, true)}>
+        <Button block className="mt-4" loading={loadingMore} onClick={() => void runSearch(result.nextOffset, true)}>
           더 보기
         </Button>
       )}

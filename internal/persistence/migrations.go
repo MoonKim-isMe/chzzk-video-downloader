@@ -61,6 +61,19 @@ var migrations = []migration{
 			)`,
 		},
 	},
+	{
+		version: 2,
+		statements: []string{
+			`ALTER TABLE app_settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'`,
+			`UPDATE app_settings
+				SET schema_version = 2,
+					theme = CASE
+						WHEN theme IN ('light', 'dark') THEN theme
+						ELSE 'dark'
+					END
+				WHERE id = 1`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

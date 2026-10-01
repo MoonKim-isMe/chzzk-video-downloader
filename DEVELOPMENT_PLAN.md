@@ -871,15 +871,15 @@ Validation:
 - `maxConcurrentDownloads` 감소 시 현재 실행 중인 작업을 강제 종료하지 않으며 active 수가 새 제한 미만이 될 때까지 신규 실행을 보류한다.
 - 지원하는 해상도 5종 × 출력 포맷 3종, 총 15개 조합이 동일한 다운로드 경로와 올바른 yt-dlp 인자로 변환되어야 한다.
 - Phase 6 설정 영속화 경계는 API용 `AppSettings`와 분리된 `StorageRecord`를 사용한다.
-- `StorageRecord` v1은 `schemaVersion / downloadDir / resolution / outputFormat / maxConcurrentDownloads`를 저장한다.
+- `StorageRecord` v2는 `schemaVersion / downloadDir / resolution / outputFormat / maxConcurrentDownloads / theme`을 저장한다. 기존 v1 레코드는 Dark 테마로 호환 복원한다.
 - 저장 레코드를 복원할 때도 Normalize/Validate를 다시 수행하고 지원하지 않는 schemaVersion은 거부한다.
-- Phase 6 SQLite 구현에서는 단일 settings 레코드를 이 StorageRecord v1 구조로 매핑하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
+- Phase 6 SQLite 구현에서는 단일 settings 레코드를 StorageRecord v2 구조로 매핑하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
 
 #### Phase 5-D 검증 현황
 
 완료:
 
-- Settings StorageRecord v1을 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
+- Settings StorageRecord v2를 재현한 Go 1.23 격리 모듈에서 `gofmt` 성공
 - 동일 모듈에서 `go test ./internal/settings` 성공
 - 동일 모듈에서 `go test -race ./internal/settings` 성공
 - 동일 모듈에서 `go vet ./internal/settings` 성공
@@ -905,7 +905,7 @@ Validation:
 
 Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Windows/Wails/외부 도구 검증은 배포 환경 통합 검증으로 유지한다.
 
-## Phase 6 — Persistence 및 Windows 패키징
+## Phase 6 — Persistence 및 UX Refinement
 
 ### Phase 6-P — Persistence
 
@@ -921,14 +921,14 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - SQLite 연결은 앱 단일 로컬 DB 사용 패턴에 맞춰 최대 connection 수를 1로 제한한다.
 - `foreign_keys=ON`, `busy_timeout=5000`, `journal_mode=WAL`을 적용한다.
 - `schema_migrations` 테이블과 순차 migration version으로 schema 변경을 관리한다.
-- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성한다.
+- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`을 추가해 기존 설정을 Dark로 승격한다.
 - 저장 채널은 앱 시작 시 SQLite에서 읽어 기존 `chzzk.Store`에 복원한다.
 - 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
 - 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.
 - 앱 재시작 시 이전 queued/running 이력은 실제 프로세스가 존재하지 않으므로 cancelled로 복구하고 finishedAt과 중단 오류를 기록한다.
 - 완료/실패/취소 다운로드 이력은 앱 재시작 후에도 다운로드 탭에서 조회할 수 있다.
 - 재시작 간 download taskId 충돌을 방지하기 위해 Task ID에 UTC UnixNano와 process-local counter를 함께 사용한다.
-- Settings는 Phase 5-D의 `StorageRecord v1`을 SQLite 단일 row(id=1)에 저장한다.
+- Settings는 `StorageRecord v2`를 SQLite 단일 row(id=1)에 저장하며 theme을 함께 영속화한다.
 - 앱 시작 시 저장된 Settings를 복원하고 해당 `maxConcurrentDownloads`로 Queue를 생성한다.
 - Settings 저장 실패 시 메모리 Settings와 Queue 동시성 값을 이전 상태로 rollback한다.
 - Persistence 초기화 실패 시 앱은 기존 메모리 기반 동작으로 fallback하고 Wails error log를 남긴다.
@@ -939,11 +939,11 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 구현/정적 확인 완료:
 
 - `internal/persistence`에 SQLite open / migration / channel / download history / settings repository 구현
-- migration v1 SQL을 SQLite 호환 문법 기준으로 확인
+- migration v1/v2 SQL을 SQLite 호환 문법 기준으로 확인
 - 저장 채널 add/delete/restore 경로 구현
 - DownloadTask 전체 필드 및 Progress 필드 저장/복원 경로 구현
 - queued/running 중단 이력 cancelled 복구 경로 구현
-- Settings StorageRecord v1 저장/복원 경로 구현
+- Settings StorageRecord v2 저장/복원 및 v1 Dark 호환 복원 경로 구현
 - 앱 startup에서 DB → 채널/Settings 복원 → Queue 생성 순서 연결
 - Settings 변경 시 SQLite 저장과 Scheduler rollback 경로 연결
 - 다운로드 이벤트 → SQLite upsert → Wails event 순서 연결
@@ -967,15 +967,15 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 #### Phase 6-UX-A — App Shell / Navigation
 
-- [ ] UX-A1. 헤더와 탭의 시각적 위계 정리
-- [ ] UX-A2. 개발 Phase 표기 등 사용자에게 불필요한 내부 정보 제거
-- [ ] UX-A3. 주요 화면의 최대 너비, 여백, 카드 밀도와 반응형 레이아웃 통일
+- [ ] UX-A1. 헤더와 탭의 시각적 위계 정리 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] UX-A2. 개발 Phase 표기 등 사용자에게 불필요한 내부 정보 제거 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] UX-A3. 주요 화면의 최대 너비, 여백, 카드 밀도와 반응형 레이아웃 통일 — 1차 Shell 구현 완료, 후속 화면 UX 단계에서 계속 보강
 - [ ] UX-A4. 로딩 / Empty / Error 상태의 기본 표현 규칙 통일
 
 #### Phase 6-UX-B — Channel / VOD 탐색
 
-- [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리
-- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선
+- [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리 — 채널 검색 1차 레이아웃 완료, URL 직접 입력은 후속
+- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선 — 북마크 채널 우측 패널 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-B3. VOD 카드의 정보 우선순위와 Queue 추가 CTA 정리
 - [ ] UX-B4. 채널 전환과 VOD 더보기 흐름의 상태 피드백 개선
 
@@ -988,10 +988,42 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
-- [ ] UX-D1. Settings Drawer의 섹션 구조와 설명 문구 간결화
+- [ ] UX-D0. Light / Dark 테마 선택, 즉시 UI 적용 및 SQLite 영속화 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] UX-D1. Settings Drawer의 섹션 구조와 설명 문구 간결화 — 화면/다운로드 섹션 1차 정리 완료, 후속 UX 점검 대기
 - [ ] UX-D2. 저장/취소/폴더 선택 액션의 상태 피드백 통일
 - [ ] UX-D3. 키보드 포커스, 버튼 상태, 텍스트 대비 등 기본 접근성 점검
 - [ ] UX-D4. 전체 UI에서 버튼/Tag/Alert/Empty/Skeleton 표현 일관성 점검
+
+#### Phase 6-UX 이번 구현 기준
+
+- 헤더는 `[앱 이름] [채널 검색 / URL 직접 입력 / 다운로드] [설정 아이콘]`의 단일 행 구조로 구성한다.
+- 기존 본문 Tabs는 제거하고 헤더 중앙 pill navigation으로 이동한다.
+- 사용자에게 불필요한 Phase / Wails 개발 표시는 제품 UI에서 제거한다.
+- 채널 검색 화면 상단은 좌측 검색/결과 영역 + 우측 북마크 채널 320px 패널로 구성한다.
+- 선택 채널 VOD 목록은 상단 탐색 영역 아래 전체 너비에 표시한다.
+- 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
+- Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
+- 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
+- `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
+- B2C 데스크톱 서비스 기준으로 불필요한 장식보다 명확한 위계, 충분한 여백, 낮은 대비의 surface, 일관된 radius를 우선한다.
+
+#### Phase 6-UX 검증 현황
+
+완료:
+
+- Go 1.23 설정 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
+- Theme 기본값 Dark / Light 저장 / 잘못된 Theme 거부 / StorageRecord v1→Dark 호환 복원 검증
+- Python 실제 SQLite 엔진에서 migration v1 → v2 적용 및 기존 settings row의 `theme=dark`, `schema_version=2` 승격 확인
+- 헤더 내부 Phase/Wails 표시 제거 및 헤더 navigation 구조 정적 확인
+- 채널 검색 좌측 / 북마크 채널 우측 레이아웃 구조 확인
+- Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- Node.js 24 + 실제 Yarn 의존성 기반 `yarn typecheck`
+- `yarn build`
+- 실제 Wails 앱에서 Light/Dark 전환 및 재실행 복원
+- 960×640 / 일반 데스크톱 창 크기에서 실제 레이아웃 시각 검증
 
 #### Phase 6-UX 원칙
 
