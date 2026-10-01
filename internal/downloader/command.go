@@ -11,6 +11,7 @@ import (
 const (
 	DefaultFormatSelector = "bv*+ba/b"
 	DefaultOutputTemplate = "%(title)s [%(id)s].%(ext)s"
+	progressTemplate      = progressPrefix + "%(progress.status)s\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t%(progress.speed)s\t%(progress.eta)s\t%(progress._percent_str)s"
 )
 
 var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
@@ -57,12 +58,17 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 
 	args := []string{
 		"--ignore-config",
+		"--no-simulate",
+		"--progress",
 		"--newline",
 		"--color", "never",
 		"--no-playlist",
 		"--windows-filenames",
 		"--no-overwrites",
 		"--continue",
+		"--progress-delta", "0.5",
+		"--progress-template", "download:" + progressTemplate,
+		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format", formatSelector,
 		"--paths", outputDir,
 		"--output", outputTemplate,
@@ -92,6 +98,7 @@ func normalizeVideoURL(raw string) (string, error) {
 	if !strings.EqualFold(parsed.Hostname(), "chzzk.naver.com") || !videoPathPattern.MatchString(parsed.EscapedPath()) {
 		return "", fmt.Errorf("치지직 VOD URL만 다운로드할 수 있습니다")
 	}
+
 	parsed.Scheme = "https"
 	parsed.Host = "chzzk.naver.com"
 	parsed.User = nil

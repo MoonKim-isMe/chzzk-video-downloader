@@ -316,11 +316,46 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 3-B — 단일 다운로드 및 진행률
 
-- [ ] DL-2. 선택한 치지직 VOD 실제 다운로드 구현
-- [ ] DL-4. yt-dlp progress template 기반 진행률/속도/ETA 파싱
-- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 완성
-- [ ] DL-3B-1. context 기반 다운로드 취소 처리
-- [ ] DL-3B-2. 다운로드 완료 후 최종 파일 경로 확보
+- [ ] DL-2. 선택한 치지직 VOD 실제 다운로드 구현 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-4. yt-dlp progress template 기반 진행률/속도/ETA 파싱 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 완성 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-3B-1. context 기반 다운로드 취소 처리 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-3B-2. 다운로드 완료 후 최종 파일 경로 확보 — 구현 완료, 실 도구 통합 검증 대기
+
+#### Phase 3-B 구현 기준
+
+- `Manager.Download`이 Prepare → yt-dlp 실행 → 진행률 파싱 → 최종 파일 경로 반환 흐름을 담당한다.
+- `--progress-template`에 앱 전용 마커를 붙여 status, downloaded bytes, total bytes, estimated total, speed, ETA, percent를 안정적으로 구분한다.
+- `--print after_move:filepath`에 별도 마커를 붙여 ffmpeg 병합/후처리 후 실제 최종 파일 경로를 확보한다.
+- `--print`의 quiet 동작과 무관하게 진행률을 유지하도록 `--progress`를 명시하고, 실제 다운로드 보장을 위해 `--no-simulate`를 명시한다.
+- 전체 크기가 없고 estimated total만 있으면 이를 `TotalBytes`로 사용하고 `TotalBytesEstimated=true`로 구분한다.
+- 성공 종료인데 최종 파일 경로를 얻지 못한 경우 완료로 간주하지 않고 오류를 반환한다.
+- context 취소/timeout은 `errors.Is`로 식별 가능한 상태를 유지한다.
+- 프로세스 오류 메시지에서 앱 내부 progress/file marker는 제거하고 실제 stderr 오류만 보존한다.
+
+#### Phase 3-B 검증 현황
+
+완료:
+
+- 실제 Phase 3-A Resolver/Runner 소스와 Phase 3-B 코드를 합친 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 모듈에서 `go test ./internal/downloader` 성공
+- 동일 격리 모듈에서 `go vet ./internal/downloader` 성공
+- progress template 인자 및 after_move filepath 인자 생성 테스트
+- 실제/추정 전체 크기 fallback 진행률 파싱 테스트
+- stdout 기반 진행률 + 최종 파일 경로 수집 테스트
+- context timeout 기반 다운로드 취소 테스트
+- 프로세스 실패 시 progress marker 제거 및 실제 stderr 보존 테스트
+- 최종 파일 경로가 없는 성공 종료를 오류로 처리하는 테스트
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 설치된 yt-dlp를 이용한 CHZZK VOD 다운로드
+- 실제 ffmpeg 영상/음성 병합 후 final filepath 확인
+- Windows에서 장시간 다운로드 context 취소 동작
+- 실제 Repository 전체 `go test ./...`
+- `wails build`
+
+위 실제 도구 통합 검증까지 완료되면 Phase 3-B 항목을 완료 처리한다.
 
 ### Phase 3-C — Wails / 프론트엔드 연결
 

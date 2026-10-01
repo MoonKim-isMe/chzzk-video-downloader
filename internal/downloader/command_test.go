@@ -29,7 +29,21 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if spec.Path != toolchain.YTDLP.Path {
 		t.Fatalf("unexpected path: %s", spec.Path)
 	}
-	for _, expected := range []string{"--ignore-config", "--newline", "never", "--no-playlist", "--windows-filenames", "--no-overwrites", "--format", DefaultFormatSelector, "--ffmpeg-location", dir, "https://chzzk.naver.com/video/12345"} {
+	for _, expected := range []string{
+		"--ignore-config",
+		"--no-simulate",
+		"--progress",
+		"--newline",
+		"--progress-template",
+		"download:" + progressTemplate,
+		"--print",
+		"after_move:" + finalPathPrefix + "%(filepath)s",
+		"--format",
+		DefaultFormatSelector,
+		"--ffmpeg-location",
+		dir,
+		"https://chzzk.naver.com/video/12345",
+	} {
 		if !slices.Contains(spec.Args, expected) {
 			t.Fatalf("missing argument %q in %#v", expected, spec.Args)
 		}
