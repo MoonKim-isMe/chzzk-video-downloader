@@ -944,7 +944,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - SQLite 연결은 앱 단일 로컬 DB 사용 패턴에 맞춰 최대 connection 수를 1로 제한한다.
 - `foreign_keys=ON`, `busy_timeout=5000`, `journal_mode=WAL`을 적용한다.
 - `schema_migrations` 테이블과 순차 migration version으로 schema 변경을 관리한다.
-- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`, migration v3는 다운로드 `error_code`, migration v4는 실패 진단 `log_path`, migration v5는 `app_settings.download_acceleration`을 추가하고 설정 저장 버전을 v3으로 올린다.
+- migration v1은 `saved_channels`, `download_tasks`, `app_settings`를 생성하고, migration v2는 `app_settings.theme`, migration v3는 다운로드 `error_code`, migration v4는 실패 진단 `log_path`, migration v5는 `app_settings.download_acceleration`을 추가하고 설정 저장 버전을 v3으로 올린다. migration v6는 기존에 임시 데이터 충돌로 잘못 분류된 HLS initialization fragment 오류 이력을 `hls_initialization_fragment_order`로 교정한다.
 - 저장 채널은 앱 시작 시 SQLite에서 읽어 기존 `chzzk.Store`에 복원한다.
 - 채널 추가/삭제는 메모리 Store와 SQLite를 함께 갱신하며 SQLite 저장 실패 시 메모리 변경을 rollback한다.
 - 모든 DownloadTask 상태 이벤트(queued/running/progress/terminal)를 taskId 기준 upsert한다.
@@ -1011,6 +1011,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 및 실패 다운로드의 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
 - [ ] UX-C6. VOD별 임시 다운로드 경로 격리 및 임시 데이터 충돌 복구 액션 — 구현 완료, 실제 Windows 다운로드 검증 대기
 - [ ] UX-C7. 다운로드 실패 진단 로그 저장 및 실패 항목 로그 파일 열기 — 구현 완료, 실제 반복 실패 VOD 검증 대기
+- [ ] UX-C8. HLS initialization fragment 순서 오류 감지, ffmpeg 자동 fallback 및 실행 상태 관측 — 구현 완료, VOD 15461111 실제 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
@@ -1064,11 +1065,16 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
 - 다운로드 중간 파일은 최종 저장 경로와 분리해 `.chzzk-temp/{videoNo}`에 격리하고, `--continue`로 정상적인 부분 다운로드 재개를 허용한다.
-- 임시 데이터 충돌 실패는 `errorCode=partial_data_conflict`로 영속화하며, 실패 항목의 `임시 파일 정리 후 재시도` 액션은 해당 VOD 임시 디렉터리만 삭제한 뒤 새 Queue 작업을 생성한다. 최종 영상 파일은 삭제하지 않는다.
+- 실제 임시 데이터 충돌 실패는 `errorCode=partial_data_conflict` 복구 경로를 유지하며, 실패 항목의 `임시 파일 정리 후 재시도` 액션은 해당 VOD 임시 디렉터리만 삭제한 뒤 새 Queue 작업을 생성한다. 최종 영상 파일은 삭제하지 않는다.
+- `initialization fragment found after media fragments`는 임시 파일 충돌이 아니라 `hls_initialization_fragment_order`로 분류한다. 최초 native HLS 다운로드가 이 오류로 실패하면 해당 VOD 임시 디렉터리만 정리한 뒤 `--downloader m3u8:ffmpeg`를 적용해 자동으로 1회 fallback한다.
+- fallback 명령에는 다운로드 가속 설정의 `--concurrent-fragments` 값을 유지하고, 번들 ffmpeg 디렉터리를 PATH 선두에 명시하며 `--downloader-args "ffmpeg:-nostdin -stats_period 1"`을 적용한다.
+- ffmpeg external downloader는 yt-dlp의 일반 progress hook이 다운로드 중 갱신되지 않을 수 있으므로, fallback 시작 시 `fallback_preparing` 상태를 즉시 emit하고 `.chzzk-temp/{videoNo}` 전체 파일 크기를 1초 간격으로 측정해 `fallback_downloading`의 다운로드 용량/속도를 갱신한다.
+- fallback 프로세스 출력과 임시 파일 크기 변화가 모두 60초 동안 없으면 stalled 상태로 판단해 해당 fallback context를 취소하고 실패 로그를 남긴다.
+- ffmpeg HLS fallback까지 실패하면 사용자에게 대체 방식까지 실패했음을 표시하고, 실패 로그의 recent process output에 1차 native HLS 시도와 2차 ffmpeg HLS 시도 출력을 함께 남긴다.
 - 다운로드 실패 시 다운로드 폴더의 `.chzzk-logs`에 VOD별 진단 로그를 남긴다. 로그에는 UTC 시각, VOD URL, 출력 설정, 사용자 오류/원인 체인, 마지막 진행 상태, 민감 인자를 마스킹한 실행 인자, 최근 400줄의 stdout/stderr를 기록한다.
 - 실패 Task의 `logPath`를 SQLite에 영속화하고 다운로드 탭에서 `로그 파일 열기`를 제공한다. 목록 삭제/임시 파일 정리 후 재시도 시에도 기존 로그 파일 자체는 보존한다.
 - HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`를 표시한다.
-- `initialization fragment found after media fragments`는 `partial_data_conflict`로 분류해 내부 실행 도구명/원문 로그 대신 임시 파일 정리 후 재시도 안내를 표시한다.
+- 기존 `initialization fragment found after media fragments`의 `partial_data_conflict` 분류는 제거하고 HLS 구조 오류 자동 fallback으로 대체한다.
 - cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
 - 완료 Task에는 `폴더 열기`와 `목록에서 삭제`를 제공하고, 실패 Task에는 `목록에서 삭제`를 제공한다. 삭제는 파일이 아니라 앱의 다운로드 이력만 제거한다.
 - 다운로드 도구 상태 UI에는 외부 프로그램명을 직접 노출하지 않고 `영상 다운로드`, `파일 저장/영상 처리`처럼 사용자가 이해할 기능 수준으로만 표현한다.
@@ -1100,6 +1106,10 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - VOD별 temp 경로가 `.chzzk-temp/{videoNo}`로 분리되고 최종 저장 경로와 별도 `--paths temp:` 인자로 전달되는 구조 정적 확인
 - `partial_data_conflict` 오류 코드의 Queue → SQLite → Frontend 타입 연결 및 복구 API/버튼 경로 정적 확인
 - 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
+- HLS initialization fragment 오류 분류 → VOD 임시 디렉터리 정리 → `m3u8:ffmpeg` command fallback → fallback 실패 시 양쪽 시도 진단 로그 병합 경로 정적 확인
+- 최신 main의 다운로드 가속 `--concurrent-fragments` 정책과 HLS fallback command를 함께 유지하도록 충돌 병합 확인
+- fallback command의 ffmpeg PATH 주입 / downloader args, temp 크기 기반 다운로드 용량·속도 관측, 프로세스 출력 기반 activity 갱신, 60초 stall 취소 경로 테스트 추가
+- Download Manager의 `대체 방식 재시도` 상태 Tag, 준비/연결/다운로드 중 문구 및 전체 크기를 알 수 없는 fallback metrics 표시 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:
 

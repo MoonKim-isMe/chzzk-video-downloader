@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -34,6 +35,10 @@ type CommandSpec struct {
 }
 
 func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (CommandSpec, error) {
+	return buildDownloadCommand(toolchain, request, false)
+}
+
+func buildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest, useFFmpegHLS bool) (CommandSpec, error) {
 	if !toolchain.YTDLP.Available {
 		return CommandSpec{}, fmt.Errorf("영상 다운로드 기능을 사용할 수 없습니다")
 	}
@@ -77,6 +82,7 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		return CommandSpec{}, err
 	}
 
+	var env []string
 	args := []string{
 		"--ignore-config",
 		"--no-simulate",
@@ -97,6 +103,20 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
 	}
+	if useFFmpegHLS {
+		args = append(
+			args,
+			"--downloader", "m3u8:ffmpeg",
+			"--downloader-args", "ffmpeg:-nostdin -stats_period 1",
+		)
+
+		ffmpegDir := filepath.Dir(toolchain.FFmpeg.Path)
+		fallbackPath := ffmpegDir
+		if currentPath := strings.TrimSpace(os.Getenv("PATH")); currentPath != "" {
+			fallbackPath += string(os.PathListSeparator) + currentPath
+		}
+		env = append(env, "PATH="+fallbackPath)
+	}
 	if outputFormat != "" {
 		args = append(args,
 			"--merge-output-format", outputFormat,
@@ -113,7 +133,7 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	}
 	args = append(args, videoURL)
 
-	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args}, nil
+	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: env}, nil
 }
 
 func normalizeVideoURL(raw string) (string, error) {

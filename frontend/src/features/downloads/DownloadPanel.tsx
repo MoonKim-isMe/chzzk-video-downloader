@@ -143,6 +143,9 @@ function DownloadTaskRow({
   const [working, setWorking] = useState(false);
   const meta = statusMeta[task.status];
   const active = task.status === 'queued' || task.status === 'running';
+  const fallbackPreparing = task.progress.status === 'fallback_preparing';
+  const fallbackDownloading = task.progress.status === 'fallback_downloading';
+  const fallbackActive = task.status === 'running' && (fallbackPreparing || fallbackDownloading);
   const total = task.progress.totalBytes > 0
     ? `${task.progress.totalBytesEstimated ? '약 ' : ''}${formatBytes(task.progress.totalBytes)}`
     : '-';
@@ -232,6 +235,7 @@ function DownloadTaskRow({
           <div className="min-w-0">
             <div className="download-task-badges">
               <Tag color={meta.color}>{meta.label}</Tag>
+              {fallbackActive && <Tag color="warning">대체 방식 재시도</Tag>}
               {queuePosition !== undefined && <Tag>대기 {queuePosition}번째</Tag>}
               <Text className="app-muted !text-xs">{task.channelName}</Text>
             </div>
@@ -287,19 +291,43 @@ function DownloadTaskRow({
           </div>
         ) : (
           <>
+            {fallbackActive && (
+              <div className="download-task-queued">
+                {fallbackPreparing
+                  ? '대체 다운로드 방식을 준비하고 있습니다.'
+                  : task.progress.downloadedBytes > 0
+                    ? '대체 방식으로 다운로드 중입니다.'
+                    : '대체 다운로드 서버에 연결 중입니다.'}
+              </div>
+            )}
+
             <div className="download-task-progress">
               <Progress
                 percent={Math.round(task.progress.percent * 10) / 10}
                 status={meta.progressStatus}
-                showInfo
+                showInfo={!fallbackActive || task.progress.percent > 0}
                 size="small"
               />
             </div>
 
             <div className="download-task-metrics">
-              <span>{formatBytes(task.progress.downloadedBytes)} / {total}</span>
-              <span>속도 {formatSpeed(task.progress.speedBytesPerSecond)}</span>
-              <span>남은 시간 {formatETA(task.progress.etaSeconds)}</span>
+              {fallbackActive && task.progress.totalBytes <= 0 ? (
+                <>
+                  <span>
+                    다운로드 {task.progress.downloadedBytes > 0
+                      ? formatBytes(task.progress.downloadedBytes)
+                      : '0 B'}
+                  </span>
+                  <span>속도 {formatSpeed(task.progress.speedBytesPerSecond)}</span>
+                  <span>전체 크기 계산 중</span>
+                </>
+              ) : (
+                <>
+                  <span>{formatBytes(task.progress.downloadedBytes)} / {total}</span>
+                  <span>속도 {formatSpeed(task.progress.speedBytesPerSecond)}</span>
+                  <span>남은 시간 {formatETA(task.progress.etaSeconds)}</span>
+                </>
+              )}
             </div>
 
             {task.status === 'failed' && task.error && (

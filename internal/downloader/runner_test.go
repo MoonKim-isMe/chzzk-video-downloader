@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -96,4 +97,40 @@ func init() {
 	default:
 		os.Exit(2)
 	}
+}
+
+
+func TestMergeCommandEnvOverridesCaseInsensitive(t *testing.T) {
+	base := []string{
+		"Path=C:\\Windows\\System32",
+		"KEEP=value",
+	}
+	merged := mergeCommandEnv(base, []string{
+		"PATH=C:\\Tools;C:\\Windows\\System32",
+		"NEW=value",
+	})
+
+	pathCount := 0
+	for _, entry := range merged {
+		if strings.EqualFold(commandEnvName(entry), "PATH") {
+			pathCount++
+			if entry != "PATH=C:\\Tools;C:\\Windows\\System32" {
+				t.Fatalf("unexpected PATH override: %q", entry)
+			}
+		}
+	}
+	if pathCount != 1 {
+		t.Fatalf("expected one PATH entry, got %d in %#v", pathCount, merged)
+	}
+	if !slices.Contains(merged, "KEEP=value") || !slices.Contains(merged, "NEW=value") {
+		t.Fatalf("environment merge lost entries: %#v", merged)
+	}
+}
+
+func commandEnvName(entry string) string {
+	index := strings.IndexByte(entry, '=')
+	if index <= 0 {
+		return entry
+	}
+	return entry[:index]
 }

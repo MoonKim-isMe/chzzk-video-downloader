@@ -8,6 +8,9 @@ import (
 const (
 	progressPrefix  = "__CHZZK_PROGRESS__"
 	finalPathPrefix = "__CHZZK_FILE__"
+
+	progressStatusFallbackPreparing   = "fallback_preparing"
+	progressStatusFallbackDownloading = "fallback_downloading"
 )
 
 type DownloadProgress struct {

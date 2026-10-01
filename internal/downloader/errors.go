@@ -8,8 +8,9 @@ import (
 type DownloadFailureKind string
 
 const (
-	DownloadFailureAuthenticationRequired DownloadFailureKind = "authentication_required"
-	DownloadFailurePartialDataConflict     DownloadFailureKind = "partial_data_conflict"
+	DownloadFailureAuthenticationRequired       DownloadFailureKind = "authentication_required"
+	DownloadFailurePartialDataConflict           DownloadFailureKind = "partial_data_conflict"
+	DownloadFailureHLSInitializationFragmentOrder DownloadFailureKind = "hls_initialization_fragment_order"
 )
 
 type DownloadFailure struct {
@@ -50,14 +51,10 @@ func classifyDownloadFailure(err error) error {
 			Cause:   err,
 		}
 
-	case containsAny(
-		text,
-		"initialization fragment found after media fragments",
-		"unable to download",
-	) && strings.Contains(text, "initialization fragment"):
+	case strings.Contains(text, "initialization fragment found after media fragments"):
 		return &DownloadFailure{
-			Kind:    DownloadFailurePartialDataConflict,
-			Message: "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
+			Kind:    DownloadFailureHLSInitializationFragmentOrder,
+			Message: "영상 스트림 구조를 일반 방식으로 처리할 수 없어 대체 다운로드 방식으로 다시 시도합니다.",
 			Cause:   err,
 		}
 	}
@@ -80,4 +77,9 @@ func downloadFailureKind(err error) (DownloadFailureKind, bool) {
 		return "", false
 	}
 	return failure.Kind, true
+}
+
+func isDownloadFailureKind(err error, kind DownloadFailureKind) bool {
+	current, ok := downloadFailureKind(err)
+	return ok && current == kind
 }

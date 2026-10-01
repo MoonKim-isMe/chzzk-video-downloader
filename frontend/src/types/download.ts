@@ -1,5 +1,8 @@
 export type DownloadTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type DownloadErrorCode = 'authentication_required' | 'partial_data_conflict';
+export type DownloadErrorCode =
+  | 'authentication_required'
+  | 'partial_data_conflict'
+  | 'hls_initialization_fragment_order';
 
 export interface ToolStatus {
   name: string;

@@ -64,7 +64,7 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 
 	cmd := exec.Command(spec.Path, spec.Args...)
 	if len(spec.Env) > 0 {
-		cmd.Env = append(os.Environ(), spec.Env...)
+		cmd.Env = mergeCommandEnv(os.Environ(), spec.Env)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -186,4 +186,45 @@ func terminateProcessTree(cmd *exec.Cmd) error {
 	}
 
 	return cmd.Process.Kill()
+}
+
+
+func mergeCommandEnv(base, overrides []string) []string {
+	result := append([]string(nil), base...)
+	indexes := make(map[string]int, len(result))
+
+	for index, entry := range result {
+		key, ok := commandEnvKey(entry)
+		if !ok {
+			continue
+		}
+		indexes[strings.ToLower(key)] = index
+	}
+
+	for _, entry := range overrides {
+		key, ok := commandEnvKey(entry)
+		if !ok {
+			result = append(result, entry)
+			continue
+		}
+
+		normalized := strings.ToLower(key)
+		if index, exists := indexes[normalized]; exists {
+			result[index] = entry
+			continue
+		}
+
+		indexes[normalized] = len(result)
+		result = append(result, entry)
+	}
+
+	return result
+}
+
+func commandEnvKey(entry string) (string, bool) {
+	index := strings.IndexByte(entry, '=')
+	if index <= 0 {
+		return "", false
+	}
+	return entry[:index], true
 }

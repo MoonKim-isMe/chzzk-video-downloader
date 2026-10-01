@@ -59,3 +59,36 @@ func TestCleanupTemporaryDownloadRemovesOnlyTargetVideo(t *testing.T) {
 		t.Fatalf("final file was removed: %v", err)
 	}
 }
+
+
+func TestTemporaryDownloadSizeTracksRegularFiles(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "video.part"), make([]byte, 128), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "audio.part"), make([]byte, 64), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	size, err := temporaryDownloadSize(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 192 {
+		t.Fatalf("unexpected temporary size: %d", size)
+	}
+}
+
+func TestTemporaryDownloadSizeMissingDirectoryIsZero(t *testing.T) {
+	size, err := temporaryDownloadSize(filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 0 {
+		t.Fatalf("unexpected missing directory size: %d", size)
+	}
+}

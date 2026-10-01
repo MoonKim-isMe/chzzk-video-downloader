@@ -72,3 +72,38 @@ func videoNoFromNormalizedURL(videoURL string) (int64, error) {
 	}
 	return videoNo, nil
 }
+
+
+func temporaryDownloadSize(path string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(path, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("다운로드 임시 파일 크기를 확인할 수 없습니다: %w", err)
+	}
+	return total, nil
+}
