@@ -235,14 +235,10 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
     ? searchWorkspace
     : activeTab === 'url'
       ? (
-          <div className="app-scroll-view">
-            <Card bordered={false} className="app-panel">
-              <VideoUrlTab
-                activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-                onQueueVideo={handleQueueVideo}
-              />
-            </Card>
-          </div>
+          <VideoUrlTab
+            activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+            onQueueVideo={handleQueueVideo}
+          />
         )
       : (
           <div className="app-scroll-view">
