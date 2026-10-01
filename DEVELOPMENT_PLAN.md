@@ -905,7 +905,46 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 위 실제 SQLite driver 통합 검증이 완료되면 DB-1~DB-4를 완료 처리한다.
 
-### Phase 6-PKG — Windows 패키징
+### Phase 6-UX — UX Refinement
+
+#### Phase 6-UX-A — App Shell / Navigation
+
+- [ ] UX-A1. 헤더와 탭의 시각적 위계 정리
+- [ ] UX-A2. 개발 Phase 표기 등 사용자에게 불필요한 내부 정보 제거
+- [ ] UX-A3. 주요 화면의 최대 너비, 여백, 카드 밀도와 반응형 레이아웃 통일
+- [ ] UX-A4. 로딩 / Empty / Error 상태의 기본 표현 규칙 통일
+
+#### Phase 6-UX-B — Channel / VOD 탐색
+
+- [ ] UX-B1. 채널 검색과 URL 직접 입력의 입력/결과 레이아웃 정리
+- [ ] UX-B2. 저장 채널 목록의 선택/삭제 동작과 현재 선택 상태 가독성 개선
+- [ ] UX-B3. VOD 카드의 정보 우선순위와 Queue 추가 CTA 정리
+- [ ] UX-B4. 채널 전환과 VOD 더보기 흐름의 상태 피드백 개선
+
+#### Phase 6-UX-C — Download Manager
+
+- [ ] UX-C1. 다운로드 탭의 활성 작업과 완료 이력 시각적 구분
+- [ ] UX-C2. Task 상태/진행률/속도/ETA/저장 위치 정보 밀도 개선
+- [ ] UX-C3. Queue 대기 순서와 취소 액션의 가시성 개선
+- [ ] UX-C4. Toolchain 경고와 다운로드 오류 메시지의 우선순위 정리
+
+#### Phase 6-UX-D — Settings / Feedback / Accessibility
+
+- [ ] UX-D1. Settings Drawer의 섹션 구조와 설명 문구 간결화
+- [ ] UX-D2. 저장/취소/폴더 선택 액션의 상태 피드백 통일
+- [ ] UX-D3. 키보드 포커스, 버튼 상태, 텍스트 대비 등 기본 접근성 점검
+- [ ] UX-D4. 전체 UI에서 버튼/Tag/Alert/Empty/Skeleton 표현 일관성 점검
+
+#### Phase 6-UX 원칙
+
+- 기존 API, Queue, Persistence 동작을 변경하지 않고 화면 정보 구조와 상호작용을 우선 개선한다.
+- 기능 추가가 필요한 UX 개선은 현재 항목에 임의로 포함하지 않고 별도 Task로 기록한다.
+- 현재의 React 19 + Ant Design v5 + Tailwind v4 조합을 유지하고 새로운 UI 프레임워크를 추가하지 않는다.
+- 기존 컴포넌트를 우선 재사용하며 요청과 관계없는 대규모 리팩터링은 하지 않는다.
+- Desktop Windows 앱을 1차 기준으로 하되 최소 창 크기 960×640에서도 주요 액션이 가려지지 않도록 한다.
+- 사용자에게 불필요한 Phase/개발 상태 문구는 제품 UI에서 제거하고 개발 진행 상태는 DEVELOPMENT_PLAN에서만 관리한다.
+
+## Phase 7 — Windows 패키징
 
 - [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용
 - [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용
