@@ -227,10 +227,39 @@ https://chzzk.naver.com/{channelId}
 
 ### Phase 2-C — 상태 연결 및 안정화
 
-- [ ] VOD-5. 비공식 API 응답 변경 및 UI 오류 상태/재시도 처리
-- [ ] VOD-2C-1. 채널 전환 시 VOD 상태 초기화
-- [ ] VOD-2C-2. 페이지 병합 시 videoNo 기준 중복 제거
-- [ ] VOD-2C-3. Phase 3 다운로드에 전달할 선택 VOD 상태 확정
+- [ ] VOD-5. 비공식 API 응답 변경 및 UI 오류 상태/재시도 처리 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-1. 채널 전환 시 VOD 상태 초기화 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-2. 페이지 병합 시 videoNo 기준 중복 제거 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] VOD-2C-3. Phase 3 다운로드에 전달할 선택 VOD 상태 확정 — 구현 완료, 전체 프론트엔드 검증 대기
+
+#### Phase 2-C 구현 및 검증 현황
+
+구현 완료:
+
+- 초기 VOD 조회 실패와 추가 페이지 조회 실패 모두 오류 Alert에 `다시 시도` 액션 제공
+- 실패한 요청의 page/append 상태를 보존해 동일 요청 단위로 재시도
+- 요청 sequence를 사용해 채널 전환 또는 재요청 이후 늦게 도착한 이전 응답 무시
+- 채널 변경 시 선택 VOD 상태 초기화
+- 선택 채널 삭제 시 선택 채널 및 선택 VOD 상태 동시 초기화
+- 페이지 병합 시 `videoNo` 기준 Map 병합으로 중복 제거
+- VOD 카드에 명시적인 `다운로드 대상으로 선택` 액션과 선택 상태 표시
+- 선택 VOD 상태를 `App` 레벨로 승격해 Phase 3 다운로드 로직에서 직접 재사용할 수 있도록 구성
+
+검증 완료:
+
+- 시스템 TypeScript 5.8.3을 사용한 격리 프론트엔드 검사
+- 실제 React `useState<T>()` 형태를 반영한 최소 React/AntD 타입 스텁 환경에서 재검증
+- 변경된 `App.tsx`, `ChannelVideoList.tsx`, Video/Backend 타입 간 시그니처 일관성 확인
+- 채널 전환, 재시도, 중복 제거, 선택 VOD 상태 경로의 TypeScript 컴파일 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 프로젝트 의존성을 사용한 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 치지직 VOD API와 Wails UI 통합 동작
+
+위 전체 프론트엔드 검증이 완료되면 Phase 2-B의 VOD-3/VOD-4와 Phase 2-C 항목을 함께 완료 처리한다.
 
 ## Phase 3 — 단일 VOD 다운로드
 

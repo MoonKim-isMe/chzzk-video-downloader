@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Empty, Image, Skeleton, Space, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getChannelVideos } from '../../lib/backend';
 import type { Channel } from '../../types/channel';
@@ -11,6 +11,13 @@ const PAGE_SIZE = 24;
 
 interface ChannelVideoListProps {
   channel: Channel;
+  selectedVideoNo?: number;
+  onSelectVideo: (video: Video) => void;
+}
+
+interface FailedRequest {
+  page: number;
+  append: boolean;
 }
 
 const emptyResult = (): VideoListResult => ({
@@ -35,11 +42,28 @@ function formatDuration(seconds: number) {
   return [minutes, remainSeconds].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
-function VideoCard({ video }: { video: Video }) {
+function mergeVideos(current: Video[], incoming: Video[]) {
+  const byVideoNo = new Map<number, Video>();
+
+  current.forEach((video) => byVideoNo.set(video.videoNo, video));
+  incoming.forEach((video) => byVideoNo.set(video.videoNo, video));
+
+  return [...byVideoNo.values()];
+}
+
+interface VideoCardProps {
+  video: Video;
+  selected: boolean;
+  onSelect: (video: Video) => void;
+}
+
+function VideoCard({ video, selected, onSelect }: VideoCardProps) {
   return (
     <Card
       size="small"
-      className="h-full overflow-hidden border-slate-800 bg-slate-900/80"
+      className={`h-full overflow-hidden bg-slate-900/80 ${
+        selected ? 'border-emerald-500/70' : 'border-slate-800'
+      }`}
       styles={{ body: { padding: 12 } }}
     >
       <div className="overflow-hidden rounded-lg bg-slate-950">
@@ -62,6 +86,7 @@ function VideoCard({ video }: { video: Video }) {
           {video.videoType && <Tag>{video.videoType}</Tag>}
           {video.adult && <Tag color="red">성인</Tag>}
           {video.videoCategoryValue && <Tag color="blue">{video.videoCategoryValue}</Tag>}
+          {selected && <Tag color="green">선택됨</Tag>}
         </Space>
 
         <Title level={5} ellipsis={{ rows: 2 }} className="!mb-1 !mt-2 !text-slate-100">
@@ -80,64 +105,90 @@ function VideoCard({ video }: { video: Video }) {
             {video.tags.map((tag) => `#${tag}`).join(' ')}
           </Paragraph>
         )}
+
+        <Button
+          block
+          className="mt-3"
+          type={selected ? 'primary' : 'default'}
+          onClick={() => onSelect(video)}
+        >
+          {selected ? '선택됨' : '다운로드 대상으로 선택'}
+        </Button>
       </div>
     </Card>
   );
 }
 
-function ChannelVideoList({ channel }: ChannelVideoListProps) {
+function ChannelVideoList({
+  channel,
+  selectedVideoNo,
+  onSelectVideo,
+}: ChannelVideoListProps) {
   const [result, setResult] = useState<VideoListResult>(emptyResult);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [failedRequest, setFailedRequest] = useState<FailedRequest>();
+  const requestSequence = useRef(0);
+
+  const fetchPage = useCallback(
+    async (page: number, append: boolean) => {
+      const requestID = ++requestSequence.current;
+
+      append ? setLoadingMore(true) : setLoading(true);
+      setError('');
+      setFailedRequest(undefined);
+
+      try {
+        const next = await getChannelVideos(channel.channelId, page, PAGE_SIZE);
+        if (requestID !== requestSequence.current) {
+          return;
+        }
+
+        setResult((current) => ({
+          ...next,
+          videos: append ? mergeVideos(current.videos, next.videos) : mergeVideos([], next.videos),
+        }));
+      } catch (cause) {
+        if (requestID !== requestSequence.current) {
+          return;
+        }
+
+        setError(cause instanceof Error ? cause.message : String(cause));
+        setFailedRequest({ page, append });
+      } finally {
+        if (requestID === requestSequence.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [channel.channelId],
+  );
 
   useEffect(() => {
-    let active = true;
-
     setResult(emptyResult());
-    setLoading(true);
     setError('');
-
-    getChannelVideos(channel.channelId, 0, PAGE_SIZE)
-      .then((next) => {
-        if (active) {
-          setResult(next);
-        }
-      })
-      .catch((cause) => {
-        if (active) {
-          setError(cause instanceof Error ? cause.message : String(cause));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+    setFailedRequest(undefined);
+    void fetchPage(0, false);
 
     return () => {
-      active = false;
+      requestSequence.current += 1;
     };
-  }, [channel.channelId]);
+  }, [fetchPage]);
 
-  const loadMore = async () => {
+  const loadMore = () => {
     if (!result.hasNext || loadingMore) {
       return;
     }
+    void fetchPage(result.nextPage, true);
+  };
 
-    setLoadingMore(true);
-    setError('');
-    try {
-      const next = await getChannelVideos(channel.channelId, result.nextPage, PAGE_SIZE);
-      setResult((current) => ({
-        ...next,
-        videos: [...current.videos, ...next.videos],
-      }));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setLoadingMore(false);
+  const retry = () => {
+    if (!failedRequest) {
+      return;
     }
+    void fetchPage(failedRequest.page, failedRequest.append);
   };
 
   return (
@@ -151,7 +202,9 @@ function ChannelVideoList({ channel }: ChannelVideoListProps) {
             {channel.channelName}
           </Title>
           <Text className="!text-slate-400">
-            {loading ? 'VOD 목록을 불러오는 중입니다.' : `전체 ${countFormatter.format(result.totalCount)}개`}
+            {loading
+              ? 'VOD 목록을 불러오는 중입니다.'
+              : `전체 ${countFormatter.format(result.totalCount)}개 · ${countFormatter.format(result.videos.length)}개 불러옴`}
           </Text>
         </div>
         {!loading && result.totalPages > 0 && (
@@ -161,7 +214,19 @@ function ChannelVideoList({ channel }: ChannelVideoListProps) {
         )}
       </div>
 
-      {error && <Alert className="mb-4" type="error" showIcon message={error} />}
+      {error && (
+        <Alert
+          className="mb-4"
+          type="error"
+          showIcon
+          message={error}
+          action={
+            <Button size="small" onClick={retry}>
+              다시 시도
+            </Button>
+          }
+        />
+      )}
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -171,18 +236,23 @@ function ChannelVideoList({ channel }: ChannelVideoListProps) {
             </Card>
           ))}
         </div>
-      ) : result.videos.length === 0 ? (
+      ) : result.videos.length === 0 && !error ? (
         <Empty description="표시할 VOD가 없습니다." />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {result.videos.map((video) => (
-              <VideoCard key={video.videoNo} video={video} />
+              <VideoCard
+                key={video.videoNo}
+                video={video}
+                selected={selectedVideoNo === video.videoNo}
+                onSelect={onSelectVideo}
+              />
             ))}
           </div>
 
           {result.hasNext && (
-            <Button block className="mt-5" loading={loadingMore} onClick={loadMore}>
+            <Button block className="mt-5" loading={loadingMore} disabled={Boolean(error)} onClick={loadMore}>
               더 보기
             </Button>
           )}
