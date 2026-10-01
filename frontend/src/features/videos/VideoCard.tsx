@@ -50,12 +50,13 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
   return (
     <Card
       size="small"
-      className={`h-full overflow-hidden bg-slate-900/80 ${
+      className={`video-card h-full overflow-hidden bg-slate-900/80 ${
         active ? 'border-emerald-500/70' : 'border-slate-800'
       }`}
-      styles={{ body: { padding: 12 } }}
+      styles={{ body: { padding: 12, height: '100%' } }}
     >
-      <div className="video-thumbnail">
+      <div className="video-card-content">
+        <div className="video-thumbnail">
         {video.thumbnailImageUrl && !thumbnailFailed ? (
           <Image
             src={video.thumbnailImageUrl}
@@ -71,10 +72,10 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
             </Text>
           </div>
         )}
-      </div>
+        </div>
 
-      <div className="mt-3 min-w-0">
-        <Space size={6} wrap>
+        <div className="mt-3 min-w-0">
+          <Space size={6} wrap>
           {video.videoType && <Tag>{video.videoType}</Tag>}
           {video.adult && <Tag color="red">성인</Tag>}
           {video.videoCategoryValue && <Tag color="blue">{video.videoCategoryValue}</Tag>}
@@ -82,46 +83,51 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
           {downloadStatus === 'queued' && <Tag>다운로드 대기 중</Tag>}
         </Space>
 
-        <Title level={5} ellipsis={{ rows: 2 }} className="!mb-1 !mt-2 !text-slate-100">
-          {video.videoTitle}
-        </Title>
+          <Title
+            level={5}
+            ellipsis={{ rows: 2 }}
+            className="video-card-title !mb-1 !mt-2 !text-slate-100"
+          >
+            {video.videoTitle}
+          </Title>
 
-        {video.channel.channelName && (
-          <Text className="block !text-xs !text-slate-400">{video.channel.channelName}</Text>
-        )}
-        <Text className="mt-1 block !text-xs !text-slate-500">
-          {video.publishDate || '게시일 정보 없음'}
-        </Text>
-
-        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          <Text className="!text-slate-400">재생시간 {formatDuration(video.duration)}</Text>
-          <Text className="!text-slate-400">조회 {countFormatter.format(video.readCount)}</Text>
+          {video.channel.channelName && (
+            <Text className="block !text-xs !text-slate-400">{video.channel.channelName}</Text>
+          )}
+          <Text className="mt-1 block !text-xs !text-slate-500">
+            {video.publishDate || '게시일 정보 없음'}
+          </Text>
         </div>
 
-        {video.tags.length > 0 && (
-          <div className="video-tag-chips">
+        <div className="video-card-footer">
+          <div className="video-card-metrics">
+            <Text className="!text-slate-400">재생시간 {formatDuration(video.duration)}</Text>
+            <Text className="!text-slate-400">조회 {countFormatter.format(video.readCount)}</Text>
+          </div>
+
+          <div className="video-tag-chips" aria-label="VOD 태그">
             {video.tags.map((tag) => (
               <span key={tag} className="video-tag-chip">
                 #{tag}
               </span>
             ))}
           </div>
-        )}
 
-        <Button
-          block
-          className="video-card-action"
-          type={active ? 'default' : 'primary'}
-          disabled={active}
-          loading={queueing}
-          onClick={() => void handleQueue()}
-        >
-          {downloadStatus === 'running'
-            ? '다운로드 중'
-            : downloadStatus === 'queued'
-              ? '다운로드 대기 중'
-              : '다운로드 추가'}
-        </Button>
+          <Button
+            block
+            className="video-card-action"
+            type={active ? 'default' : 'primary'}
+            disabled={active}
+            loading={queueing}
+            onClick={() => void handleQueue()}
+          >
+            {downloadStatus === 'running'
+              ? '다운로드 중'
+              : downloadStatus === 'queued'
+                ? '다운로드 대기 중'
+                : '다운로드 추가'}
+          </Button>
+        </div>
       </div>
     </Card>
   );

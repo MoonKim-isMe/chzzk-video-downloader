@@ -448,7 +448,24 @@ select {
   gap: 12px;
 }
 
+.video-card > .ant-card-body {
+  height: 100%;
+}
+
+.video-card-content {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.video-card-title {
+  font-size: 14px !important;
+  line-height: 20px !important;
+}
+
 .video-thumbnail {
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 8px;
   background: #020617;
@@ -462,11 +479,34 @@ select {
   padding: 16px;
 }
 
-.video-tag-chips {
+.video-card-footer {
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.video-card-metrics {
   display: flex;
   flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.video-card-metrics .ant-typography {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.video-tag-chips {
+  display: flex;
+  min-height: 24px;
+  max-height: 24px;
+  flex-wrap: nowrap;
   gap: 6px;
   margin-top: 10px;
+  overflow: hidden;
 }
 
 .video-tag-chip {
