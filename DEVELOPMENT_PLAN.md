@@ -263,11 +263,71 @@ https://chzzk.naver.com/{channelId}
 
 ## Phase 3 — 단일 VOD 다운로드
 
-- [ ] DL-1. yt-dlp 실행 경로 및 프로세스 래퍼 구현
-- [ ] DL-2. 선택한 치지직 VOD 다운로드 구현
-- [ ] DL-3. ffmpeg/ffprobe 연동 기반 구성
-- [ ] DL-4. 다운로드 진행 데이터 수집 인터페이스 구현
-- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 구현
+### Phase 3-A — yt-dlp / ffmpeg 실행 기반
+
+- [x] DL-1. yt-dlp 실행 경로 및 프로세스 래퍼 구현
+- [x] DL-3. ffmpeg/ffprobe 연동 기반 구성
+- [x] DL-3A-1. yt-dlp / ffmpeg / ffprobe 탐색 및 버전 확인 구현
+- [x] DL-3A-2. CHZZK VOD URL과 기본 옵션을 yt-dlp 인자로 변환하는 Command Builder 구현
+- [x] DL-3A-3. stdout/stderr 라인 스트리밍 및 exit code 기반 ProcessError 구현
+- [x] DL-3A-4. Wails App에서 다운로드 Toolchain 상태 조회 기반 연결
+
+#### Phase 3-A 실행 기준
+
+도구 탐색 우선순위:
+
+1. `CHZZK_DOWNLOADER_TOOLS_DIR` 환경 변수
+2. 애플리케이션 실행 파일 옆 `tools` 디렉터리
+3. 애플리케이션 실행 파일과 같은 디렉터리
+4. 시스템 `PATH`
+
+기본 yt-dlp 명령 정책:
+
+- 사용자 전역 yt-dlp 설정의 영향을 받지 않도록 `--ignore-config` 사용
+- 단일 VOD만 대상으로 `--no-playlist` 사용
+- Windows 호환 파일명을 위해 `--windows-filenames` 사용
+- 기존 파일을 덮어쓰지 않도록 `--no-overwrites` 사용
+- 중단된 조각 다운로드 재개를 위해 `--continue` 사용
+- 출력 라인 단위 처리를 위해 `--newline`, `--color never` 사용
+- 기본 포맷 선택은 `bv*+ba/b`
+- 기본 파일명은 `%(title)s [%(id)s].%(ext)s`
+- ffmpeg / ffprobe가 같은 디렉터리에 있으면 `--ffmpeg-location`으로 해당 디렉터리를 전달
+- ffmpeg / ffprobe가 서로 다른 위치에 있다면 둘 모두 PATH에서 탐색된 경우만 허용
+
+#### Phase 3-A 검증 현황
+
+완료:
+
+- Phase 3-A와 동일한 `internal/downloader` 소스를 사용하는 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 모듈에서 `go test ./internal/downloader` 성공
+- 도구 탐색 우선순위 및 실행 가능 상태 판정 테스트
+- CHZZK VOD URL 검증/정규화와 기본 yt-dlp 인자 생성 테스트
+- ffmpeg / ffprobe 배치 조건 검증 테스트
+- stdout/stderr 라인 스트리밍 테스트
+- 비정상 프로세스 종료 시 exit code 및 stderr tail 보존 테스트
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 체크아웃 기반 `go test ./...`
+- 실제 설치된 yt-dlp / ffmpeg / ffprobe를 이용한 통합 실행
+- `wails build`
+
+실제 VOD 다운로드 시작, 진행률 파싱, 완료 파일 경로 확보는 Phase 3-B에서 구현한다.
+
+### Phase 3-B — 단일 다운로드 및 진행률
+
+- [ ] DL-2. 선택한 치지직 VOD 실제 다운로드 구현
+- [ ] DL-4. yt-dlp progress template 기반 진행률/속도/ETA 파싱
+- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 완성
+- [ ] DL-3B-1. context 기반 다운로드 취소 처리
+- [ ] DL-3B-2. 다운로드 완료 후 최종 파일 경로 확보
+
+### Phase 3-C — Wails / 프론트엔드 연결
+
+- [ ] DL-3C-1. StartDownload / CancelDownload Wails API 정의
+- [ ] DL-3C-2. Go → React 다운로드 상태 이벤트 전달
+- [ ] DL-3C-3. Phase 2 선택 VOD를 다운로드 시작 동작에 연결
+- [ ] DL-3C-4. Phase 4 Download Manager에서 재사용할 다운로드 상태 모델 확정
 
 ## Phase 4 — 다운로드 탭 및 Download Manager
 

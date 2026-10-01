@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
 )
 
 const (
@@ -12,9 +13,10 @@ const (
 )
 
 type App struct {
-	ctx          context.Context
-	chzzkClient  *chzzk.Client
-	channelStore *chzzk.Store
+	ctx             context.Context
+	chzzkClient     *chzzk.Client
+	channelStore    *chzzk.Store
+	downloadManager *downloader.Manager
 }
 
 type AppInfo struct {
@@ -25,8 +27,9 @@ type AppInfo struct {
 
 func NewApp() *App {
 	return &App{
-		chzzkClient:  chzzk.NewClient(),
-		channelStore: chzzk.NewStore(),
+		chzzkClient:     chzzk.NewClient(),
+		channelStore:    chzzk.NewStore(),
+		downloadManager: downloader.NewManager(),
 	}
 }
 
@@ -75,4 +78,8 @@ func (a *App) RemoveSavedChannel(channelID string) []chzzk.Channel {
 
 func (a *App) GetChannelVideos(channelID string, page, size int) (chzzk.VideoListResult, error) {
 	return a.chzzkClient.GetChannelVideos(a.appContext(), channelID, page, size)
+}
+
+func (a *App) GetDownloadToolchainStatus() downloader.ToolchainStatus {
+	return a.downloadManager.ToolchainStatus(a.appContext())
 }

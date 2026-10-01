@@ -2,7 +2,7 @@
 
 치지직 채널을 검색하거나 채널 URL을 직접 입력하고, 채널의 VOD를 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 2-C — 상태 연결 및 안정화**까지 구현 중입니다.
+현재는 **Phase 3-A — yt-dlp / ffmpeg 실행 기반**까지 구현 중입니다.
 
 ## 현재 구현 범위
 
@@ -24,6 +24,9 @@
 - page 병합 시 `videoNo` 기준 중복 제거
 - 채널 전환 시 이전 VOD/선택 상태 분리
 - Phase 3에서 사용할 다운로드 대상 VOD 선택 상태 관리
+- yt-dlp / ffmpeg / ffprobe 실행 파일 탐색 및 버전 확인
+- yt-dlp 단일 VOD 기본 명령 생성
+- stdout/stderr 라인 스트리밍 및 exit code 오류 처리
 
 Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 앱 재실행 후에도 유지되는 영속 저장은 이후 SQLite Phase에서 추가합니다.
 
@@ -38,7 +41,7 @@ Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 
 - Ant Design v5
 - Yarn 4
 
-향후 yt-dlp, ffmpeg, ffprobe 및 SQLite를 연동합니다.
+yt-dlp, ffmpeg, ffprobe 실행 기반을 구성했으며 이후 SQLite를 연동합니다.
 
 ## 개발 환경
 
@@ -51,6 +54,8 @@ Windows 10/11을 기본 개발 및 배포 환경으로 합니다.
 - Corepack / Yarn
 - Wails CLI v2.15.0
 - Microsoft WebView2 Runtime
+- yt-dlp
+- ffmpeg / ffprobe
 
 Wails CLI 설치:
 
@@ -72,6 +77,24 @@ yarn install
 cd ..
 ```
 
+## 다운로드 도구 탐색
+
+Phase 3-A부터 앱은 `yt-dlp`, `ffmpeg`, `ffprobe` 실행 파일을 다음 순서로 찾습니다.
+
+1. `CHZZK_DOWNLOADER_TOOLS_DIR` 환경 변수로 지정한 디렉터리
+2. 앱 실행 파일 옆 `tools` 디렉터리
+3. 앱 실행 파일과 같은 디렉터리
+4. 시스템 `PATH`
+
+개발 환경에서는 PATH에 등록하거나 다음처럼 도구 디렉터리를 지정할 수 있습니다.
+
+```powershell
+$env:CHZZK_DOWNLOADER_TOOLS_DIR = "C:\\Tools\\chzzk-video-downloader"
+wails dev
+```
+
+최종 배포 시 도구를 어떤 위치에 포함하고 업데이트할지는 Windows 패키징 Phase에서 확정합니다.
+
 ## 개발 실행
 
 ```powershell
@@ -82,10 +105,11 @@ Wails가 Vite 개발 서버와 Go 애플리케이션을 함께 실행합니다.
 
 ## 검증
 
-치지직 API 계층 단위 테스트:
+치지직 API 및 다운로드 실행 계층 단위 테스트:
 
 ```powershell
 go test ./internal/chzzk
+go test ./internal/downloader
 ```
 
 프론트엔드 타입 검사:
@@ -105,7 +129,7 @@ Go 포맷:
 
 ```powershell
 cd ..
-gofmt -w app.go main.go internal/chzzk/*.go
+gofmt -w app.go main.go internal/chzzk/*.go internal/downloader/*.go
 ```
 
 전체 Wails 빌드:
