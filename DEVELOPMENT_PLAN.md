@@ -263,11 +263,146 @@ https://chzzk.naver.com/{channelId}
 
 ## Phase 3 — 단일 VOD 다운로드
 
-- [ ] DL-1. yt-dlp 실행 경로 및 프로세스 래퍼 구현
-- [ ] DL-2. 선택한 치지직 VOD 다운로드 구현
-- [ ] DL-3. ffmpeg/ffprobe 연동 기반 구성
-- [ ] DL-4. 다운로드 진행 데이터 수집 인터페이스 구현
-- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 구현
+### Phase 3-A — yt-dlp / ffmpeg 실행 기반
+
+- [x] DL-1. yt-dlp 실행 경로 및 프로세스 래퍼 구현
+- [x] DL-3. ffmpeg/ffprobe 연동 기반 구성
+- [x] DL-3A-1. yt-dlp / ffmpeg / ffprobe 탐색 및 버전 확인 구현
+- [x] DL-3A-2. CHZZK VOD URL과 기본 옵션을 yt-dlp 인자로 변환하는 Command Builder 구현
+- [x] DL-3A-3. stdout/stderr 라인 스트리밍 및 exit code 기반 ProcessError 구현
+- [x] DL-3A-4. Wails App에서 다운로드 Toolchain 상태 조회 기반 연결
+
+#### Phase 3-A 실행 기준
+
+도구 탐색 우선순위:
+
+1. `CHZZK_DOWNLOADER_TOOLS_DIR` 환경 변수
+2. 애플리케이션 실행 파일 옆 `tools` 디렉터리
+3. 애플리케이션 실행 파일과 같은 디렉터리
+4. 시스템 `PATH`
+
+기본 yt-dlp 명령 정책:
+
+- 사용자 전역 yt-dlp 설정의 영향을 받지 않도록 `--ignore-config` 사용
+- 단일 VOD만 대상으로 `--no-playlist` 사용
+- Windows 호환 파일명을 위해 `--windows-filenames` 사용
+- 기존 파일을 덮어쓰지 않도록 `--no-overwrites` 사용
+- 중단된 조각 다운로드 재개를 위해 `--continue` 사용
+- 출력 라인 단위 처리를 위해 `--newline`, `--color never` 사용
+- 기본 포맷 선택은 `bv*+ba/b`
+- 기본 파일명은 `%(title)s [%(id)s].%(ext)s`
+- ffmpeg / ffprobe가 같은 디렉터리에 있으면 `--ffmpeg-location`으로 해당 디렉터리를 전달
+- ffmpeg / ffprobe가 서로 다른 위치에 있다면 둘 모두 PATH에서 탐색된 경우만 허용
+
+#### Phase 3-A 검증 현황
+
+완료:
+
+- Phase 3-A와 동일한 `internal/downloader` 소스를 사용하는 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 모듈에서 `go test ./internal/downloader` 성공
+- 도구 탐색 우선순위 및 실행 가능 상태 판정 테스트
+- CHZZK VOD URL 검증/정규화와 기본 yt-dlp 인자 생성 테스트
+- ffmpeg / ffprobe 배치 조건 검증 테스트
+- stdout/stderr 라인 스트리밍 테스트
+- 비정상 프로세스 종료 시 exit code 및 stderr tail 보존 테스트
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Repository 전체 체크아웃 기반 `go test ./...`
+- 실제 설치된 yt-dlp / ffmpeg / ffprobe를 이용한 통합 실행
+- `wails build`
+
+실제 VOD 다운로드 시작, 진행률 파싱, 완료 파일 경로 확보는 Phase 3-B에서 구현한다.
+
+### Phase 3-B — 단일 다운로드 및 진행률
+
+- [ ] DL-2. 선택한 치지직 VOD 실제 다운로드 구현 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-4. yt-dlp progress template 기반 진행률/속도/ETA 파싱 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-5. 다운로드 오류 및 프로세스 종료 처리 완성 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-3B-1. context 기반 다운로드 취소 처리 — 구현 완료, 실 도구 통합 검증 대기
+- [ ] DL-3B-2. 다운로드 완료 후 최종 파일 경로 확보 — 구현 완료, 실 도구 통합 검증 대기
+
+#### Phase 3-B 구현 기준
+
+- `Manager.Download`이 Prepare → yt-dlp 실행 → 진행률 파싱 → 최종 파일 경로 반환 흐름을 담당한다.
+- `--progress-template`에 앱 전용 마커를 붙여 status, downloaded bytes, total bytes, estimated total, speed, ETA, percent를 안정적으로 구분한다.
+- `--print after_move:filepath`에 별도 마커를 붙여 ffmpeg 병합/후처리 후 실제 최종 파일 경로를 확보한다.
+- `--print`의 quiet 동작과 무관하게 진행률을 유지하도록 `--progress`를 명시하고, 실제 다운로드 보장을 위해 `--no-simulate`를 명시한다.
+- 전체 크기가 없고 estimated total만 있으면 이를 `TotalBytes`로 사용하고 `TotalBytesEstimated=true`로 구분한다.
+- 성공 종료인데 최종 파일 경로를 얻지 못한 경우 완료로 간주하지 않고 오류를 반환한다.
+- context 취소/timeout은 `errors.Is`로 식별 가능한 상태를 유지한다.
+- 프로세스 오류 메시지에서 앱 내부 progress/file marker는 제거하고 실제 stderr 오류만 보존한다.
+
+#### Phase 3-B 검증 현황
+
+완료:
+
+- 실제 Phase 3-A Resolver/Runner 소스와 Phase 3-B 코드를 합친 격리 Go 모듈에서 `gofmt` 수행
+- 동일 격리 모듈에서 `go test ./internal/downloader` 성공
+- 동일 격리 모듈에서 `go vet ./internal/downloader` 성공
+- progress template 인자 및 after_move filepath 인자 생성 테스트
+- 실제/추정 전체 크기 fallback 진행률 파싱 테스트
+- stdout 기반 진행률 + 최종 파일 경로 수집 테스트
+- context timeout 기반 다운로드 취소 테스트
+- 프로세스 실패 시 progress marker 제거 및 실제 stderr 보존 테스트
+- 최종 파일 경로가 없는 성공 종료를 오류로 처리하는 테스트
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 설치된 yt-dlp를 이용한 CHZZK VOD 다운로드
+- 실제 ffmpeg 영상/음성 병합 후 final filepath 확인
+- Windows에서 장시간 다운로드 context 취소 동작
+- 실제 Repository 전체 `go test ./...`
+- `wails build`
+
+위 실제 도구 통합 검증까지 완료되면 Phase 3-B 항목을 완료 처리한다.
+
+### Phase 3-C — Wails / 프론트엔드 연결
+
+- [ ] DL-3C-1. StartDownload / CancelDownload Wails API 정의 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-2. Go → React 다운로드 상태 이벤트 전달 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-3. Phase 2 선택 VOD를 다운로드 시작 동작에 연결 — 구현 완료, Wails 통합 검증 대기
+- [ ] DL-3C-4. Phase 4 Download Manager에서 재사용할 다운로드 상태 모델 확정 — 구현 완료, Wails 통합 검증 대기
+
+#### Phase 3-C 구현 기준
+
+- Phase 3에서는 동시에 하나의 VOD만 다운로드하며 Queue/동시 다운로드 정책은 Phase 4에서 확장한다.
+- Wails `StartDownload`은 즉시 Task 상태를 반환하고 실제 yt-dlp 다운로드는 goroutine에서 실행한다.
+- Wails `CancelDownload(taskId)`는 활성 작업의 context를 취소한다.
+- Go → React 상태 전달은 `download:state` 이벤트 하나로 통일한다.
+- 이벤트 payload는 `DownloadTask` 전체 상태를 전달해 별도의 progress/completed/error 이벤트 모델을 만들지 않는다.
+- `DownloadTask`에는 taskId, videoNo, 제목, 채널명, 썸네일, URL, 출력 경로, 상태, 진행률, 최종 파일 경로, 오류, 시작/종료 시각을 포함한다.
+- 앱 종료 시 `OnShutdown`에서 활성 다운로드 context를 취소하고 종료 중에는 프론트 이벤트를 추가 전송하지 않는다.
+- Settings가 구현되기 전 기본 저장 위치는 사용자 홈의 `Downloads/CHZZK Video Downloader`를 사용한다.
+- 다운로드 시작 전 yt-dlp / ffmpeg / ffprobe 사용 가능 여부를 확인한다.
+- Phase 3에서는 활성 다운로드가 있으면 두 번째 다운로드 시작을 거부하며 Phase 4에서 Queue로 교체한다.
+
+#### Phase 3-C 검증 현황
+
+완료:
+
+- Wails runtime v2.15 문서 기준 `runtime.EventsEmit` / `window.runtime.EventsOn` API 확인
+- Wails `OnShutdown func(context.Context)` lifecycle signature 확인
+- Wails runtime을 최소 stub으로 대체한 격리 Go 모듈에서 App 다운로드 제어 코드 `go test ./...` 성공
+- 동일 격리 Go 모듈에서 `go vet ./...` 성공
+- StartDownload → progress → completed 상태 이벤트 단위 테스트
+- 활성 작업 중 두 번째 다운로드 시작 거부 테스트
+- CancelDownload → context 취소 경로 단위 테스트
+- cancelled 최종 상태 이벤트 단위 테스트
+- StartDownloadRequest validation / 기본 다운로드 경로 테스트
+- Phase 3-C 프론트 연결 구조를 재현한 TypeScript 5.8.3 격리 fixture에서 `tsc --noEmit` 성공
+- StartDownload / CancelDownload / Toolchain / DownloadTask TypeScript 시그니처 확인
+- Wails EventsOn 구독과 DownloadTask 상태 갱신 타입 확인
+
+현재 실행 환경 제약으로 검증 대기:
+
+- 실제 Wails generated binding을 사용하는 `yarn typecheck`
+- `yarn build`
+- `wails build`
+- 실제 Wails 창에서 Go EventsEmit → React EventsOn 전달
+- 실제 yt-dlp/ffmpeg 다운로드 시작·진행·취소 UI 통합 동작
+
+위 Wails/실 도구 통합 검증까지 완료되면 Phase 3-B/C의 검증 대기 항목을 완료 처리한다.
 
 ## Phase 4 — 다운로드 탭 및 Download Manager
 
