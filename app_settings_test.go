@@ -25,7 +25,8 @@ func TestGetSettingsReturnsDefaults(t *testing.T) {
 	}
 	if value.Resolution != appsettings.ResolutionBest ||
 		value.OutputFormat != appsettings.OutputFormatMP4 ||
-		value.MaxConcurrentDownloads != 1 {
+		value.MaxConcurrentDownloads != 1 ||
+		value.Theme != appsettings.ThemeDark {
 		t.Fatalf("unexpected settings: %#v", value)
 	}
 }
@@ -43,6 +44,7 @@ func TestUpdateSettingsStoresNormalizedValue(t *testing.T) {
 		Resolution:             appsettings.Resolution(" 1440P "),
 		OutputFormat:           appsettings.OutputFormat(" WEBM "),
 		MaxConcurrentDownloads: 3,
+		Theme:                  appsettings.ThemeLight,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +52,8 @@ func TestUpdateSettingsStoresNormalizedValue(t *testing.T) {
 
 	if next.Resolution != appsettings.Resolution1440p ||
 		next.OutputFormat != appsettings.OutputFormatWebM ||
-		next.MaxConcurrentDownloads != 3 {
+		next.MaxConcurrentDownloads != 3 ||
+		next.Theme != appsettings.ThemeLight {
 		t.Fatalf("unexpected normalized settings: %#v", next)
 	}
 

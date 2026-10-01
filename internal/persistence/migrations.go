@@ -61,6 +61,42 @@ var migrations = []migration{
 			)`,
 		},
 	},
+	{
+		version: 2,
+		statements: []string{
+			`ALTER TABLE app_settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'`,
+			`UPDATE app_settings
+				SET schema_version = 2,
+					theme = CASE
+						WHEN theme IN ('light', 'dark') THEN theme
+						ELSE 'dark'
+					END
+				WHERE id = 1`,
+		},
+	},
+	{
+		version: 3,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN error_code TEXT NOT NULL DEFAULT ''`,
+			`UPDATE download_tasks
+				SET error_code = 'partial_data_conflict'
+				WHERE status = 'failed'
+					AND error IN (
+						'이전 다운로드의 임시 데이터와 충돌했습니다. 다운로드를 처음부터 다시 시도해 주세요.',
+						'이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.'
+					)`,
+			`UPDATE download_tasks
+				SET error_code = 'authentication_required'
+				WHERE status = 'failed'
+					AND error = '로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.'`,
+		},
+	},
+	{
+		version: 4,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN log_path TEXT NOT NULL DEFAULT ''`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

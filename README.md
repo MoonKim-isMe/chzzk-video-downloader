@@ -188,7 +188,7 @@ Phase 4-A 기준으로 Phase 3의 단일 다운로드 엔진을 FIFO Download Qu
 - 다운로드 중에는 취소할 수 있습니다.
 - 완료 시 ffmpeg 후처리까지 끝난 최종 파일 경로를 표시합니다.
 - Phase 4-A부터 여러 VOD를 FIFO Queue에 등록할 수 있으며 실제 동시 실행은 1개로 유지합니다.
-- queued/running 작업을 개별 취소할 수 있으며 다운로드 탭에서 전체 Task 상태를 실시간으로 확인합니다.
+- queued/running 작업을 개별 취소할 수 있습니다. 취소가 승인되면 목록에서 즉시 제거되며, 완료 작업은 폴더 열기와 목록 삭제를 지원합니다.
 
 ## Phase 4 Scheduler 기준
 
@@ -250,7 +250,7 @@ Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
 - 동시 다운로드 수를 낮춰도 현재 실행 중인 작업은 종료하지 않습니다.
 - 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
 
-Phase 6 설정 영속화는 `internal/settings.StorageRecord` v1을 기준으로 구현합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`이며 복원 시 현재 Settings Validation을 다시 수행합니다.
+설정 영속화는 `internal/settings.StorageRecord` v2를 기준으로 합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`, `theme`이며 v1 설정은 Dark 테마로 호환 복원합니다.
 
 ## Phase 6-P SQLite Persistence
 
@@ -268,9 +268,9 @@ SQLite에는 다음 데이터를 저장합니다.
 - 다운로드 작업/진행 상태/완료 이력
 - Settings
 
-앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. 완료/실패/취소 이력은 다운로드 탭에 계속 표시됩니다.
+앱 시작 시 저장 채널과 Settings를 복원하며, 이전 실행에서 `queued` 또는 `running` 상태로 남은 다운로드는 실제 프로세스가 사라졌으므로 `cancelled` 상태로 복구합니다. cancelled 항목은 다운로드 탭에서 숨기고, 완료/실패 이력만 표시합니다.
 
-Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v1`을 단일 row로 저장하고 복원 시 현재 Validation을 다시 수행합니다.
+Schema는 `schema_migrations`와 migration version으로 관리합니다. Settings는 `StorageRecord v2`를 단일 row로 저장하고 Light/Dark 테마까지 복원하며 현재 Validation을 다시 수행합니다.
 
 SQLite driver는 Windows에서 CGO 없이 사용할 수 있는 `modernc.org/sqlite`를 사용합니다. 현재 실행 환경은 외부 Go module 다운로드가 차단되어 실제 driver 기반 전체 테스트와 `go mod tidy`는 Windows/네트워크 가능 환경에서 추가 확인이 필요합니다.
 
@@ -294,7 +294,7 @@ Windows 패키징과 yt-dlp/ffmpeg/ffprobe 배포 전략은 Phase 7로 이동했
 https://chzzk.naver.com/video/{videoNo}
 ```
 
-URL을 확인하면 videoNo 기반으로 VOD 메타데이터 한 건을 조회하고, 해당 영상 카드를 바로 Download Queue에 추가할 수 있습니다. 채널 검색은 별도로 채널 사용자를 검색하고 선택한 채널의 VOD 목록을 표시합니다.
+URL 입력 영역은 상단에 고정되고, 조회된 단일 VOD는 **좌측 16:9 썸네일 / 우측 영상 정보**의 상세 레이아웃으로 표시합니다. 우측에는 제목, 채널, 게시일, 재생시간, 조회수, 태그와 다운로드 추가 CTA를 표시합니다. 결과 영역은 독립 스크롤되며 900px 이하에서는 썸네일 위 / 영상 정보 아래의 1열로 전환됩니다.
 
 
 ## Windows 빌드 및 설치 패키지의 다운로드 도구
@@ -320,3 +320,56 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer 
 다운로드 도구가 Go executable에 embed되므로 Wails NSIS installer가 별도의 yt-dlp/ffmpeg 설치 프로그램을 실행할 필요가 없습니다. 설치 후 첫 Toolchain 확인 시 embedded 도구가 LocalAppData에 자동 materialize됩니다.
 
 현재 bundle 대상은 Windows amd64입니다. Windows arm64 bundle은 별도 패키징 작업으로 취급합니다. Third-party 도구 출처와 라이선스 안내는 `THIRD_PARTY_NOTICES.md`를 참고합니다.
+
+
+## Phase 6 UX — Shell / Channel Search / Theme
+
+상단 헤더는 제품 UI 기준으로 다음 3영역만 표시합니다.
+
+```text
+[CHZZK Video Downloader] [채널 검색 | URL 직접 입력 | 다운로드] [설정 아이콘]
+```
+
+기존 본문 Tabs와 Phase/Wails 개발 표시는 제거했습니다.
+
+채널 검색 화면은 헤더 아래 남은 높이를 사용하는 2열 Workspace로 구성합니다.
+
+- 좌측: `검색 / 북마크` 내부 탭
+  - 검색 탭: 검색 입력은 고정하고 검색 결과 목록만 스크롤
+  - 북마크 탭: 북마크 목록만 스크롤
+- 우측: 선택한 채널의 VOD 전용 패널
+  - 채널/VOD 요약 헤더는 고정
+  - VOD 카드 목록만 독립 스크롤
+
+앱 본문 자체가 중첩 스크롤을 만들지 않도록 채널 검색 Workspace에서는 좌·우 패널이 각각 스크롤을 담당합니다.
+
+Settings Drawer의 **화면 > 테마**에서 `라이트 / 다크`를 선택할 수 있습니다. 기본값은 Dark이며 선택값은 SQLite에 저장되어 앱 재실행 후에도 유지됩니다. 기존 Settings DB는 migration v2에서 Dark 테마로 자동 승격됩니다.
+
+
+## Download Manager UX
+
+다운로드 탭은 헤더 아래 남은 높이를 사용하는 단일 Workspace입니다.
+
+- 상단: 기능 중심의 다운로드 준비 상태 + 진행/완료/실패 compact 요약
+- 본문: `진행 중 / 완료 / 실패` 섹션
+- 진행 중: 진행률, 다운로드 크기, 속도, 남은 시간, 취소
+- 완료: 결과 경로, `폴더 열기`, `목록에서 삭제`
+- 실패: 오류 내용을 compact하게 표시
+
+취소 요청이 승인되면 Task는 즉시 cancelled 상태로 전환되고 UI 목록에서 제거됩니다. 실제 다운로드 프로세스가 완전히 종료되기 전까지 Scheduler slot은 유지하므로 동시 다운로드 제한은 깨지지 않습니다.
+
+`목록에서 삭제`는 다운로드된 파일을 삭제하지 않고 앱의 이력만 제거합니다. 다운로드 도구 상태 메시지는 사용자에게 외부 프로그램명을 직접 노출하지 않고 영상 다운로드/파일 저장 기능의 사용 가능 여부로 표시합니다.
+
+
+## 다운로드 오류 처리
+
+사용자에게 실행 도구의 raw stderr를 그대로 노출하지 않고 주요 다운로드 실패 원인을 구분합니다.
+
+- 로그인/연령 제한/접근 권한이 필요한 콘텐츠에서 HTTP 401 또는 Unauthorized가 발생하면:
+  - `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`
+- 취소 후 남은 부분 다운로드 상태와 fragment가 충돌하는 오류가 감지되면:
+  - `이전 다운로드의 임시 데이터와 충돌했습니다. 다운로드를 처음부터 다시 시도해 주세요.`
+
+취소 후 같은 VOD를 다시 다운로드할 때 이전 fragment를 이어받지 않도록 다운로드 명령에 `--no-continue`와 `--no-keep-fragments`를 사용합니다. 따라서 취소 후 재시도는 부분 파일을 이어받는 대신 처음부터 새로 다운로드합니다.
+
+실패한 다운로드 항목은 다운로드 탭에서 `목록에서 삭제`로 이력만 제거할 수 있으며, 실제 파일은 삭제하지 않습니다.

@@ -29,17 +29,27 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if spec.Path != toolchain.YTDLP.Path {
 		t.Fatalf("unexpected path: %s", spec.Path)
 	}
+	expectedTempDir, err := TemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, expected := range []string{
 		"--ignore-config",
 		"--no-simulate",
 		"--progress",
 		"--newline",
+		"--continue",
+		"--no-keep-fragments",
 		"--progress-template",
 		"download:" + progressTemplate,
 		"--print",
 		"after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format",
 		DefaultFormatSelector,
+		"--paths",
+		filepath.Join(dir, "downloads"),
+		"temp:" + expectedTempDir,
 		"--ffmpeg-location",
 		dir,
 		"https://chzzk.naver.com/video/12345",
@@ -122,5 +132,26 @@ func TestBuildDownloadCommandRejectsSplitToolDirectories(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected ffmpeg location error")
+	}
+}
+
+
+func TestBuildDownloadCommandDoesNotResumeCancelledPartialData(t *testing.T) {
+	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/12345",
+		OutputDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(spec.Args, "--no-continue") {
+		t.Fatalf("retry safety flag missing: %#v", spec.Args)
+	}
+	if slices.Contains(spec.Args, "--continue") {
+		t.Fatalf("partial resume must be disabled after cancellation: %#v", spec.Args)
+	}
+	if !slices.Contains(spec.Args, "--no-keep-fragments") {
+		t.Fatalf("fragment cleanup flag missing: %#v", spec.Args)
 	}
 }

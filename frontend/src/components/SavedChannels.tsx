@@ -1,6 +1,7 @@
-import { Avatar, Button, Empty, List, Space, Tag, Typography } from 'antd';
+import { Avatar, Empty, List, Tag, Tooltip, Typography } from 'antd';
 
 import type { Channel } from '../types/channel';
+import { StarIcon } from './ChannelCard';
 
 const { Text } = Typography;
 
@@ -13,52 +14,68 @@ interface SavedChannelsProps {
 
 function SavedChannels({ channels, selectedChannelId, onSelect, onRemove }: SavedChannelsProps) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="mb-3">
-        <Text strong className="!text-slate-100">
-          저장 채널
-        </Text>
-        <Text className="ml-2 !text-slate-500">{channels.length}</Text>
+    <div className="channel-bookmarks-view">
+      <div className="channel-sidebar-summary">
+        <Text strong>북마크 채널</Text>
+        <Text className="app-muted !text-xs">{channels.length}개</Text>
       </div>
 
-      {channels.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="저장된 채널이 없습니다." />
-      ) : (
-        <List
-          dataSource={channels}
-          split={false}
-          renderItem={(channel) => {
-            const selected = selectedChannelId === channel.channelId;
-            return (
-              <List.Item className="!px-0 !py-2">
-                <div className="w-full rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar src={channel.channelImageUrl || undefined}>
-                      {channel.channelName.slice(0, 1)}
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <Space size={6}>
-                        <Text ellipsis className="!max-w-36 !text-slate-200">
+      <div className="channel-sidebar-scroll">
+        {channels.length === 0 ? (
+          <Empty
+            className="channel-sidebar-empty"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="북마크한 채널이 없습니다."
+          />
+        ) : (
+          <List
+            className="bookmark-list"
+            dataSource={channels}
+            split={false}
+            renderItem={(channel) => {
+              const selected = selectedChannelId === channel.channelId;
+              return (
+                <List.Item className="!border-0 !p-0">
+                  <div className={`bookmark-item ${selected ? 'is-selected' : ''}`}>
+                    <button
+                      type="button"
+                      className="bookmark-channel-main"
+                      onClick={() => onSelect(channel)}
+                    >
+                      <Avatar size={40} src={channel.channelImageUrl || undefined}>
+                        {channel.channelName.slice(0, 1)}
+                      </Avatar>
+                      <span className="min-w-0 flex-1 text-left">
+                        <Text ellipsis className="block !font-medium">
                           {channel.channelName}
                         </Text>
-                        {selected && <Tag color="green">선택됨</Tag>}
-                      </Space>
-                    </div>
+                        <Text className="app-muted block !text-xs">
+                          {selected ? '선택된 채널' : 'VOD 보기'}
+                        </Text>
+                      </span>
+                      {selected && <Tag color="green">선택됨</Tag>}
+                    </button>
+                    <Tooltip title="북마크 해제" placement="left">
+                      <button
+                        type="button"
+                        aria-label="북마크 해제"
+                        aria-pressed="true"
+                        className="channel-favorite-button bookmark-favorite-button is-active"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRemove(channel.channelId);
+                        }}
+                      >
+                        <StarIcon filled />
+                      </button>
+                    </Tooltip>
                   </div>
-                  <Space className="mt-3 w-full justify-end">
-                    <Button size="small" type={selected ? 'primary' : 'default'} onClick={() => onSelect(channel)}>
-                      선택
-                    </Button>
-                    <Button size="small" danger onClick={() => onRemove(channel.channelId)}>
-                      삭제
-                    </Button>
-                  </Space>
-                </div>
-              </List.Item>
-            );
-          }}
-        />
-      )}
+                </List.Item>
+              );
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

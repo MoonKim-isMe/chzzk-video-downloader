@@ -106,7 +106,58 @@ func init() {
 		fmt.Fprintln(os.Stderr, progressPrefix+"downloading\t500\t1000\tNA\t250\t2\t50.0%")
 		fmt.Fprintln(os.Stderr, "ERROR: actual failure")
 		os.Exit(7)
+	case "unauthorized":
+		fmt.Fprintln(os.Stderr, "ERROR: [chzzk:video] Failed to download MPD manifest: HTTP Error 401: Unauthorized")
+		os.Exit(1)
+	case "partial-conflict":
+		fmt.Fprintln(os.Stderr, "ERROR: Initialization fragment found after media fragments, unable to download")
+		os.Exit(1)
 	default:
 		os.Exit(2)
+	}
+}
+
+
+func TestRunPreparedDownloadClassifiesAuthenticationRequired(t *testing.T) {
+	manager := &Manager{runner: NewRunner()}
+	_, err := manager.runPreparedDownload(
+		context.Background(),
+		downloadHelperCommand("unauthorized"),
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected authentication error")
+	}
+
+	kind, ok := downloadFailureKind(err)
+	if !ok || kind != DownloadFailureAuthenticationRequired {
+		t.Fatalf("unexpected failure kind: %q %v", kind, err)
+	}
+	if got := err.Error(); got != "로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다." {
+		t.Fatalf("unexpected user message: %q", got)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "yt-dlp") ||
+		strings.Contains(strings.ToLower(err.Error()), "401") {
+		t.Fatalf("internal error leaked to user: %v", err)
+	}
+}
+
+func TestRunPreparedDownloadClassifiesPartialDataConflict(t *testing.T) {
+	manager := &Manager{runner: NewRunner()}
+	_, err := manager.runPreparedDownload(
+		context.Background(),
+		downloadHelperCommand("partial-conflict"),
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected partial data conflict")
+	}
+
+	kind, ok := downloadFailureKind(err)
+	if !ok || kind != DownloadFailurePartialDataConflict {
+		t.Fatalf("unexpected failure kind: %q %v", kind, err)
+	}
+	if got := err.Error(); got != "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요." {
+		t.Fatalf("unexpected user message: %q", got)
 	}
 }

@@ -12,6 +12,7 @@ func TestStorageRecordRoundTrip(t *testing.T) {
 		Resolution:             Resolution1440p,
 		OutputFormat:           OutputFormatMKV,
 		MaxConcurrentDownloads: 3,
+		Theme:                  ThemeLight,
 	}
 
 	record, err := NewStorageRecord(value)
@@ -64,5 +65,24 @@ func TestStorageRecordRejectsInvalidSettings(t *testing.T) {
 	}
 	if _, err := record.AppSettings(); err == nil {
 		t.Fatal("expected invalid stored settings error")
+	}
+}
+
+
+func TestStorageRecordV1DefaultsToDarkTheme(t *testing.T) {
+	record := StorageRecord{
+		SchemaVersion:          1,
+		DownloadDir:            t.TempDir(),
+		Resolution:             ResolutionBest,
+		OutputFormat:           OutputFormatMP4,
+		MaxConcurrentDownloads: 1,
+	}
+
+	value, err := record.AppSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Theme != ThemeDark {
+		t.Fatalf("legacy theme should default to dark: %#v", value)
 	}
 }

@@ -1,4 +1,5 @@
 export type DownloadTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type DownloadErrorCode = 'authentication_required' | 'partial_data_conflict';
 
 export interface ToolStatus {
   name: string;
@@ -50,7 +51,9 @@ export interface DownloadTask {
   status: DownloadTaskStatus;
   progress: DownloadProgress;
   finalPath?: string;
+  logPath?: string;
   error?: string;
+  errorCode?: DownloadErrorCode;
   queuedAt: string;
   startedAt?: string;
   finishedAt?: string;

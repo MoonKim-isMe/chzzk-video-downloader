@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Skeleton, Typography } from 'antd';
+import { Alert, Avatar, Button, Card, Empty, Skeleton, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getChannelVideos } from '../../lib/backend';
@@ -103,78 +103,89 @@ function ChannelVideoList({
   };
 
   return (
-    <Card className="border-slate-800 bg-slate-900/80">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Text className="!text-xs !font-semibold !uppercase !tracking-wider !text-slate-500">
-            선택 채널 VOD
-          </Text>
-          <Title level={3} className="!mb-1 !mt-1 !text-slate-100">
-            {channel.channelName}
-          </Title>
-          <Text className="!text-slate-400">
-            {loading
-              ? 'VOD 목록을 불러오는 중입니다.'
-              : `전체 ${countFormatter.format(result.totalCount)}개 · ${countFormatter.format(result.videos.length)}개 불러옴`}
-          </Text>
+    <Card bordered={false} className="app-panel channel-vod-panel">
+      <div className="channel-vod-header">
+        <div className="channel-vod-identity">
+          <Avatar size={46} src={channel.channelImageUrl || undefined}>
+            {channel.channelName.slice(0, 1)}
+          </Avatar>
+          <div className="min-w-0">
+            <Text className="app-eyebrow">VOD</Text>
+            <Title level={4} ellipsis className="app-section-title !mb-0 !mt-1">
+              {channel.channelName}
+            </Title>
+          </div>
         </div>
-        {!loading && result.totalPages > 0 && (
-          <Text className="!text-xs !text-slate-500">
-            {result.page + 1} / {result.totalPages} 페이지까지 조회
+
+        <div className="channel-vod-meta">
+          <Text className="app-muted !text-xs">
+            {loading
+              ? '불러오는 중'
+              : `전체 ${countFormatter.format(result.totalCount)}개 · ${countFormatter.format(result.videos.length)}개 표시`}
           </Text>
-        )}
+          {!loading && result.totalPages > 0 && (
+            <Text className="app-muted !text-xs">
+              {result.page + 1} / {result.totalPages} 페이지
+            </Text>
+          )}
+        </div>
       </div>
 
       {error && (
-        <Alert
-          className="mb-4"
-          type="error"
-          showIcon
-          message={error}
-          action={
-            <Button size="small" onClick={retry}>
-              다시 시도
-            </Button>
-          }
-        />
+        <div className="channel-vod-alert">
+          <Alert
+            type="error"
+            showIcon
+            message={error}
+            action={
+              <Button size="small" onClick={retry}>
+                다시 시도
+              </Button>
+            }
+          />
+        </div>
       )}
 
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }, (_, index) => (
-            <Card key={index} className="border-slate-800 bg-slate-900/60">
-              <Skeleton active paragraph={{ rows: 3 }} />
-            </Card>
-          ))}
-        </div>
-      ) : result.videos.length === 0 && !error ? (
-        <Empty description="표시할 VOD가 없습니다." />
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {result.videos.map((video) => (
-              <VideoCard
-                key={video.videoNo}
-                video={video}
-                downloadStatus={activeDownloadStatusByVideoNo.get(video.videoNo)}
-                onQueue={onQueueVideo}
-              />
+      <div className="channel-vod-scroll">
+        {loading ? (
+          <div className="channel-vod-grid">
+            {Array.from({ length: 6 }, (_, index) => (
+              <Card key={index} className="border-slate-800 bg-slate-900/60">
+                <Skeleton active paragraph={{ rows: 3 }} />
+              </Card>
             ))}
           </div>
+        ) : result.videos.length === 0 && !error ? (
+          <div className="channel-vod-empty-content">
+            <Empty description="표시할 VOD가 없습니다." />
+          </div>
+        ) : (
+          <>
+            <div className="channel-vod-grid">
+              {result.videos.map((video) => (
+                <VideoCard
+                  key={video.videoNo}
+                  video={video}
+                  downloadStatus={activeDownloadStatusByVideoNo.get(video.videoNo)}
+                  onQueue={onQueueVideo}
+                />
+              ))}
+            </div>
 
-          {result.hasNext && (
-            <Button
-              block
-              className="mt-5"
-              loading={loadingMore}
-              disabled={Boolean(error)}
-              onClick={() => void fetchPage(result.nextPage, true)}
-            >
-              더 보기
-            </Button>
-          )}
-        </>
-      )}
+            {result.hasNext && (
+              <Button
+                block
+                className="mt-4"
+                loading={loadingMore}
+                disabled={Boolean(error)}
+                onClick={() => void fetchPage(result.nextPage, true)}
+              >
+                더 보기
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </Card>
   );
 }

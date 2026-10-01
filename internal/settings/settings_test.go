@@ -12,7 +12,8 @@ func TestDefaults(t *testing.T) {
 	if value.DownloadDir != dir ||
 		value.Resolution != ResolutionBest ||
 		value.OutputFormat != OutputFormatMP4 ||
-		value.MaxConcurrentDownloads != 1 {
+		value.MaxConcurrentDownloads != 1 ||
+		value.Theme != ThemeDark {
 		t.Fatalf("unexpected defaults: %#v", value)
 	}
 	if err := Validate(value); err != nil {
@@ -37,7 +38,8 @@ func TestStoreUpdateNormalizesValues(t *testing.T) {
 	}
 	if next.Resolution != Resolution1080p ||
 		next.OutputFormat != OutputFormatMKV ||
-		next.MaxConcurrentDownloads != 4 {
+		next.MaxConcurrentDownloads != 4 ||
+		next.Theme != ThemeDark {
 		t.Fatalf("unexpected normalized settings: %#v", next)
 	}
 	if store.Get() != next {
@@ -73,6 +75,7 @@ func TestValidateRejectsUnsupportedValues(t *testing.T) {
 		func() AppSettings { value := base; value.Resolution = "480p"; return value }(),
 		func() AppSettings { value := base; value.OutputFormat = "avi"; return value }(),
 		func() AppSettings { value := base; value.MaxConcurrentDownloads = 0; return value }(),
+		func() AppSettings { value := base; value.Theme = "system"; return value }(),
 	}
 
 	for _, value := range cases {
@@ -116,5 +119,23 @@ func TestStoreConcurrentGetAndUpdate(t *testing.T) {
 
 	if err := Validate(store.Get()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+
+func TestStoreUpdatesTheme(t *testing.T) {
+	store, err := NewStore(Defaults(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := store.Get()
+	next.Theme = ThemeLight
+	updated, err := store.Update(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Theme != ThemeLight || store.Get().Theme != ThemeLight {
+		t.Fatalf("theme was not updated: %#v", updated)
 	}
 }

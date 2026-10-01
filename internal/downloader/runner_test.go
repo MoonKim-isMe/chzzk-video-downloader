@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunnerStreamsOutput(t *testing.T) {
@@ -28,6 +29,24 @@ func TestRunnerStreamsOutput(t *testing.T) {
 	}
 	if !foundStdout || !foundStderr {
 		t.Fatalf("unexpected output: %#v", lines)
+	}
+}
+
+func TestRunnerCancellationStopsProcess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := time.Now()
+	err := NewRunner().Run(ctx, helperCommand("wait"), func(line OutputLine) {
+		if line.Stream == StreamStdout && line.Text == "waiting" {
+			cancel()
+		}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if time.Since(started) > 2*time.Second {
+		t.Fatalf("cancelled process did not exit promptly: %s", time.Since(started))
 	}
 }
 
@@ -69,6 +88,11 @@ func init() {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "failed-line")
 		os.Exit(7)
+	case "wait":
+		fmt.Fprintln(os.Stdout, "waiting")
+		for {
+			time.Sleep(time.Second)
+		}
 	default:
 		os.Exit(2)
 	}

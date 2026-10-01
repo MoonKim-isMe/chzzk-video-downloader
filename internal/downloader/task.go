@@ -41,9 +41,11 @@ type DownloadTask struct {
 	OutputDir         string           `json:"outputDir"`
 	Status            TaskStatus       `json:"status"`
 	Progress          DownloadProgress `json:"progress"`
-	FinalPath         string           `json:"finalPath,omitempty"`
-	Error             string           `json:"error,omitempty"`
-	QueuedAt          string           `json:"queuedAt"`
+	FinalPath         string              `json:"finalPath,omitempty"`
+	LogPath           string              `json:"logPath,omitempty"`
+	Error             string              `json:"error,omitempty"`
+	ErrorCode         DownloadFailureKind `json:"errorCode,omitempty"`
+	QueuedAt          string              `json:"queuedAt"`
 	StartedAt         string           `json:"startedAt,omitempty"`
 	FinishedAt        string           `json:"finishedAt,omitempty"`
 }

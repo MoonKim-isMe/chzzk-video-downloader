@@ -2,7 +2,7 @@ package settings
 
 import "fmt"
 
-const StorageSchemaVersion = 1
+const StorageSchemaVersion = 2
 
 type StorageRecord struct {
 	SchemaVersion          int          `json:"schemaVersion"`
@@ -10,6 +10,7 @@ type StorageRecord struct {
 	Resolution             Resolution   `json:"resolution"`
 	OutputFormat           OutputFormat `json:"outputFormat"`
 	MaxConcurrentDownloads int          `json:"maxConcurrentDownloads"`
+	Theme                  ThemeMode    `json:"theme"`
 }
 
 func NewStorageRecord(value AppSettings) (StorageRecord, error) {
@@ -24,15 +25,21 @@ func NewStorageRecord(value AppSettings) (StorageRecord, error) {
 		Resolution:             value.Resolution,
 		OutputFormat:           value.OutputFormat,
 		MaxConcurrentDownloads: value.MaxConcurrentDownloads,
+		Theme:                  value.Theme,
 	}, nil
 }
 
 func (record StorageRecord) AppSettings() (AppSettings, error) {
-	if record.SchemaVersion != StorageSchemaVersion {
+	if record.SchemaVersion != 1 && record.SchemaVersion != StorageSchemaVersion {
 		return AppSettings{}, fmt.Errorf(
 			"지원하지 않는 설정 저장 버전입니다: %d",
 			record.SchemaVersion,
 		)
+	}
+
+	theme := record.Theme
+	if record.SchemaVersion == 1 {
+		theme = ThemeDark
 	}
 
 	value := Normalize(AppSettings{
@@ -40,6 +47,7 @@ func (record StorageRecord) AppSettings() (AppSettings, error) {
 		Resolution:             record.Resolution,
 		OutputFormat:           record.OutputFormat,
 		MaxConcurrentDownloads: record.MaxConcurrentDownloads,
+		Theme:                  theme,
 	})
 	if err := Validate(value); err != nil {
 		return AppSettings{}, err

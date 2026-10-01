@@ -32,10 +32,10 @@ type CommandSpec struct {
 
 func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (CommandSpec, error) {
 	if !toolchain.YTDLP.Available {
-		return CommandSpec{}, fmt.Errorf("yt-dlp를 사용할 수 없습니다")
+		return CommandSpec{}, fmt.Errorf("영상 다운로드 기능을 사용할 수 없습니다")
 	}
 	if !toolchain.MergeReady {
-		return CommandSpec{}, fmt.Errorf("ffmpeg와 ffprobe가 모두 필요합니다")
+		return CommandSpec{}, fmt.Errorf("다운로드 후 영상 처리 기능을 사용할 수 없습니다")
 	}
 
 	videoURL, err := normalizeVideoURL(request.URL)
@@ -44,6 +44,14 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	}
 
 	outputDir, err := normalizeOutputDir(request.OutputDir)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	videoNo, err := videoNoFromNormalizedURL(videoURL)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	tempDir, err := TemporaryDownloadDir(outputDir, videoNo)
 	if err != nil {
 		return CommandSpec{}, err
 	}
@@ -72,11 +80,13 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--windows-filenames",
 		"--no-overwrites",
 		"--continue",
+		"--no-keep-fragments",
 		"--progress-delta", "0.5",
 		"--progress-template", "download:" + progressTemplate,
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format", formatSelector,
 		"--paths", outputDir,
+		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
 	}
 	if outputFormat != "" {
@@ -144,7 +154,7 @@ func normalizeOutputDir(raw string) (string, error) {
 
 func ffmpegLocation(toolchain ToolchainStatus) (string, error) {
 	if !toolchain.FFmpeg.Available || !toolchain.FFprobe.Available {
-		return "", fmt.Errorf("ffmpeg와 ffprobe가 모두 필요합니다")
+		return "", fmt.Errorf("다운로드 후 영상 처리 기능을 사용할 수 없습니다")
 	}
 	ffmpegDir := filepath.Dir(toolchain.FFmpeg.Path)
 	ffprobeDir := filepath.Dir(toolchain.FFprobe.Path)
@@ -154,5 +164,5 @@ func ffmpegLocation(toolchain ToolchainStatus) (string, error) {
 	if toolchain.FFmpeg.Source == "path" && toolchain.FFprobe.Source == "path" {
 		return "", nil
 	}
-	return "", fmt.Errorf("ffmpeg와 ffprobe를 같은 도구 디렉터리에 배치하거나 PATH에 등록해 주세요")
+	return "", fmt.Errorf("다운로드 후 영상 처리 환경을 확인해 주세요")
 }

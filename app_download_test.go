@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -242,11 +244,18 @@ func TestStartDownloadReportsCancellationAndStartsNext(t *testing.T) {
 
 	select {
 	case event := <-cancelled:
-		if event.Error == "" {
-			t.Fatal("expected cancellation error message")
+		if event.TaskID != first.TaskID ||
+			event.Status != downloader.TaskStatusCancelled ||
+			event.FinishedAt == "" {
+			t.Fatalf("unexpected immediate cancellation event: %#v", event)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("cancelled event timeout")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("cancelled event was not emitted immediately")
+	}
+
+	current, ok := app.ensureDownloadQueue().Get(first.TaskID)
+	if !ok || current.Status != downloader.TaskStatusCancelled {
+		t.Fatalf("cancelled task remained running: %#v", current)
 	}
 
 	select {
@@ -619,5 +628,159 @@ func TestUpdateSettingsDecreasingConcurrencyWaitsForActiveSlots(t *testing.T) {
 	releaseMu.Unlock()
 	if thirdRelease != nil {
 		close(thirdRelease)
+	}
+}
+
+
+func TestRecoverDownloadCleansTemporaryFilesAndQueuesRetry(t *testing.T) {
+	outputDir := t.TempDir()
+	store, err := appsettings.NewStore(appsettings.Defaults(outputDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	attempts := 0
+	release := make(chan struct{}, 1)
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			handler downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			mu.Lock()
+			attempts++
+			attempt := attempts
+			mu.Unlock()
+
+			if attempt == 1 {
+				return downloader.DownloadResult{}, &downloader.DownloadFailure{
+					Kind:    downloader.DownloadFailurePartialDataConflict,
+					Message: "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.",
+				}
+			}
+
+			select {
+			case <-release:
+				return downloader.DownloadResult{
+					FinalPath:    request.URL + ".mp4",
+					LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			case <-ctx.Done():
+				return downloader.DownloadResult{}, ctx.Err()
+			}
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	request := testStartRequest(t)
+	request.OutputDir = outputDir
+	failedTask, err := app.StartDownload(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := app.ensureDownloadQueue().Get(failedTask.TaskID)
+		if ok && current.Status == downloader.TaskStatusFailed {
+			failedTask = current
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if failedTask.Status != downloader.TaskStatusFailed ||
+		failedTask.ErrorCode != downloader.DownloadFailurePartialDataConflict {
+		t.Fatalf("expected recoverable failed task, got %#v", failedTask)
+	}
+
+	tempDir, err := downloader.TemporaryDownloadDir(outputDir, failedTask.VideoNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tempDir+"/stale.part", []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	retried, err := app.RecoverDownload(failedTask.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.TaskID == failedTask.TaskID {
+		t.Fatal("retry must create a new task")
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Fatalf("temporary directory was not removed: %v", err)
+	}
+	if _, ok := app.ensureDownloadQueue().Get(failedTask.TaskID); ok {
+		t.Fatal("previous failed task still exists in queue")
+	}
+
+	release <- struct{}{}
+}
+
+
+func TestOpenDownloadLogUsesStoredFailureLog(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "failure.log")
+	if err := os.WriteFile(logPath, []byte("failure"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			return downloader.DownloadResult{LogPath: logPath}, errors.New("download failed")
+		},
+	}
+	store, err := appsettings.NewStore(appsettings.Defaults(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	var opened string
+	app.fileOpener = func(path string) error {
+		opened = path
+		return nil
+	}
+
+	task, err := app.StartDownload(testStartRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		current, ok := app.ensureDownloadQueue().Get(task.TaskID)
+		if ok && current.Status == downloader.TaskStatusFailed {
+			task = current
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if task.Status != downloader.TaskStatusFailed || task.LogPath != logPath {
+		t.Fatalf("unexpected failed task: %#v", task)
+	}
+
+	if err := app.OpenDownloadLog(task.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if opened != logPath {
+		t.Fatalf("unexpected opened log path: %q", opened)
 	}
 }

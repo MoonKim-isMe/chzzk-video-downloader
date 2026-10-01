@@ -16,7 +16,8 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		download_dir,
 		resolution,
 		output_format,
-		max_concurrent_downloads
+		max_concurrent_downloads,
+		theme
 	FROM app_settings
 	WHERE id = 1`).Scan(
 		&record.SchemaVersion,
@@ -24,6 +25,7 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		&record.Resolution,
 		&record.OutputFormat,
 		&record.MaxConcurrentDownloads,
+		&record.Theme,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return appsettings.StorageRecord{}, false, nil
@@ -46,20 +48,23 @@ func (d *Database) SaveSettings(record appsettings.StorageRecord) error {
 		resolution,
 		output_format,
 		max_concurrent_downloads,
+		theme,
 		updated_at
-	) VALUES (1, ?, ?, ?, ?, ?, ?)
+	) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		schema_version = excluded.schema_version,
 		download_dir = excluded.download_dir,
 		resolution = excluded.resolution,
 		output_format = excluded.output_format,
 		max_concurrent_downloads = excluded.max_concurrent_downloads,
+		theme = excluded.theme,
 		updated_at = excluded.updated_at`,
 		record.SchemaVersion,
 		record.DownloadDir,
 		string(record.Resolution),
 		string(record.OutputFormat),
 		record.MaxConcurrentDownloads,
+		string(record.Theme),
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {

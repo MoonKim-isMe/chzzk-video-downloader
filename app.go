@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +50,8 @@ type App struct {
 	shuttingDown atomic.Bool
 	eventEmitter    func(downloader.DownloadTask)
 	directoryPicker func(context.Context, runtime.OpenDialogOptions) (string, error)
+	folderOpener    func(string) error
+	fileOpener      func(string) error
 }
 
 type AppInfo struct {
@@ -255,10 +261,10 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 
 	toolchain := a.downloadManager.ToolchainStatus(a.appContext())
 	if !toolchain.DownloadReady {
-		return downloader.DownloadTask{}, fmt.Errorf("yt-dlp 실행 환경이 준비되지 않았습니다")
+		return downloader.DownloadTask{}, fmt.Errorf("영상 다운로드 실행 환경이 준비되지 않았습니다")
 	}
 	if !toolchain.MergeReady {
-		return downloader.DownloadTask{}, fmt.Errorf("ffmpeg/ffprobe 실행 환경이 준비되지 않았습니다")
+		return downloader.DownloadTask{}, fmt.Errorf("다운로드 후 영상 처리 환경이 준비되지 않았습니다")
 	}
 
 	return a.ensureDownloadQueue().Enqueue(request)
@@ -268,19 +274,202 @@ func (a *App) GetDownloadTasks() []downloader.DownloadTask {
 	current := a.ensureDownloadQueue().List()
 	database := a.persistenceDatabase()
 	if database == nil {
-		return current
+		return visibleDownloadTasks(current)
 	}
 
 	persisted, err := database.ListDownloadTasks()
 	if err != nil {
 		runtime.LogErrorf(a.appContext(), "다운로드 이력을 조회할 수 없습니다: %v", err)
-		return current
+		return visibleDownloadTasks(current)
 	}
-	return mergeDownloadTasks(persisted, current)
+	return visibleDownloadTasks(mergeDownloadTasks(persisted, current))
 }
 
 func (a *App) CancelDownload(taskID string) bool {
-	return a.ensureDownloadQueue().Cancel(taskID)
+	return a.ensureDownloadQueue().Cancel(strings.TrimSpace(taskID))
+}
+
+func (a *App) RecoverDownload(taskID string) (downloader.DownloadTask, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return downloader.DownloadTask{}, fmt.Errorf("복구할 다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return downloader.DownloadTask{}, fmt.Errorf("복구할 다운로드 작업을 찾을 수 없습니다")
+	}
+	if task.Status != downloader.TaskStatusFailed {
+		return downloader.DownloadTask{}, fmt.Errorf("실패한 다운로드만 복구할 수 있습니다")
+	}
+	if task.ErrorCode != downloader.DownloadFailurePartialDataConflict {
+		return downloader.DownloadTask{}, fmt.Errorf("임시 파일 정리로 복구할 수 있는 오류가 아닙니다")
+	}
+
+	if err := downloader.CleanupTemporaryDownload(task.OutputDir, task.VideoNo); err != nil {
+		return downloader.DownloadTask{}, err
+	}
+
+	retried, err := a.StartDownload(downloader.StartDownloadRequest{
+		VideoNo:           task.VideoNo,
+		VideoTitle:        task.VideoTitle,
+		ChannelName:       task.ChannelName,
+		ThumbnailImageURL: task.ThumbnailImageURL,
+		URL:               task.URL,
+		OutputDir:         task.OutputDir,
+	})
+	if err != nil {
+		return downloader.DownloadTask{}, fmt.Errorf("임시 파일은 정리했지만 다운로드를 다시 시작할 수 없습니다: %w", err)
+	}
+
+	if err := a.DeleteDownloadTask(taskID); err != nil {
+		runtime.LogErrorf(a.appContext(), "복구한 이전 다운로드 이력을 삭제할 수 없습니다: %v", err)
+	}
+	return retried, nil
+}
+
+func (a *App) DeleteDownloadTask(taskID string) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("삭제할 다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return fmt.Errorf("삭제할 다운로드 작업을 찾을 수 없습니다")
+	}
+	if task.Status == downloader.TaskStatusQueued || task.Status == downloader.TaskStatusRunning {
+		return fmt.Errorf("진행 중인 다운로드는 삭제할 수 없습니다")
+	}
+
+	if database := a.persistenceDatabase(); database != nil {
+		if err := database.DeleteDownloadTask(taskID); err != nil {
+			return err
+		}
+	}
+	a.ensureDownloadQueue().Remove(taskID)
+	return nil
+}
+
+func (a *App) OpenDownloadLog(taskID string) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return fmt.Errorf("다운로드 작업을 찾을 수 없습니다")
+	}
+
+	logPath := strings.TrimSpace(task.LogPath)
+	if logPath == "" {
+		return fmt.Errorf("저장된 오류 로그가 없습니다")
+	}
+	info, err := os.Stat(logPath)
+	if err != nil {
+		return fmt.Errorf("오류 로그 파일을 열 수 없습니다: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("오류 로그 경로가 파일이 아닙니다")
+	}
+
+	opener := a.fileOpener
+	if opener == nil {
+		opener = openFile
+	}
+	if err := opener(logPath); err != nil {
+		return fmt.Errorf("오류 로그 파일을 열 수 없습니다: %w", err)
+	}
+	return nil
+}
+
+func (a *App) OpenDownloadFolder(taskID string) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return fmt.Errorf("다운로드 작업을 찾을 수 없습니다")
+	}
+
+	directory := strings.TrimSpace(task.OutputDir)
+	if finalPath := strings.TrimSpace(task.FinalPath); finalPath != "" {
+		directory = filepath.Dir(finalPath)
+	}
+	if directory == "" || directory == "." {
+		return fmt.Errorf("다운로드 폴더를 확인할 수 없습니다")
+	}
+	if info, err := os.Stat(directory); err != nil {
+		return fmt.Errorf("다운로드 폴더를 열 수 없습니다: %w", err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("다운로드 경로가 폴더가 아닙니다")
+	}
+
+	opener := a.folderOpener
+	if opener == nil {
+		opener = openFolder
+	}
+	if err := opener(directory); err != nil {
+		return fmt.Errorf("다운로드 폴더를 열 수 없습니다: %w", err)
+	}
+	return nil
+}
+
+func (a *App) findDownloadTask(taskID string) (downloader.DownloadTask, bool) {
+	if task, ok := a.ensureDownloadQueue().Get(taskID); ok {
+		return task, true
+	}
+	if database := a.persistenceDatabase(); database != nil {
+		tasks, err := database.ListDownloadTasks()
+		if err == nil {
+			for _, task := range tasks {
+				if task.TaskID == taskID {
+					return task, true
+				}
+			}
+		}
+	}
+	return downloader.DownloadTask{}, false
+}
+
+func visibleDownloadTasks(tasks []downloader.DownloadTask) []downloader.DownloadTask {
+	visible := make([]downloader.DownloadTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Status == downloader.TaskStatusCancelled {
+			continue
+		}
+		visible = append(visible, task)
+	}
+	return visible
+}
+
+func openFolder(directory string) error {
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		command = exec.Command("explorer.exe", directory)
+	case "darwin":
+		command = exec.Command("open", directory)
+	default:
+		command = exec.Command("xdg-open", directory)
+	}
+	return command.Start()
+}
+
+func openFile(path string) error {
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		command = exec.Command("notepad.exe", path)
+	case "darwin":
+		command = exec.Command("open", path)
+	default:
+		command = exec.Command("xdg-open", path)
+	}
+	return command.Start()
 }
 
 func (a *App) ensureDownloadQueue() *downloader.Queue {
@@ -427,7 +616,11 @@ func mergeDownloadTasks(
 
 func (a *App) emitDownloadState(task downloader.DownloadTask) {
 	if database := a.persistenceDatabase(); database != nil {
-		if err := database.UpsertDownloadTask(task); err != nil {
+		if task.Status == downloader.TaskStatusCancelled {
+			if err := database.DeleteDownloadTask(task.TaskID); err != nil {
+				runtime.LogErrorf(a.appContext(), "취소한 다운로드 이력을 삭제할 수 없습니다: %v", err)
+			}
+		} else if err := database.UpsertDownloadTask(task); err != nil {
 			runtime.LogErrorf(a.appContext(), "다운로드 이력을 저장할 수 없습니다: %v", err)
 		}
 	}

@@ -1,17 +1,18 @@
-import { Alert, Button, Empty, Input, Space, Typography } from 'antd';
+import { Alert, Button, Empty, Input, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 
 import ChannelCard from '../../components/ChannelCard';
 import { searchChannels } from '../../lib/backend';
 import type { Channel, ChannelSearchResult } from '../../types/channel';
 
-const { Paragraph, Title } = Typography;
+const { Text } = Typography;
 
 interface ChannelSearchTabProps {
   savedChannelIds: Set<string>;
   selectedChannelId?: string;
   onSelect: (channel: Channel) => void;
   onSave: (channel: Channel) => void;
+  onRemove: (channelId: string) => void;
 }
 
 function ChannelSearchTab({
@@ -19,9 +20,14 @@ function ChannelSearchTab({
   selectedChannelId,
   onSelect,
   onSave,
+  onRemove,
 }: ChannelSearchTabProps) {
   const [keyword, setKeyword] = useState('');
-  const [result, setResult] = useState<ChannelSearchResult>({ channels: [], nextOffset: 0, hasNext: false });
+  const [result, setResult] = useState<ChannelSearchResult>({
+    channels: [],
+    nextOffset: 0,
+    hasNext: false,
+  });
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -58,48 +64,61 @@ function ChannelSearchTab({
   };
 
   return (
-    <div>
-      <Title level={3} className="!mb-2 !text-slate-100">
-        채널 검색
-      </Title>
-      <Paragraph className="!text-slate-400">
-        치지직 웹 서비스의 채널 검색 API를 사용해 채널을 찾습니다.
-      </Paragraph>
+    <div className="channel-search-view">
+      <div className="channel-search-controls">
+        <Input.Search
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onSearch={() => void runSearch(0, false)}
+          enterButton="검색"
+          placeholder="채널명 또는 검색어"
+          size="large"
+          loading={loading}
+        />
 
-      <Input.Search
-        value={keyword}
-        onChange={(event) => setKeyword(event.target.value)}
-        onSearch={() => runSearch(0, false)}
-        enterButton="검색"
-        placeholder="채널명 또는 검색어"
-        size="large"
-        loading={loading}
-      />
+        {error && <Alert type="error" showIcon message={error} />}
 
-      {error && <Alert className="mt-4" type="error" showIcon message={error} />}
+        {searched && !loading && (
+          <div className="channel-result-summary">
+            <Text strong>검색 결과</Text>
+            <Text className="app-muted !text-xs">{uniqueChannels.length}개</Text>
+          </div>
+        )}
+      </div>
 
-      <Space direction="vertical" size={12} className="mt-5 w-full">
-        {uniqueChannels.map((channel) => (
-          <ChannelCard
-            key={channel.channelId}
-            channel={channel}
-            saved={savedChannelIds.has(channel.channelId)}
-            selected={selectedChannelId === channel.channelId}
-            onSelect={onSelect}
-            onSave={onSave}
-          />
-        ))}
-      </Space>
+      <div className="channel-sidebar-scroll">
+        {uniqueChannels.length > 0 && (
+          <div className="channel-result-list">
+            {uniqueChannels.map((channel) => (
+              <ChannelCard
+                key={channel.channelId}
+                channel={channel}
+                saved={savedChannelIds.has(channel.channelId)}
+                selected={selectedChannelId === channel.channelId}
+                onSelect={onSelect}
+                onSave={onSave}
+                onRemove={onRemove}
+              />
+            ))}
+          </div>
+        )}
 
-      {searched && !loading && uniqueChannels.length === 0 && (
-        <Empty className="mt-12" description="검색 결과가 없습니다." />
-      )}
+        {searched && !loading && uniqueChannels.length === 0 && (
+          <Empty className="channel-sidebar-empty" description="검색 결과가 없습니다." />
+        )}
 
-      {result.hasNext && (
-        <Button block className="mt-4" loading={loadingMore} onClick={() => runSearch(result.nextOffset, true)}>
-          더 보기
-        </Button>
-      )}
+        {result.hasNext && (
+          <div className="channel-load-more">
+            <Button
+              block
+              loading={loadingMore}
+              onClick={() => void runSearch(result.nextOffset, true)}
+            >
+              더 보기
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

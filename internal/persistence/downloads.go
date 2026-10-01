@@ -25,12 +25,14 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		speed_bytes_per_second,
 		eta_seconds,
 		final_path,
+		log_path,
 		error,
+		error_code,
 		queued_at,
 		started_at,
 		finished_at,
 		updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(task_id) DO UPDATE SET
 		video_no = excluded.video_no,
 		video_title = excluded.video_title,
@@ -47,7 +49,9 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		speed_bytes_per_second = excluded.speed_bytes_per_second,
 		eta_seconds = excluded.eta_seconds,
 		final_path = excluded.final_path,
+		log_path = excluded.log_path,
 		error = excluded.error,
+		error_code = excluded.error_code,
 		queued_at = excluded.queued_at,
 		started_at = excluded.started_at,
 		finished_at = excluded.finished_at,
@@ -68,7 +72,9 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task.Progress.SpeedBytesPerSecond,
 		task.Progress.ETASeconds,
 		task.FinalPath,
+		task.LogPath,
 		task.Error,
+		string(task.ErrorCode),
 		task.QueuedAt,
 		task.StartedAt,
 		task.FinishedAt,
@@ -76,6 +82,17 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 	)
 	if err != nil {
 		return fmt.Errorf("다운로드 이력을 SQLite에 저장할 수 없습니다: %w", err)
+	}
+	return nil
+}
+
+func (d *Database) DeleteDownloadTask(taskID string) error {
+	result, err := d.db.Exec(`DELETE FROM download_tasks WHERE task_id = ?`, taskID)
+	if err != nil {
+		return fmt.Errorf("다운로드 이력을 삭제할 수 없습니다: %w", err)
+	}
+	if _, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("다운로드 이력 삭제 결과를 확인할 수 없습니다: %w", err)
 	}
 	return nil
 }
@@ -98,7 +115,9 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		speed_bytes_per_second,
 		eta_seconds,
 		final_path,
+		log_path,
 		error,
+		error_code,
 		queued_at,
 		started_at,
 		finished_at
@@ -131,7 +150,9 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			&task.Progress.SpeedBytesPerSecond,
 			&task.Progress.ETASeconds,
 			&task.FinalPath,
+			&task.LogPath,
 			&task.Error,
+			&task.ErrorCode,
 			&task.QueuedAt,
 			&task.StartedAt,
 			&task.FinishedAt,
@@ -157,6 +178,7 @@ func (d *Database) RecoverInterruptedDownloads() error {
 	_, err := d.db.Exec(`UPDATE download_tasks
 	SET
 		status = ?,
+		error_code = '',
 		error = CASE
 			WHEN error = '' THEN '앱 종료로 다운로드가 중단되었습니다.'
 			ELSE error
