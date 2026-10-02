@@ -186,7 +186,7 @@ func TestBuildDownloadCommandUsesFFmpegForHLSFallback(t *testing.T) {
 
 	expectedPairs := [][2]string{
 		{"--downloader", "m3u8:ffmpeg"},
-		{"--downloader-args", "ffmpeg:-nostdin -stats_period 1"},
+		{"--downloader-args", "ffmpeg:-nostdin"},
 		{"--concurrent-fragments", "8"},
 	}
 	for _, pair := range expectedPairs {
@@ -207,19 +207,19 @@ func TestBuildDownloadCommandUsesFFmpegForHLSFallback(t *testing.T) {
 		t.Fatalf("ffmpeg tool directory was not injected into PATH: %#v", spec.Env)
 	}
 
-	expectedFallbackTemp, err := fallbackTemporaryDownloadDir(specOutputDir(spec.Args), 12345, "default")
-	if err != nil {
-		t.Fatal(err)
+	fallbackTemp := commandTempPath(spec.Args)
+	if fallbackTemp == "" {
+		t.Fatalf("fallback temp path missing: %#v", spec.Args)
 	}
-	if !hasArgumentPair(spec.Args, "--paths", "temp:"+expectedFallbackTemp) {
-		t.Fatalf("isolated fallback temp path missing: %#v", spec.Args)
+	if !hasArgumentPair(spec.Args, "--paths", fallbackTemp) {
+		t.Fatalf("fallback home path must be staged with temp path: %#v", spec.Args)
 	}
 }
 
-func specOutputDir(args []string) string {
+func commandTempPath(args []string) string {
 	for index := 0; index+1 < len(args); index++ {
-		if args[index] == "--paths" && !strings.HasPrefix(args[index+1], "temp:") {
-			return args[index+1]
+		if args[index] == "--paths" && strings.HasPrefix(args[index+1], "temp:") {
+			return strings.TrimPrefix(args[index+1], "temp:")
 		}
 	}
 	return ""

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -121,6 +122,50 @@ func videoNoFromNormalizedURL(videoURL string) (int64, error) {
 	return videoNo, nil
 }
 
+
+func promoteFallbackDownload(fallbackDir, outputDir, finalPath string) (string, error) {
+	fallbackRoot, err := filepath.Abs(filepath.Clean(fallbackDir))
+	if err != nil {
+		return "", fmt.Errorf("대체 다운로드 임시 경로를 확인할 수 없습니다: %w", err)
+	}
+	source, err := filepath.Abs(filepath.Clean(strings.TrimSpace(finalPath)))
+	if err != nil {
+		return "", fmt.Errorf("대체 다운로드 완료 파일 경로를 확인할 수 없습니다: %w", err)
+	}
+	relative, err := filepath.Rel(fallbackRoot, source)
+	if err != nil ||
+		relative == "." ||
+		relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("대체 다운로드 완료 파일이 임시 경로 밖에 있습니다")
+	}
+
+	destinationRoot, err := normalizeOutputDir(outputDir)
+	if err != nil {
+		return "", err
+	}
+	destination := filepath.Join(destinationRoot, relative)
+	if _, err := os.Stat(destination); err == nil {
+		return "", fmt.Errorf("동일한 다운로드 파일이 이미 존재합니다: %s", destination)
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("다운로드 완료 파일 상태를 확인할 수 없습니다: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		return "", fmt.Errorf("다운로드 완료 파일 폴더를 만들 수 없습니다: %w", err)
+	}
+
+	var renameErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		renameErr = os.Rename(source, destination)
+		if renameErr == nil {
+			return destination, nil
+		}
+		if attempt < 4 {
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
+	}
+	return "", fmt.Errorf("대체 다운로드 완료 파일을 다운로드 폴더로 이동할 수 없습니다: %w", renameErr)
+}
 
 func temporaryDownloadSize(path string) (int64, error) {
 	var total int64

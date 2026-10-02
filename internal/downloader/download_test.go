@@ -270,8 +270,12 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 			}
 			time.Sleep(20 * time.Millisecond)
 
+			finalPath := filepath.Join(fallbackTempDir, "done.mp4")
+			if err := os.WriteFile(finalPath, []byte("completed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 			return DownloadResult{
-				FinalPath:    "done.mp4",
+				FinalPath:    finalPath,
 				LastProgress: DownloadProgress{Status: "completed", Percent: 100},
 			}, nil
 		},
@@ -282,8 +286,12 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 	if attempts != 2 {
 		t.Fatalf("unexpected attempt count: %d", attempts)
 	}
-	if result.FinalPath != "done.mp4" {
+	expectedFinalPath := filepath.Join(outputDir, "done.mp4")
+	if result.FinalPath != expectedFinalPath {
 		t.Fatalf("unexpected fallback result: %#v", result)
+	}
+	if data, statErr := os.ReadFile(expectedFinalPath); statErr != nil || string(data) != "completed" {
+		t.Fatalf("fallback result was not promoted: %q %v", string(data), statErr)
 	}
 	if usedSpec.Path == initialSpec.Path && slices.Equal(usedSpec.Args, initialSpec.Args) {
 		t.Fatalf("fallback command was not returned: %#v", usedSpec)
@@ -380,7 +388,7 @@ func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
 			attemptCtx context.Context,
 			CommandSpec,
 			ProgressHandler,
-			LineHandler,
+			lineHandler LineHandler,
 		) (DownloadResult, error) {
 			attempts++
 			if attempts == 1 {
@@ -390,8 +398,19 @@ func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
 					Cause:   errors.New("Initialization fragment found after media fragments"),
 				}
 			}
-			<-attemptCtx.Done()
-			return DownloadResult{}, attemptCtx.Err()
+
+			ticker := time.NewTicker(5 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-attemptCtx.Done():
+					return DownloadResult{}, attemptCtx.Err()
+				case <-ticker.C:
+					if lineHandler != nil {
+						lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg heartbeat"})
+					}
+				}
+			}
 		},
 	)
 	if err == nil || !strings.Contains(err.Error(), "진행되지 않아 중단") {
@@ -406,7 +425,7 @@ func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
 		diagnostics.WriteString(line.Text)
 		diagnostics.WriteByte('\n')
 	}
-	if !strings.Contains(diagnostics.String(), "fallback monitor: no process output or temporary file growth") {
+	if !strings.Contains(diagnostics.String(), "fallback monitor: no fallback file growth") {
 		t.Fatalf("stall diagnostic missing:\n%s", diagnostics.String())
 	}
 }

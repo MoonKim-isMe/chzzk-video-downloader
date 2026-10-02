@@ -127,7 +127,7 @@ func executeDownloadWithHLSFallback(
 			OutputLine{
 				Stream: StreamStderr,
 				Text: fmt.Sprintf(
-					"fallback monitor: no process output or temporary file growth for %d seconds",
+					"fallback monitor: no fallback file growth for %d seconds",
 					stallSeconds,
 				),
 			},
@@ -148,7 +148,7 @@ func executeDownloadWithHLSFallback(
 				stallSeconds,
 			),
 			Cause: fmt.Errorf(
-				"ffmpeg HLS fallback stalled without output or file growth for %d seconds",
+				"ffmpeg HLS fallback stalled without file growth for %d seconds",
 				stallSeconds,
 			),
 		}
@@ -163,6 +163,16 @@ func executeDownloadWithHLSFallback(
 			Cause:   fallbackErr,
 		}
 	}
+
+	promotedPath, err := promoteFallbackDownload(tempDir, request.OutputDir, fallbackResult.FinalPath)
+	if err != nil {
+		return fallbackResult, fallbackSpec, &DownloadFailure{
+			Kind:    DownloadFailureHLSInitializationFragmentOrder,
+			Message: "대체 방식 다운로드는 완료했지만 최종 파일을 다운로드 폴더로 이동하지 못했습니다.",
+			Cause:   err,
+		}
+	}
+	fallbackResult.FinalPath = promotedPath
 	return fallbackResult, fallbackSpec, nil
 }
 
@@ -221,8 +231,8 @@ func runMonitoredHLSFallback(
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	lastActivity := time.Now()
-	lastSample := lastActivity
+	lastGrowth := time.Now()
+	lastSample := lastGrowth
 	lastBytes, _ := temporaryDownloadSize(tempDir)
 	stalled := false
 	reportedProcessActivity := false
@@ -238,7 +248,6 @@ func runMonitoredHLSFallback(
 			return current.result, current.err, false
 
 		case <-activity:
-			lastActivity = time.Now()
 			if !reportedProcessActivity {
 				reportedProcessActivity = true
 				if handler != nil {
@@ -258,7 +267,7 @@ func runMonitoredHLSFallback(
 					speed = float64(currentBytes-lastBytes) / elapsed
 				}
 
-				lastActivity = now
+				lastGrowth = now
 				lastBytes = currentBytes
 				if handler != nil {
 					handler(DownloadProgress{
@@ -272,7 +281,7 @@ func runMonitoredHLSFallback(
 
 			if !stalled &&
 				ffmpegFallbackStallTimeout > 0 &&
-				now.Sub(lastActivity) >= ffmpegFallbackStallTimeout {
+				now.Sub(lastGrowth) >= ffmpegFallbackStallTimeout {
 				stalled = true
 				cancel()
 			}

@@ -94,6 +94,11 @@ func buildDownloadCommandWithTempDir(
 		return CommandSpec{}, err
 	}
 
+	outputHomeDir := outputDir
+	if useFFmpegHLS {
+		outputHomeDir = tempDir
+	}
+
 	var env []string
 	args := []string{
 		"--ignore-config",
@@ -111,7 +116,7 @@ func buildDownloadCommandWithTempDir(
 		"--progress-template", "download:" + progressTemplate,
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format", formatSelector,
-		"--paths", outputDir,
+		"--paths", outputHomeDir,
 		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
 	}
@@ -119,7 +124,7 @@ func buildDownloadCommandWithTempDir(
 		args = append(
 			args,
 			"--downloader", "m3u8:ffmpeg",
-			"--downloader-args", "ffmpeg:-nostdin -stats_period 1",
+			"--downloader-args", "ffmpeg:-nostdin",
 		)
 
 		ffmpegDir := filepath.Dir(toolchain.FFmpeg.Path)

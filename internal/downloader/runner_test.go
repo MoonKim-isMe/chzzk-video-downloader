@@ -33,6 +33,21 @@ func TestRunnerStreamsOutput(t *testing.T) {
 	}
 }
 
+func TestRunnerSplitsCarriageReturnProgress(t *testing.T) {
+	var lines []OutputLine
+	err := NewRunner().Run(context.Background(), helperCommand("carriage"), func(line OutputLine) {
+		lines = append(lines, line)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 ||
+		lines[0].Text != "frame=1" ||
+		lines[1].Text != "frame=2" {
+		t.Fatalf("unexpected carriage-return output: %#v", lines)
+	}
+}
+
 func TestRunnerCancellationStopsProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -89,6 +104,9 @@ func init() {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "failed-line")
 		os.Exit(7)
+	case "carriage":
+		fmt.Fprint(os.Stderr, "frame=1\rframe=2\r")
+		os.Exit(0)
 	case "wait":
 		fmt.Fprintln(os.Stdout, "waiting")
 		for {
