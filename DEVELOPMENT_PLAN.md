@@ -1069,8 +1069,9 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - `initialization fragment found after media fragments`는 임시 파일 충돌이 아니라 `hls_initialization_fragment_order`로 분류한다. 최초 native HLS 다운로드가 이 오류로 실패하면 native 임시 파일을 삭제하지 않고 `.chzzk-temp/{videoNo}/fallback-{runId}` 독립 경로를 만든 뒤 `--downloader m3u8:ffmpeg`를 적용해 자동으로 1회 fallback한다.
 - native 다운로드는 `.chzzk-temp/{videoNo}/native`를 사용하고, ffmpeg fallback은 매 시도마다 새로운 `fallback-{runId}`를 사용해 Windows에서 native `.part` 파일이 잠겨 있어도 fallback 시작을 막지 않는다.
 - fallback 명령에는 다운로드 가속 설정의 `--concurrent-fragments` 값을 유지하고, 번들 ffmpeg 디렉터리를 PATH 선두에 명시하며 `--downloader-args "ffmpeg:-nostdin"`을 적용한다. fallback에서는 `--paths`의 home과 temp를 모두 현재 `fallback-{runId}`로 지정해 외부 downloader가 어느 출력 단계에 쓰더라도 동일 경로에서 파일 증가를 관측한다.
-- ffmpeg external downloader는 yt-dlp의 일반 progress hook이 다운로드 중 갱신되지 않을 수 있으므로, fallback 시작 시 `fallback_preparing` 상태를 즉시 emit하고 현재 `fallback-{runId}` 전체 크기를 1초 간격으로 측정해 `fallback_downloading`의 다운로드 용량/속도를 갱신한다.
-- 프로세스 stdout/stderr 출력만으로 stall 타이머를 연장하지 않는다. fallback 파일 크기가 60초 동안 증가하지 않으면 stalled로 판단해 프로세스 트리를 취소하고 실패 로그를 남긴다.
+- `--print`가 quiet를 암시하는 yt-dlp 동작을 고려해 fallback에만 `--verbose --no-quiet`를 추가한다. verbose 로그의 URL query/fragment는 저장 전에 `<redacted>`로 마스킹해 서명된 스트림 정보가 실패 로그에 남지 않도록 한다.
+- fallback 진입 직후에는 `fallback_preparing` 상태를 유지한다. 일반 디버그 출력만으로 다운로드 중 상태로 전환하지 않고 `Invoking ffmpeg downloader` / ffmpeg command line 또는 실제 fallback 파일 증가가 확인될 때만 `fallback_downloading`으로 전환한다.
+- fallback 준비 단계와 다운로드 단계를 별도 timeout으로 관리한다. ffmpeg downloader가 120초 내 시작되지 않으면 preparation timeout으로 중단하고, downloader 시작 후에는 fallback 파일 크기가 60초 동안 증가하지 않을 때만 stalled로 판단해 프로세스 트리를 취소한다.
 - Runner는 `\n`뿐 아니라 ffmpeg가 진행 상태에 사용하는 `\r`도 라인 구분자로 처리한다.
 - ffmpeg HLS fallback까지 실패하면 사용자에게 대체 방식까지 실패했음을 표시하고, 실패 로그의 recent process output에 1차 native HLS 시도와 2차 ffmpeg HLS 시도 출력을 함께 남긴다.
 - fallback 성공 파일은 검증된 `fallback-{runId}` 내부 경로에서 실제 다운로드 폴더로 이동한 뒤 완료 처리한다. 이동 시 동일 파일이 이미 있으면 덮어쓰지 않으며 Windows 파일 핸들 해제 지연을 고려해 짧게 재시도한다.
@@ -1111,7 +1112,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
 - HLS initialization fragment 오류 분류 → native temp 보존 → 독립 `fallback-{runId}` temp 생성 → `m3u8:ffmpeg` command fallback → fallback 실패 시 양쪽 시도 진단 로그 병합 경로 정적 확인
 - 최신 main의 다운로드 가속 `--concurrent-fragments` 정책과 HLS fallback command를 함께 유지하도록 충돌 병합 확인
-- fallback command의 ffmpeg PATH 주입 / downloader args, staged home+temp 경로, fallback 전체 크기 기반 다운로드 용량·속도 관측, 반복 프로세스 출력과 무관한 60초 file-growth stall 취소, `\r` 출력 분리, 성공 파일 promote 경로 테스트 추가
+- fallback command의 ffmpeg PATH 주입 / `--verbose --no-quiet`, staged home+temp 경로, downloader start marker 감지, 120초 preparation timeout / 60초 file-growth stall 분리, `\r` 출력 분리, verbose URL query 마스킹, 성공 파일 promote 경로 테스트 추가
 - Download Manager의 `대체 방식 재시도` 상태 Tag, 준비/연결/다운로드 중 문구 및 전체 크기를 알 수 없는 fallback metrics 표시 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:

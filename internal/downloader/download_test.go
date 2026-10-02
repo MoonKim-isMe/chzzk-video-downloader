@@ -177,11 +177,14 @@ func commandTemporaryDir(args []string) string {
 func useFastFallbackMonitor(t *testing.T) {
 	t.Helper()
 	previousPoll := ffmpegFallbackPollInterval
+	previousPreparation := ffmpegFallbackPreparationTimeout
 	previousStall := ffmpegFallbackStallTimeout
 	ffmpegFallbackPollInterval = 5 * time.Millisecond
+	ffmpegFallbackPreparationTimeout = 80 * time.Millisecond
 	ffmpegFallbackStallTimeout = 80 * time.Millisecond
 	t.Cleanup(func() {
 		ffmpegFallbackPollInterval = previousPoll
+		ffmpegFallbackPreparationTimeout = previousPreparation
 		ffmpegFallbackStallTimeout = previousStall
 	})
 }
@@ -259,7 +262,10 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 			}
 
 			if lineHandler != nil {
-				lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg started"})
+				lineHandler(OutputLine{
+					Stream: StreamStderr,
+					Text:   `[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8?token=secret"`,
+				})
 			}
 			if err := os.WriteFile(
 				filepath.Join(fallbackTempDir, "fallback.part"),
@@ -369,9 +375,10 @@ func TestExecuteDownloadWithHLSFallbackMergesDiagnosticsWhenFallbackFails(t *tes
 	}
 }
 
-func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
+func TestExecuteDownloadWithHLSFallbackStopsPreparationTimeout(t *testing.T) {
 	useFastFallbackMonitor(t)
-	ffmpegFallbackStallTimeout = 30 * time.Millisecond
+	ffmpegFallbackPreparationTimeout = 30 * time.Millisecond
+	ffmpegFallbackStallTimeout = 200 * time.Millisecond
 
 	request := DownloadRequest{
 		URL:       "https://chzzk.naver.com/video/15461111",
@@ -407,17 +414,20 @@ func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
 					return DownloadResult{}, attemptCtx.Err()
 				case <-ticker.C:
 					if lineHandler != nil {
-						lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg heartbeat"})
+						lineHandler(OutputLine{
+							Stream: StreamStderr,
+							Text:   "[debug] Extracting URL metadata",
+						})
 					}
 				}
 			}
 		},
 	)
-	if err == nil || !strings.Contains(err.Error(), "진행되지 않아 중단") {
-		t.Fatalf("unexpected stall error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "대체 다운로드 준비가") {
+		t.Fatalf("unexpected preparation timeout error: %v", err)
 	}
-	if attempts != 2 {
-		t.Fatalf("unexpected attempt count: %d", attempts)
+	if result.LastProgress.Status != progressStatusFallbackPreparing {
+		t.Fatalf("unexpected preparation progress: %#v", result.LastProgress)
 	}
 
 	var diagnostics strings.Builder
@@ -425,8 +435,93 @@ func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
 		diagnostics.WriteString(line.Text)
 		diagnostics.WriteByte('\n')
 	}
-	if !strings.Contains(diagnostics.String(), "fallback monitor: no fallback file growth") {
+	if !strings.Contains(diagnostics.String(), "ffmpeg downloader did not start") {
+		t.Fatalf("preparation timeout diagnostic missing:\n%s", diagnostics.String())
+	}
+}
+
+func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
+	useFastFallbackMonitor(t)
+	ffmpegFallbackPreparationTimeout = 200 * time.Millisecond
+	ffmpegFallbackStallTimeout = 30 * time.Millisecond
+
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: t.TempDir(),
+	}
+	attempts := 0
+	result, _, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		readyToolchain(t.TempDir()),
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(
+			attemptCtx context.Context,
+			CommandSpec,
+			ProgressHandler,
+			lineHandler LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "fallback required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			if lineHandler != nil {
+				lineHandler(OutputLine{
+					Stream: StreamStderr,
+					Text:   `[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8?token=secret"`,
+				})
+			}
+
+			ticker := time.NewTicker(5 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-attemptCtx.Done():
+					return DownloadResult{}, attemptCtx.Err()
+				case <-ticker.C:
+					if lineHandler != nil {
+						lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg heartbeat"})
+					}
+				}
+			}
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "대체 다운로드가 시작된 뒤") {
+		t.Fatalf("unexpected stall error: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("unexpected attempt count: %d", attempts)
+	}
+	if result.LastProgress.Status != progressStatusFallbackDownloading {
+		t.Fatalf("unexpected stalled progress: %#v", result.LastProgress)
+	}
+
+	var diagnostics strings.Builder
+	for _, line := range result.DiagnosticLines {
+		diagnostics.WriteString(line.Text)
+		diagnostics.WriteByte('\n')
+	}
+	if !strings.Contains(diagnostics.String(), "no fallback file growth") {
 		t.Fatalf("stall diagnostic missing:\n%s", diagnostics.String())
+	}
+}
+
+func TestIsFFmpegDownloaderStartLine(t *testing.T) {
+	for _, line := range []string{
+		`[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8"`,
+		`[debug] ffmpeg command line: ffmpeg -i https://example.com/master.m3u8`,
+	} {
+		if !isFFmpegDownloaderStartLine(line) {
+			t.Fatalf("expected downloader start line: %q", line)
+		}
+	}
+	if isFFmpegDownloaderStartLine("[debug] Extracting URL metadata") {
+		t.Fatal("metadata output must not mark ffmpeg downloader as started")
 	}
 }
 

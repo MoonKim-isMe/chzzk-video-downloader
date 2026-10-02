@@ -123,6 +123,8 @@ func buildDownloadCommandWithTempDir(
 	if useFFmpegHLS {
 		args = append(
 			args,
+			"--verbose",
+			"--no-quiet",
 			"--downloader", "m3u8:ffmpeg",
 			"--downloader-args", "ffmpeg:-nostdin",
 		)

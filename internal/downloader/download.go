@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,8 +20,17 @@ type DownloadResult struct {
 }
 
 var (
-	ffmpegFallbackPollInterval = time.Second
-	ffmpegFallbackStallTimeout = 60 * time.Second
+	ffmpegFallbackPollInterval       = time.Second
+	ffmpegFallbackPreparationTimeout = 120 * time.Second
+	ffmpegFallbackStallTimeout       = 60 * time.Second
+)
+
+type fallbackMonitorStopReason string
+
+const (
+	fallbackMonitorStopNone               fallbackMonitorStopReason = ""
+	fallbackMonitorStopPreparationTimeout fallbackMonitorStopReason = "preparation_timeout"
+	fallbackMonitorStopDownloadStalled    fallbackMonitorStopReason = "download_stalled"
 )
 
 type downloadAttemptRunner func(
@@ -113,22 +123,37 @@ func executeDownloadWithHLSFallback(
 		}
 	}
 
-	fallbackResult, fallbackErr, stalled := runMonitoredHLSFallback(
+	fallbackResult, fallbackErr, stopReason := runMonitoredHLSFallback(
 		ctx,
 		tempDir,
 		fallbackSpec,
 		handler,
 		run,
 	)
-	if stalled {
-		stallSeconds := int(ffmpegFallbackStallTimeout.Seconds())
+	switch stopReason {
+	case fallbackMonitorStopPreparationTimeout:
+		seconds := int(ffmpegFallbackPreparationTimeout.Seconds())
+		fallbackResult.LastProgress.Status = progressStatusFallbackPreparing
 		fallbackResult.DiagnosticLines = appendDiagnosticLine(
 			fallbackResult.DiagnosticLines,
 			OutputLine{
 				Stream: StreamStderr,
 				Text: fmt.Sprintf(
-					"fallback monitor: no fallback file growth for %d seconds",
-					stallSeconds,
+					"fallback monitor: ffmpeg downloader did not start within %d seconds",
+					seconds,
+				),
+			},
+		)
+	case fallbackMonitorStopDownloadStalled:
+		seconds := int(ffmpegFallbackStallTimeout.Seconds())
+		fallbackResult.LastProgress.Status = progressStatusFallbackDownloading
+		fallbackResult.DiagnosticLines = appendDiagnosticLine(
+			fallbackResult.DiagnosticLines,
+			OutputLine{
+				Stream: StreamStderr,
+				Text: fmt.Sprintf(
+					"fallback monitor: no fallback file growth for %d seconds after downloader start",
+					seconds,
 				),
 			},
 		)
@@ -139,17 +164,31 @@ func executeDownloadWithHLSFallback(
 		fallbackResult.DiagnosticLines,
 	)
 
-	if stalled {
-		stallSeconds := int(ffmpegFallbackStallTimeout.Seconds())
+	switch stopReason {
+	case fallbackMonitorStopPreparationTimeout:
+		seconds := int(ffmpegFallbackPreparationTimeout.Seconds())
 		return fallbackResult, fallbackSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
 			Message: fmt.Sprintf(
-				"대체 다운로드 방식이 %d초 동안 진행되지 않아 중단했습니다.",
-				stallSeconds,
+				"대체 다운로드 준비가 %d초 동안 완료되지 않아 중단했습니다.",
+				seconds,
 			),
 			Cause: fmt.Errorf(
-				"ffmpeg HLS fallback stalled without file growth for %d seconds",
-				stallSeconds,
+				"ffmpeg HLS fallback downloader did not start within %d seconds",
+				seconds,
+			),
+		}
+	case fallbackMonitorStopDownloadStalled:
+		seconds := int(ffmpegFallbackStallTimeout.Seconds())
+		return fallbackResult, fallbackSpec, &DownloadFailure{
+			Kind:    DownloadFailureHLSInitializationFragmentOrder,
+			Message: fmt.Sprintf(
+				"대체 다운로드가 시작된 뒤 %d초 동안 진행되지 않아 중단했습니다.",
+				seconds,
+			),
+			Cause: fmt.Errorf(
+				"ffmpeg HLS fallback stalled without file growth for %d seconds after downloader start",
+				seconds,
 			),
 		}
 	}
@@ -182,7 +221,7 @@ func runMonitoredHLSFallback(
 	spec CommandSpec,
 	handler ProgressHandler,
 	run downloadAttemptRunner,
-) (DownloadResult, error, bool) {
+) (DownloadResult, error, fallbackMonitorStopReason) {
 	fallbackCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -192,10 +231,10 @@ func runMonitoredHLSFallback(
 	}
 
 	outcomes := make(chan outcome, 1)
-	activity := make(chan struct{}, 1)
-	markActivity := func() {
+	downloaderStartedSignal := make(chan struct{}, 1)
+	markDownloaderStarted := func() {
 		select {
-		case activity <- struct{}{}:
+		case downloaderStartedSignal <- struct{}{}:
 		default:
 		}
 	}
@@ -209,16 +248,18 @@ func runMonitoredHLSFallback(
 			fallbackCtx,
 			spec,
 			func(progress DownloadProgress) {
-				markActivity()
 				if progress.Status != "completed" {
+					markDownloaderStarted()
 					progress.Status = progressStatusFallbackDownloading
 				}
 				if handler != nil {
 					handler(progress)
 				}
 			},
-			func(OutputLine) {
-				markActivity()
+			func(line OutputLine) {
+				if isFFmpegDownloaderStartLine(line.Text) {
+					markDownloaderStarted()
+				}
 			},
 		)
 		outcomes <- outcome{result: result, err: err}
@@ -231,36 +272,44 @@ func runMonitoredHLSFallback(
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	lastGrowth := time.Now()
-	lastSample := lastGrowth
+	startedAt := time.Now()
+	lastSample := startedAt
+	lastGrowth := startedAt
 	lastBytes, _ := temporaryDownloadSize(tempDir)
-	stalled := false
-	reportedProcessActivity := false
+	downloaderStarted := false
+
+	reportDownloading := func() {
+		if downloaderStarted {
+			return
+		}
+		downloaderStarted = true
+		lastGrowth = time.Now()
+		if handler != nil {
+			handler(DownloadProgress{
+				Status:          progressStatusFallbackDownloading,
+				DownloadedBytes: lastBytes,
+			})
+		}
+	}
 
 	for {
 		select {
 		case current := <-outcomes:
-			return current.result, current.err, stalled
+			return current.result, current.err, fallbackMonitorStopNone
 
 		case <-ctx.Done():
 			cancel()
 			current := <-outcomes
-			return current.result, current.err, false
+			return current.result, current.err, fallbackMonitorStopNone
 
-		case <-activity:
-			if !reportedProcessActivity {
-				reportedProcessActivity = true
-				if handler != nil {
-					handler(DownloadProgress{
-						Status:          progressStatusFallbackDownloading,
-						DownloadedBytes: lastBytes,
-					})
-				}
-			}
+		case <-downloaderStartedSignal:
+			reportDownloading()
 
 		case now := <-ticker.C:
 			currentBytes, sizeErr := temporaryDownloadSize(tempDir)
 			if sizeErr == nil && currentBytes != lastBytes {
+				reportDownloading()
+
 				elapsed := now.Sub(lastSample).Seconds()
 				speed := 0.0
 				if currentBytes > lastBytes && elapsed > 0 {
@@ -279,14 +328,29 @@ func runMonitoredHLSFallback(
 			}
 			lastSample = now
 
-			if !stalled &&
+			if !downloaderStarted &&
+				ffmpegFallbackPreparationTimeout > 0 &&
+				now.Sub(startedAt) >= ffmpegFallbackPreparationTimeout {
+				cancel()
+				current := <-outcomes
+				return current.result, current.err, fallbackMonitorStopPreparationTimeout
+			}
+
+			if downloaderStarted &&
 				ffmpegFallbackStallTimeout > 0 &&
 				now.Sub(lastGrowth) >= ffmpegFallbackStallTimeout {
-				stalled = true
 				cancel()
+				current := <-outcomes
+				return current.result, current.err, fallbackMonitorStopDownloadStalled
 			}
 		}
 	}
+}
+
+func isFFmpegDownloaderStartLine(line string) bool {
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "invoking ffmpeg downloader") ||
+		strings.Contains(lower, "ffmpeg command line")
 }
 
 func mergeHLSFallbackDiagnostics(

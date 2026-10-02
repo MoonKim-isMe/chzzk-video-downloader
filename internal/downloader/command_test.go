@@ -194,6 +194,11 @@ func TestBuildDownloadCommandUsesFFmpegForHLSFallback(t *testing.T) {
 			t.Fatalf("ffmpeg HLS fallback argument pair missing: %#v in %#v", pair, spec.Args)
 		}
 	}
+	for _, flag := range []string{"--verbose", "--no-quiet"} {
+		if !slices.Contains(spec.Args, flag) {
+			t.Fatalf("fallback diagnostic flag %q missing: %#v", flag, spec.Args)
+		}
+	}
 
 	pathInjected := false
 	for _, entry := range spec.Env {
