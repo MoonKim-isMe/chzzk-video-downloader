@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -86,14 +87,8 @@ func executeDownloadWithHLSFallback(
 		return firstResult, initialSpec, fmt.Errorf("다운로드가 취소되었습니다: %w", err)
 	}
 
-	if err := cleanupTemporaryDownloadRequest(request); err != nil {
-		return firstResult, initialSpec, &DownloadFailure{
-			Kind:    DownloadFailureHLSInitializationFragmentOrder,
-			Message: "영상 스트림 구조 문제를 감지했지만 대체 다운로드를 준비하지 못했습니다.",
-			Cause:   err,
-		}
-	}
-	tempDir, err := temporaryDownloadDirForRequest(request)
+	fallbackRunID := strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+	tempDir, err := fallbackTemporaryDownloadDirForRequest(request, fallbackRunID)
 	if err != nil {
 		return firstResult, initialSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
@@ -109,7 +104,7 @@ func executeDownloadWithHLSFallback(
 		}
 	}
 
-	fallbackSpec, err := buildDownloadCommand(toolchain, request, true)
+	fallbackSpec, err := buildDownloadCommandWithTempDir(toolchain, request, true, tempDir)
 	if err != nil {
 		return firstResult, initialSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,

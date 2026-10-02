@@ -8,7 +8,11 @@ import (
 	"strings"
 )
 
-const temporaryDownloadDirectoryName = ".chzzk-temp"
+const (
+	temporaryDownloadDirectoryName       = ".chzzk-temp"
+	nativeTemporaryDirectoryName         = "native"
+	fallbackTemporaryDirectoryNamePrefix = "fallback-"
+)
 
 func TemporaryDownloadDir(outputDir string, videoNo int64) (string, error) {
 	if videoNo <= 0 {
@@ -46,6 +50,50 @@ func temporaryDownloadDirForRequest(request DownloadRequest) (string, error) {
 		return "", err
 	}
 	return TemporaryDownloadDir(request.OutputDir, videoNo)
+}
+
+func nativeTemporaryDownloadDir(outputDir string, videoNo int64) (string, error) {
+	root, err := TemporaryDownloadDir(outputDir, videoNo)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, nativeTemporaryDirectoryName), nil
+}
+
+func fallbackTemporaryDownloadDir(outputDir string, videoNo int64, runID string) (string, error) {
+	root, err := TemporaryDownloadDir(outputDir, videoNo)
+	if err != nil {
+		return "", err
+	}
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return "", fmt.Errorf("대체 다운로드 실행 ID가 필요합니다")
+	}
+	return filepath.Join(root, fallbackTemporaryDirectoryNamePrefix+runID), nil
+}
+
+func nativeTemporaryDownloadDirForRequest(request DownloadRequest) (string, error) {
+	videoURL, err := normalizeVideoURL(request.URL)
+	if err != nil {
+		return "", err
+	}
+	videoNo, err := videoNoFromNormalizedURL(videoURL)
+	if err != nil {
+		return "", err
+	}
+	return nativeTemporaryDownloadDir(request.OutputDir, videoNo)
+}
+
+func fallbackTemporaryDownloadDirForRequest(request DownloadRequest, runID string) (string, error) {
+	videoURL, err := normalizeVideoURL(request.URL)
+	if err != nil {
+		return "", err
+	}
+	videoNo, err := videoNoFromNormalizedURL(videoURL)
+	if err != nil {
+		return "", err
+	}
+	return fallbackTemporaryDownloadDir(request.OutputDir, videoNo, runID)
 }
 
 func cleanupTemporaryDownloadRequest(request DownloadRequest) error {

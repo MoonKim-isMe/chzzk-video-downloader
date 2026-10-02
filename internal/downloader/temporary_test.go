@@ -92,3 +92,30 @@ func TestTemporaryDownloadSizeMissingDirectoryIsZero(t *testing.T) {
 		t.Fatalf("unexpected missing directory size: %d", size)
 	}
 }
+
+
+func TestDownloadAttemptTemporaryDirectoriesAreSeparated(t *testing.T) {
+	outputDir := t.TempDir()
+	root, err := TemporaryDownloadDir(outputDir, 15461111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeDir, err := nativeTemporaryDownloadDir(outputDir, 15461111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackDir, err := fallbackTemporaryDownloadDir(outputDir, 15461111, "123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if nativeDir != filepath.Join(root, "native") {
+		t.Fatalf("unexpected native temp dir: %q", nativeDir)
+	}
+	if fallbackDir != filepath.Join(root, "fallback-123456789") {
+		t.Fatalf("unexpected fallback temp dir: %q", fallbackDir)
+	}
+	if nativeDir == fallbackDir {
+		t.Fatalf("native and fallback temp directories must differ: %q", nativeDir)
+	}
+}

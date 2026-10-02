@@ -39,6 +39,22 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 }
 
 func buildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest, useFFmpegHLS bool) (CommandSpec, error) {
+	tempDir, err := nativeTemporaryDownloadDirForRequest(request)
+	if useFFmpegHLS {
+		tempDir, err = fallbackTemporaryDownloadDirForRequest(request, "default")
+	}
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	return buildDownloadCommandWithTempDir(toolchain, request, useFFmpegHLS, tempDir)
+}
+
+func buildDownloadCommandWithTempDir(
+	toolchain ToolchainStatus,
+	request DownloadRequest,
+	useFFmpegHLS bool,
+	tempDir string,
+) (CommandSpec, error) {
 	if !toolchain.YTDLP.Available {
 		return CommandSpec{}, fmt.Errorf("영상 다운로드 기능을 사용할 수 없습니다")
 	}
@@ -55,13 +71,9 @@ func buildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest, us
 	if err != nil {
 		return CommandSpec{}, err
 	}
-	videoNo, err := videoNoFromNormalizedURL(videoURL)
-	if err != nil {
-		return CommandSpec{}, err
-	}
-	tempDir, err := TemporaryDownloadDir(outputDir, videoNo)
-	if err != nil {
-		return CommandSpec{}, err
+	tempDir = filepath.Clean(strings.TrimSpace(tempDir))
+	if tempDir == "" || tempDir == "." {
+		return CommandSpec{}, fmt.Errorf("다운로드 임시 경로가 필요합니다")
 	}
 
 	formatSelector := strings.TrimSpace(request.FormatSelector)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -164,6 +165,15 @@ func TestRunPreparedDownloadClassifiesPartialDataConflict(t *testing.T) {
 }
 
 
+func commandTemporaryDir(args []string) string {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "--paths" && strings.HasPrefix(args[index+1], "temp:") {
+			return strings.TrimPrefix(args[index+1], "temp:")
+		}
+	}
+	return ""
+}
+
 func useFastFallbackMonitor(t *testing.T) {
 	t.Helper()
 	previousPoll := ffmpegFallbackPollInterval
@@ -184,14 +194,14 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 		URL:       "https://chzzk.naver.com/video/15461111",
 		OutputDir: outputDir,
 	}
-	tempDir, err := temporaryDownloadDirForRequest(request)
+	nativeTempDir, err := nativeTemporaryDownloadDirForRequest(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+	if err := os.MkdirAll(nativeTempDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stalePath := tempDir + string(os.PathSeparator) + "stale.part"
+	stalePath := filepath.Join(nativeTempDir, "stale.part")
 	if err := os.WriteFile(stalePath, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -223,9 +233,20 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 					Cause:   errors.New("Initialization fragment found after media fragments"),
 				}
 			}
-			if _, statErr := os.Stat(stalePath); !os.IsNotExist(statErr) {
-				t.Fatalf("stale VOD temp data was not removed before fallback: %v", statErr)
+			if _, statErr := os.Stat(stalePath); statErr != nil {
+				t.Fatalf("native temp data must not be deleted before fallback: %v", statErr)
 			}
+			fallbackTempDir := commandTemporaryDir(spec.Args)
+			if fallbackTempDir == "" {
+				t.Fatalf("fallback temp directory missing: %#v", spec.Args)
+			}
+			if filepath.Clean(fallbackTempDir) == filepath.Clean(nativeTempDir) {
+				t.Fatalf("fallback reused native temp directory: %q", fallbackTempDir)
+			}
+			if !strings.HasPrefix(filepath.Base(fallbackTempDir), fallbackTemporaryDirectoryNamePrefix) {
+				t.Fatalf("unexpected fallback temp directory: %q", fallbackTempDir)
+			}
+
 			found := false
 			for index := 0; index+1 < len(spec.Args); index++ {
 				if spec.Args[index] == "--downloader" && spec.Args[index+1] == "m3u8:ffmpeg" {
@@ -241,7 +262,7 @@ func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T)
 				lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg started"})
 			}
 			if err := os.WriteFile(
-				tempDir+string(os.PathSeparator)+"fallback.part",
+				filepath.Join(fallbackTempDir, "fallback.part"),
 				make([]byte, 512),
 				0o644,
 			); err != nil {

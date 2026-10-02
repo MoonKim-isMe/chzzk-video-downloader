@@ -1106,7 +1106,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - VOD별 temp 경로가 `.chzzk-temp/{videoNo}`로 분리되고 최종 저장 경로와 별도 `--paths temp:` 인자로 전달되는 구조 정적 확인
 - `partial_data_conflict` 오류 코드의 Queue → SQLite → Frontend 타입 연결 및 복구 API/버튼 경로 정적 확인
 - 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
-- HLS initialization fragment 오류 분류 → VOD 임시 디렉터리 정리 → `m3u8:ffmpeg` command fallback → fallback 실패 시 양쪽 시도 진단 로그 병합 경로 정적 확인
+- HLS initialization fragment 오류 분류 → native temp 보존 → 독립 `fallback-{runId}` temp 생성 → `m3u8:ffmpeg` command fallback → fallback 실패 시 양쪽 시도 진단 로그 병합 경로 정적 확인
 - 최신 main의 다운로드 가속 `--concurrent-fragments` 정책과 HLS fallback command를 함께 유지하도록 충돌 병합 확인
 - fallback command의 ffmpeg PATH 주입 / downloader args, temp 크기 기반 다운로드 용량·속도 관측, 프로세스 출력 기반 activity 갱신, 60초 stall 취소 경로 테스트 추가
 - Download Manager의 `대체 방식 재시도` 상태 Tag, 준비/연결/다운로드 중 문구 및 전체 크기를 알 수 없는 fallback metrics 표시 경로 정적 확인

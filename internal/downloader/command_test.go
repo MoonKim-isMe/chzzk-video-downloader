@@ -33,7 +33,7 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if !hasArgumentPair(spec.Args, "--concurrent-fragments", "2") {
 		t.Fatalf("default acceleration missing: %#v", spec.Args)
 	}
-	expectedTempDir, err := TemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
+	expectedTempDir, err := nativeTemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,4 +206,21 @@ func TestBuildDownloadCommandUsesFFmpegForHLSFallback(t *testing.T) {
 	if !pathInjected {
 		t.Fatalf("ffmpeg tool directory was not injected into PATH: %#v", spec.Env)
 	}
+
+	expectedFallbackTemp, err := fallbackTemporaryDownloadDir(specOutputDir(spec.Args), 12345, "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasArgumentPair(spec.Args, "--paths", "temp:"+expectedFallbackTemp) {
+		t.Fatalf("isolated fallback temp path missing: %#v", spec.Args)
+	}
+}
+
+func specOutputDir(args []string) string {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "--paths" && !strings.HasPrefix(args[index+1], "temp:") {
+			return args[index+1]
+		}
+	}
+	return ""
 }
