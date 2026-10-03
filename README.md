@@ -1,8 +1,8 @@
-# CHZZK Video Downloader
+# CHZZK/YouTube Video Downloader
 
-치지직 채널을 검색하거나 치지직 VOD URL을 직접 입력해 원하는 영상을 yt-dlp로 내려받기 위한 Windows 데스크톱 애플리케이션입니다.
+CHZZK와 YouTube의 영상을 한 앱에서 탐색하고 다운로드하기 위한 Windows 데스크톱 애플리케이션입니다.
 
-현재는 **Phase 6 — Persistence 완료 후 UX Refinement**를 진행 중입니다.
+현재 `v0.1`은 CHZZK 검색·URL 다운로드와 Windows Portable 배포 기반을 제공하며, `v0.2`에서 YouTube 검색·통합 URL 다운로드·YouTube MP3 다운로드를 추가하는 것을 목표로 합니다.
 
 ## 현재 구현 범위
 
@@ -36,6 +36,29 @@
 - 취소/완료 경합 시 cancelled 상태 우선 보장
 
 Phase 1의 저장 채널은 현재 앱 실행 중 메모리에 보관합니다. 앱 재실행 후에도 유지되는 영속 저장은 이후 SQLite Phase에서 추가합니다.
+
+## v0.2 목표
+
+v0.2의 제품명은 **CHZZK/YouTube Video Downloader**입니다. 기존 CHZZK 동작을 유지하면서 YouTube를 동일한 다운로드 경험에 추가합니다.
+
+- CHZZK 검색은 현재 채널 검색과 VOD 목록 흐름을 유지합니다.
+- YouTube 검색은 CHZZK 검색과 분리된 전용 화면으로 제공합니다.
+- `URL 직접 입력`은 CHZZK와 YouTube URL을 한 입력창에서 받고 Provider를 자동 판별합니다.
+- URL 또는 검색 결과는 공통 Media 모델로 정규화한 뒤 동일한 Download Queue로 전달합니다.
+- YouTube는 기존 영상 다운로드에 더해 **MP3 다운로드**를 제공합니다.
+- 영상 다운로드의 해상도·컨테이너·동시 다운로드·가속 설정은 가능한 범위에서 기존 정책을 재사용합니다.
+- MP3 작업은 영상 작업과 구분해 Queue·진행 상태·완료/실패 이력에 표시합니다.
+- 기존 CHZZK 사용자 설정, 북마크, 다운로드 이력과 런타임 데이터가 앱 이름 변경 때문에 유실되지 않도록 데이터 경로 호환 또는 마이그레이션 정책을 먼저 확정합니다.
+- Portable 파일명에는 `/`를 사용할 수 없으므로 v0.2 배포 파일은 `CHZZK-YouTube-Video-Downloader-v{version}-portable.exe` 형식을 사용합니다.
+
+기본 탐색 구조는 다음을 목표로 합니다.
+
+```text
+[CHZZK 검색] [YouTube 검색] [URL 직접 입력] [다운로드] [설정]
+```
+
+v0.2의 상세 구현 순서와 완료 조건은 `DEVELOPMENT_PLAN.md`의 **Version 0.2** 섹션을 기준으로 관리합니다.
+
 
 ## 기술 스택
 
