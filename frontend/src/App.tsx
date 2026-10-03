@@ -65,10 +65,11 @@ function SettingsIcon() {
 
 interface AppContentProps {
   themeMode: ThemeMode;
+  onThemePreview: (theme: ThemeMode) => void;
   onSettingsUpdated: (settings: AppSettings) => void;
 }
 
-function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
+function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContentProps) {
   const { message } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<AppTab>('search');
   const [channelPanelTab, setChannelPanelTab] = useState<ChannelPanelTab>('search');
@@ -323,6 +324,7 @@ function AppContent({ themeMode, onSettingsUpdated }: AppContentProps) {
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        onThemePreview={onThemePreview}
         onSettingsUpdated={onSettingsUpdated}
       />
     </Layout>
@@ -369,6 +371,7 @@ function App() {
       <AntdApp message={{ top: messageTopOffset }}>
         <AppContent
           themeMode={themeMode}
+          onThemePreview={setThemeMode}
           onSettingsUpdated={(settings) => setThemeMode(settings.theme)}
         />
       </AntdApp>

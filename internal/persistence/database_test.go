@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -51,6 +52,100 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	}
 	if version != 6 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
+	}
+}
+
+func TestOpenRepairsLegacySettingsSchemaWithoutDownloadAcceleration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.sqlite3")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, statement := range []string{
+		`CREATE TABLE schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE app_settings (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			schema_version INTEGER NOT NULL,
+			download_dir TEXT NOT NULL,
+			resolution TEXT NOT NULL,
+			output_format TEXT NOT NULL,
+			max_concurrent_downloads INTEGER NOT NULL,
+			updated_at TEXT NOT NULL,
+			theme TEXT NOT NULL DEFAULT 'dark'
+		)`,
+		`INSERT INTO app_settings (
+			id,
+			schema_version,
+			download_dir,
+			resolution,
+			output_format,
+			max_concurrent_downloads,
+			updated_at,
+			theme
+		) VALUES (
+			1,
+			2,
+			'C:\\Downloads',
+			'best',
+			'mp4',
+			3,
+			'2026-10-03T00:00:00Z',
+			'dark'
+		)`,
+	} {
+		if _, err := raw.Exec(statement); err != nil {
+			_ = raw.Close()
+			t.Fatal(err)
+		}
+	}
+	for version := 1; version <= 6; version++ {
+		if _, err := raw.Exec(
+			"INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+			version,
+			"2026-10-03T00:00:00Z",
+		); err != nil {
+			_ = raw.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	record, found, err := database.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("expected repaired settings row")
+	}
+	if record.DownloadAcceleration != appsettings.DownloadAccelerationStandard {
+		t.Fatalf("unexpected repaired download acceleration: %q", record.DownloadAcceleration)
+	}
+	if record.SchemaVersion != appsettings.StorageSchemaVersion {
+		t.Fatalf("unexpected repaired settings schema version: %d", record.SchemaVersion)
+	}
+
+	var count int
+	if err := database.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('app_settings')
+		WHERE name = 'download_acceleration'
+	`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("download_acceleration column was not repaired: %d", count)
 	}
 }
 

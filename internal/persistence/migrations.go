@@ -148,6 +148,44 @@ func (d *Database) migrate() error {
 		}
 		current = item.version
 	}
+
+	if err := d.repairLegacySettingsSchema(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *Database) repairLegacySettingsSchema() error {
+	var hasDownloadAcceleration int
+	if err := d.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('app_settings')
+		WHERE name = 'download_acceleration'
+	`).Scan(&hasDownloadAcceleration); err != nil {
+		return fmt.Errorf("SQLite 설정 스키마를 확인할 수 없습니다: %w", err)
+	}
+	if hasDownloadAcceleration == 0 {
+		if _, err := d.db.Exec(
+			`ALTER TABLE app_settings
+				ADD COLUMN download_acceleration TEXT NOT NULL DEFAULT 'standard'`,
+		); err != nil {
+			return fmt.Errorf("SQLite 다운로드 가속 설정 컬럼을 복구할 수 없습니다: %w", err)
+		}
+	}
+
+	if _, err := d.db.Exec(`UPDATE app_settings
+		SET schema_version = CASE
+				WHEN schema_version < 3 THEN 3
+				ELSE schema_version
+			END,
+			download_acceleration = CASE
+				WHEN download_acceleration IN ('stable', 'standard', 'fast', 'ultra')
+					THEN download_acceleration
+				ELSE 'standard'
+			END
+		WHERE id = 1`); err != nil {
+		return fmt.Errorf("SQLite 다운로드 가속 설정을 복구할 수 없습니다: %w", err)
+	}
 	return nil
 }
 
