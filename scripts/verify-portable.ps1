@@ -10,7 +10,10 @@ $expectedArtifact = "CHZZK-Video-Downloader-v$($metadata.version)-portable.exe"
 if ($metadata.version -notmatch '^\d+\.\d+\.\d+$' -or
     $metadata.artifact -cne $expectedArtifact -or
     $metadata.platform -ne "windows/amd64" -or
-    $metadata.distribution -ne "portable") {
+    $metadata.distribution -ne "portable" -or
+    $metadata.projectLicense -ne "MIT" -or
+    $metadata.projectLicenseFile -ne "LICENSE" -or
+    $metadata.thirdPartyNotices -ne "THIRD_PARTY_NOTICES.md") {
     throw "Invalid Portable release metadata."
 }
 $exePath = Join-Path $ReleaseDir $expectedArtifact
@@ -41,6 +44,9 @@ $hash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLowerInvar
 $checksum = (Get-Content -LiteralPath "$exePath.sha256" -Raw).Trim()
 if ($metadata.sha256 -cne $hash -or $checksum -cne "$hash  $expectedArtifact") {
     throw "Portable EXE checksum verification failed."
+}
+if (-not (Test-Path -LiteralPath (Join-Path $ReleaseDir "LICENSE") -PathType Leaf)) {
+    throw "Project license is missing."
 }
 if (-not (Test-Path -LiteralPath (Join-Path $ReleaseDir "THIRD_PARTY_NOTICES.md") -PathType Leaf)) {
     throw "Third-party notices are missing."

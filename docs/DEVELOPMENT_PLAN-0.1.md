@@ -1280,3 +1280,38 @@ Windows 실 검증 대기:
 - 아이콘 원본은 256×256 RGBA PNG이며 네 모서리가 투명한 상태임을 확인한다.
 - `build-windows.ps1`은 Wails 실행 직전에 원본 PNG를 복사하고 기존 생성 ICO를 제거하므로 이전 로컬 아이콘이 남아 새 아이콘 생성을 막지 않는다.
 - 실제 Windows Shell의 아이콘 캐시까지 포함한 최종 표시는 Windows Portable EXE 실 빌드 후 확인한다.
+
+### Phase 7-G — 라이선스 및 제3자 고지 정리
+
+- [x] PKG-7G-1. Repository 작성 소스에 MIT `LICENSE` 추가 및 저작권자 `MoonKim` 명시
+- [x] PKG-7G-2. `THIRD_PARTY_NOTICES.md`에 yt-dlp, FFmpeg/ffprobe, WebView2 및 주요 런타임 의존성의 라이선스·출처·적용 범위 정리
+- [x] PKG-7G-3. Portable 릴리스에 `LICENSE`와 `THIRD_PARTY_NOTICES.md`를 함께 복사하고 release metadata에 project license 필드 기록
+- [x] PKG-7G-4. Portable 검증에서 프로젝트 라이선스·제3자 고지·project license metadata 누락을 실패 처리
+- [x] PKG-7G-5. README에 프로젝트 라이선스와 제3자 라이선스 분리 원칙 및 배포 파일 구성을 문서화
+- [ ] PKG-7G-6. Windows/PowerShell 환경에서 `scripts/test-portable.ps1` 계약 테스트 실제 실행
+
+#### Phase 7-G 라이선스 기준
+
+- Repository에서 직접 작성한 프로젝트 소스 코드는 MIT License를 적용하고 `Copyright (c) 2026 MoonKim`으로 표기한다.
+- Repository의 MIT License는 제3자 구성요소를 재라이선스하지 않는다.
+- 공식 Windows `yt-dlp.exe`는 upstream 안내에 따라 PyInstaller 번들에 GPLv3+ 코드가 포함된 배포물로 고지한다. yt-dlp 원본을 수정하지 않고 별도 프로세스로 실행한다.
+- FFmpeg/ffprobe는 현재 빌드 스크립트가 선택하는 `ffmpeg-master-latest-win64-lgpl.zip` 기준으로 LGPL-2.1-or-later 구성요소로 고지한다. artifact/provider 변경 시 라이선스를 다시 검토한다.
+- Wails `-webview2 embed`가 포함하는 Microsoft Edge WebView2 Evergreen Runtime bootstrapper는 Microsoft 배포 조건의 적용을 받으며 프로젝트 MIT 대상에 포함하지 않는다.
+- Wails/React/Ant Design/modernc.org/sqlite 등 애플리케이션 의존성은 각 upstream 라이선스를 유지하고 정확한 버전은 `go.mod`/`go.sum`/`frontend/yarn.lock`을 기준으로 한다.
+- Portable 릴리스에는 실행 파일과 별개로 `LICENSE`와 `THIRD_PARTY_NOTICES.md`를 함께 게시하는 것을 배포 기준으로 한다.
+
+#### Phase 7-G 검증 현황
+
+완료:
+
+- 현재 빌드 스크립트가 공식 `yt-dlp.exe`와 BtbN `win64-lgpl` FFmpeg archive를 선택하는 경로를 확인했다.
+- yt-dlp upstream의 현재 Licensing 안내에서 PyInstaller Windows 실행 파일이 GPLv3+ 결합 저작물로 배포됨을 확인했다.
+- FFmpeg 공식 License 안내에서 기본 LGPL-2.1-or-later와 GPL 옵션 활성화 시 라이선스 변경 조건을 확인했고, 현재 artifact명이 LGPL build임을 대조했다.
+- Microsoft 공식 WebView2 배포 문서에서 Evergreen bootstrapper를 애플리케이션과 함께 패키징할 수 있음을 확인했다.
+- Wails v2.15.0은 MIT, modernc.org/sqlite는 BSD-3-Clause, React/Ant Design 계열 주요 런타임 패키지는 MIT임을 각 package metadata에서 확인했다.
+- `build-windows.ps1`, `verify-portable.ps1`, `test-portable.ps1`의 license 파일/metadata 계약을 동일하게 갱신했다.
+
+검증 대기:
+
+- 현재 작업 환경에는 PowerShell이 없어 `scripts/test-portable.ps1`을 실제 실행하지 못했다. Windows/PowerShell 환경에서 계약 테스트를 실행한 뒤 PKG-7G-6을 완료 처리한다.
+
