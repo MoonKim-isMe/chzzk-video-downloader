@@ -1,5 +1,8 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = "Patch")]
 param(
+    [Parameter(ParameterSetName = "Minor")][switch]$Minor,
+    [Parameter(ParameterSetName = "Major")][switch]$Major,
+    [Parameter(ParameterSetName = "NoVersionBump")][switch]$NoVersionBump,
     [switch]$RefreshTools
 )
 
@@ -9,11 +12,42 @@ if ($env:OS -ne "Windows_NT") {
     throw "Build the Windows Portable EXE on Windows."
 }
 
-$config = Get-Content -LiteralPath (Join-Path $repoRoot "wails.json") -Raw | ConvertFrom-Json
-$version = [string]$config.info.productVersion
-if ($version -notmatch '^\d+\.\d+\.\d+$') {
+$wailsPath = Join-Path $repoRoot "wails.json"
+$packagePath = Join-Path $repoRoot "frontend\package.json"
+$originalWails = [IO.File]::ReadAllBytes($wailsPath)
+$originalPackage = [IO.File]::ReadAllBytes($packagePath)
+$wailsText = [IO.File]::ReadAllText($wailsPath)
+$packageText = [IO.File]::ReadAllText($packagePath)
+$config = $wailsText | ConvertFrom-Json
+$package = $packageText | ConvertFrom-Json
+$currentVersion = [string]$config.info.productVersion
+if ($currentVersion -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
     throw "wails.json info.productVersion must use major.minor.patch."
 }
+if ($package.version -cne $currentVersion) {
+    throw "wails.json and frontend/package.json versions must match before building."
+}
+$parts = @($currentVersion.Split('.') | ForEach-Object { [int]$_ })
+if ($Major) { $parts = @(($parts[0] + 1), 0, 0) }
+elseif ($Minor) { $parts = @($parts[0], ($parts[1] + 1), 0) }
+elseif (-not $NoVersionBump) { $parts[2]++ }
+if (@($parts | Where-Object { $_ -gt 65535 }).Count -gt 0) {
+    throw "Windows product version components must not exceed 65535."
+}
+$version = $parts -join '.'
+$config.info.productVersion = $version
+
+function Set-VersionText {
+    param([string]$Text, [string]$Property, [string]$Value)
+    $pattern = '("' + [Regex]::Escape($Property) + '"\s*:\s*")[^"]+(")'
+    # Preserve formatting and every other JSON field.
+    if ([Regex]::Matches($Text, $pattern).Count -ne 1) {
+        throw "Expected exactly one $Property version field."
+    }
+    return [Regex]::Replace($Text, $pattern, '${1}' + $Value + '${2}')
+}
+$nextWails = Set-VersionText -Text $wailsText -Property "productVersion" -Value $version
+$nextPackage = Set-VersionText -Text $packageText -Property "version" -Value $version
 $artifactName = "CHZZK-Video-Downloader-v$version-portable.exe"
 $releaseDir = Join-Path $repoRoot "build\portable\v$version"
 
@@ -44,7 +78,15 @@ foreach ($name in $expectedTools) {
 }
 
 Push-Location $repoRoot
+$versionsWritten = $false
 try {
+    if ($version -cne $currentVersion) {
+        $versionsWritten = $true
+        $wailsBom = $originalWails.Length -ge 3 -and $originalWails[0] -eq 239 -and $originalWails[1] -eq 187 -and $originalWails[2] -eq 191
+        $packageBom = $originalPackage.Length -ge 3 -and $originalPackage[0] -eq 239 -and $originalPackage[1] -eq 187 -and $originalPackage[2] -eq 191
+        [IO.File]::WriteAllText($wailsPath, $nextWails, (New-Object Text.UTF8Encoding($wailsBom)))
+        [IO.File]::WriteAllText($packagePath, $nextPackage, (New-Object Text.UTF8Encoding($packageBom)))
+    }
     # No NSIS, app installer, UPX, or code signing. Embed the official WebView2
     # bootstrapper so machines without the runtime receive an installation prompt.
     $arguments = @("build", "-platform", "windows/amd64", "-webview2", "embed", "-o", $artifactName)
@@ -88,6 +130,14 @@ try {
     Copy-Item -LiteralPath (Join-Path $repoRoot "THIRD_PARTY_NOTICES.md") -Destination $releaseDir -Force
     & (Join-Path $PSScriptRoot "verify-portable.ps1") -ReleaseDir $releaseDir
     Write-Host "Portable release ready: $releaseExe"
+    Write-Host "Product version: $currentVersion -> $version"
+}
+catch {
+    if ($versionsWritten) {
+        [IO.File]::WriteAllBytes($wailsPath, $originalWails)
+        [IO.File]::WriteAllBytes($packagePath, $originalPackage)
+    }
+    throw
 }
 finally {
     Pop-Location

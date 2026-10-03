@@ -1154,7 +1154,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 법인/회사명을 의미하는 별도 브랜드를 사용하지 않고 개인 배포자명은 `MoonKim`으로 통일한다.
 - Wails의 `companyName` 필드는 Windows 리소스 메타데이터 필드명이며, 값은 개인 배포자명 `MoonKim`을 사용한다.
 - 제품명은 `CHZZK Video Downloader`를 유지한다.
-- 현재 개발 버전은 `0.1.0`을 유지하고 정식 배포 시 별도 버전 정책에 따라 갱신한다.
+- 현재 저장된 개발 버전은 `0.1.0`이며, Phase 7-C의 기본 패치/명시적 마이너·메이저/버전 유지 정책에 따라 빌드한다.
 - 저작권 표기는 `Copyright © 2026 MoonKim`을 사용한다.
 - 사용자용 제품 설명에서는 내부 구현 도구명을 직접 노출하지 않고 `CHZZK VOD downloader`로 표시한다.
 - 실제 Portable EXE의 Windows 파일 속성 반영 여부는 Phase 7 패키징 검증에서 확인한다.
@@ -1178,7 +1178,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 #### Phase 7 배포 기준
 
 - 공식 기본 배포물은 `CHZZK-Video-Downloader-v{version}-portable.exe`이며 앱 설치 프로그램과 ZIP을 생성하지 않는다.
-- 현재 버전은 `0.1.0`이다. 개인 배포자명 `MoonKim`과 저작권을 유지하고 코드 서명을 적용하지 않는다.
+- 현재 저장 버전은 `0.1.0`이며 기본 빌드 성공 시 `0.1.1`로 증가한다. 개인 배포자명 `MoonKim`과 저작권을 유지하고 코드 서명을 적용하지 않는다.
 - 프로젝트는 Wails 기반이다. 기존 Go embed 및 LocalAppData 도구 관리 방식을 재사용하며 Electron portable/asar 구조로 전환하지 않는다.
 - yt-dlp/ffmpeg/ffprobe는 EXE에 내장하며 런타임에는 `%LOCALAPPDATA%/CHZZK Video Downloader/tools`에서 실행한다.
 - 동일 bundle에서 managed 도구는 재사용한다. 파일 누락 또는 bundle 변경 시 내장본을 추출한다. 새 bundle은 직접 갱신한 도구도 내장본으로 교체한다. 별도 도구 자동 업데이트 기능은 이번 범위에 추가하지 않는다.
@@ -1211,3 +1211,23 @@ Windows 실 검증 대기:
 
 - 기존 `go test ./internal/...`에서 `download_test.go`의 두 callback에 타입/이름이 혼용된 파라미터가 있고, `queue_test.go`에서 미정의 `immediateErrorExecutor`를 참조하여 downloader 전체 테스트가 컴파일되지 않는다. Portable 변경 이전 코드의 오류이며 관련 bundle/Resolver 테스트와 production compile은 별도로 수행한다. 전체 테스트 통과로 기록하지 않는다.
 - `go test app.go app_download_test.go app_persistence_test.go app_settings_test.go`는 기존 3개 Queue 테스트가 기본 동시 다운로드 1을 기대하지만 현재 기본값은 3이어서 실패했다. 관련 설정/저장 테스트는 선별 통과했으며 이 요청에서는 다운로드 테스트를 임의 수정하지 않는다.
+
+
+### Phase 7-C — Portable 빌드 버전 관리
+
+- [x] PKG-7C-1. 기본 실행 시 patch +1, `-Minor`/`-Major` 선택 시 하위 버전 0 초기화
+- [x] PKG-7C-2. `-NoVersionBump`로 동일 버전 재빌드 및 모든 옵션에 `-RefreshTools` 조합 지원
+- [x] PKG-7C-3. 상충하는 버전 옵션, JSON 버전 불일치, Windows 버전 범위 오류를 빌드 전에 거부
+- [x] PKG-7C-4. Wails/Frontend 버전·EXE 파일명·release metadata 동기화, 기존 JSON 필드/서식 유지
+- [x] PKG-7C-5. 성공 시 증가된 버전 유지, 빌드 또는 배포 검증 실패 시 두 JSON을 원래 바이트로 복원
+- [x] PKG-7C-6. PowerShell 계약 테스트와 README 사용 예시 업데이트
+
+#### Phase 7-C 검증 및 사용 기준
+
+- PowerShell 7.4.6 fixture에서 기본 patch, Minor + RefreshTools, Major, NoVersionBump, 두 JSON/EXE/metadata 동기화를 검증했다.
+- NoVersionBump 실행 및 patch/minor/major 빌드 실패 시 두 JSON이 바이트 단위로 유지/복원되는 것을 검증했다.
+- 컴파일 성공 후 배포 검증 실패 시에도 JSON을 복원하는 것을 검증했다.
+- 상충하는 버전 옵션 조합과 Wails/Frontend 버전 불일치를 거부하는 것을 검증했다.
+- Windows PowerShell의 기본 문자 인코딩에 의존하지 않고 UTF-8 JSON을 읽으며, 버전 변경 외 기존 필드·줄바꿈·BOM을 유지한다.
+- Repository의 저장 버전 자체는 이번 스크립트 구현 요청에서 수동 증가시키지 않았다. 실제 Windows 빌드가 성공하면 버전 변경 파일도 이후 commit에 포함한다.
+- 기존 Windows 실제 실행 검증 대기 및 전체 테스트 차단 사항은 그대로 유지한다. 이번 추가 수정은 PowerShell/문서 범위이며 기존 Go 테스트 오류를 임의 수정하지 않는다.

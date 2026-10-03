@@ -309,12 +309,32 @@ Windows amd64에서 프로젝트 루트의 아래 명령으로 빌드합니다. 
 powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1
 ```
 
-버전은 `wails.json`의 `info.productVersion`을 기준으로 합니다. 현재 `0.1.0`이며 빌드 시 임의로 `1.0.0`으로 올리지 않습니다. 정식 배포 버전을 바꾸려면 프론트엔드 `package.json` 버전도 함께 맞춥니다.
+버전은 `wails.json`의 `info.productVersion`을 기준으로 합니다. 기본 실행은 패치를 1 증가시키며, 두 JSON 버전과 EXE 파일명·배포 metadata를 함께 맞춥니다. 현재 저장 버전 `0.1.0`에서 기본 빌드가 성공하면 `0.1.1`이 됩니다.
+
+| 옵션 | 버전 변경 예시 (`1.2.3` 기준) |
+| --- | --- |
+| 기본 실행 | `1.2.4` |
+| `-Minor` | `1.3.0` |
+| `-Major` | `2.0.0` |
+| `-NoVersionBump` | `1.2.3` 유지 |
+
+```powershell
+# 마이너 증가
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Minor
+# 메이저 증가
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Major
+# 같은 버전으로 다시 빌드
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -NoVersionBump
+```
+
+버전 옵션은 하나만 지정할 수 있으며 각 옵션에 `-RefreshTools`를 함께 사용할 수 있습니다. 마이너 증가 시 패치는 0으로, 메이저 증가 시 마이너·패치는 0으로 초기화합니다. 기본 패치는 마이너로 자동 올림되지 않습니다.
+
+빌드 전에 두 파일의 버전이 다르면 중단합니다. 빌드·메타데이터 검사·최종 배포 검증 중 실패하면 두 JSON 파일을 변경 전 바이트로 복원합니다. 성공하면 새 버전이 두 파일에 유지되므로 이후 commit에 함께 포함합니다. `-NoVersionBump`는 두 버전 파일을 쓰지 않고 같은 버전의 산출물을 다시 생성합니다.
 
 ```text
-build/portable/v0.1.0/
-  CHZZK-Video-Downloader-v0.1.0-portable.exe
-  CHZZK-Video-Downloader-v0.1.0-portable.exe.sha256
+build/portable/v0.1.1/
+  CHZZK-Video-Downloader-v0.1.1-portable.exe
+  CHZZK-Video-Downloader-v0.1.1-portable.exe.sha256
   release-metadata.json
   THIRD_PARTY_NOTICES.md
 ```
@@ -323,7 +343,7 @@ build/portable/v0.1.0/
 
 빌드 스크립트는 준비된 도구 3종의 SHA-256을 다시 확인한 뒤 빌드합니다. 빌드 결과의 제품명·버전·개인 배포자 `MoonKim`·저작권을 확인하고, EXE의 SHA-256 및 도구 bundle manifest를 기록합니다. 도구가 누락되거나 손상되면 빌드를 중단합니다.
 
-최신 다운로드 도구로 새 배포본을 만들려면:
+최신 다운로드 도구로 패치를 증가시킨 새 배포본을 만들려면:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -RefreshTools
@@ -334,7 +354,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -RefreshToo
 배포 파일 단일 amd64 PE EXE 여부 및 무결성 확인:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\verify-portable.ps1 -ReleaseDir .\build\portable\v0.1.0
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-portable.ps1 -ReleaseDir .\build\portable\v0.1.1
 ```
 
 패키징 스크립트 계약 검증(실제 Wails/도구 실행을 fixture로 대체):
