@@ -57,7 +57,7 @@ v0.2의 제품명은 **CHZZK/YouTube Video Downloader**입니다. 기존 CHZZK �
 [CHZZK 검색] [YouTube 검색] [URL 직접 입력] [다운로드] [설정]
 ```
 
-v0.2의 상세 구현 순서와 완료 조건은 `DEVELOPMENT_PLAN.md`의 **Version 0.2** 섹션을 기준으로 관리합니다.
+v0.2의 상세 구현 순서와 완료 조건은 [`docs/DEVELOPMENT_PLAN-0.2.md`](./docs/DEVELOPMENT_PLAN-0.2.md)를 기준으로 관리합니다.
 
 
 ## 기술 스택
@@ -202,7 +202,10 @@ WebView2 데이터는 `%LOCALAPPDATA%\CHZZK Video Downloader\webview2`에 저장
 
 ## 개발 계획
 
-세부 Phase와 진행 상태는 [`DEVELOPMENT_PLAN.md`](./DEVELOPMENT_PLAN.md)를 기준으로 관리합니다.
+버전별 개발 계획과 진행 상태는 `docs/` 아래에서 관리합니다.
+
+- v0.1: [`docs/DEVELOPMENT_PLAN-0.1.md`](./docs/DEVELOPMENT_PLAN-0.1.md)
+- v0.2: [`docs/DEVELOPMENT_PLAN-0.2.md`](./docs/DEVELOPMENT_PLAN-0.2.md)
 
 ## Phase 3~4 다운로드 동작
 
