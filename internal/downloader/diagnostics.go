@@ -153,7 +153,8 @@ func redactDiagnosticText(text string) string {
 			return raw
 		}
 
-		safe := parsed.Scheme + "://" + parsed.Host + parsed.EscapedPath()
+		safePath := redactDiagnosticURLPath(parsed.EscapedPath())
+		safe := parsed.Scheme + "://" + parsed.Host + safePath
 		if parsed.RawQuery != "" {
 			safe += "?<redacted>"
 		}
@@ -175,4 +176,18 @@ func splitDiagnosticURLSuffix(raw string) (string, string) {
 		}
 	}
 	return raw, ""
+}
+
+
+func redactDiagnosticURLPath(path string) string {
+	segments := strings.Split(path, "/")
+	for index, segment := range segments {
+		lower := strings.ToLower(segment)
+		if strings.HasPrefix(lower, "hdntl=") ||
+			strings.HasPrefix(lower, "hdnts=") ||
+			strings.Contains(lower, "~hmac=") {
+			segments[index] = "<redacted>"
+		}
+	}
+	return strings.Join(segments, "/")
 }

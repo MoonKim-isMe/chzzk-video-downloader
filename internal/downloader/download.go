@@ -68,6 +68,7 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 				lineHandler,
 			)
 		},
+		m.runner.Run,
 	)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -88,6 +89,7 @@ func executeDownloadWithHLSFallback(
 	initialSpec CommandSpec,
 	handler ProgressHandler,
 	run downloadAttemptRunner,
+	rawRun rawCommandRunner,
 ) (DownloadResult, CommandSpec, error) {
 	firstResult, firstErr := run(ctx, initialSpec, handler, nil)
 	if firstErr == nil || !isDownloadFailureKind(firstErr, DownloadFailureHLSInitializationFragmentOrder) {
@@ -97,17 +99,35 @@ func executeDownloadWithHLSFallback(
 		return firstResult, initialSpec, fmt.Errorf("다운로드가 취소되었습니다: %w", err)
 	}
 
+	splitResult, splitSpec, splitErr := executeDiscontinuitySplitFallback(
+		ctx,
+		request,
+		toolchain,
+		handler,
+		run,
+		rawRun,
+	)
+	if splitErr == nil {
+		return splitResult, splitSpec, nil
+	}
+	if errors.Is(splitErr, context.Canceled) || errors.Is(splitErr, context.DeadlineExceeded) {
+		return splitResult, splitSpec, splitErr
+	}
+	if err := ctx.Err(); err != nil {
+		return splitResult, splitSpec, fmt.Errorf("다운로드가 취소되었습니다: %w", err)
+	}
+
 	fallbackRunID := strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
 	tempDir, err := fallbackTemporaryDownloadDirForRequest(request, fallbackRunID)
 	if err != nil {
-		return firstResult, initialSpec, &DownloadFailure{
+		return splitResult, splitSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
 			Message: "영상 스트림 구조 문제를 감지했지만 대체 다운로드를 준비하지 못했습니다.",
 			Cause:   err,
 		}
 	}
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
-		return firstResult, initialSpec, &DownloadFailure{
+		return splitResult, splitSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
 			Message: "영상 스트림 구조 문제를 감지했지만 대체 다운로드를 준비하지 못했습니다.",
 			Cause:   fmt.Errorf("다운로드 임시 폴더를 만들 수 없습니다: %w", err),
@@ -116,7 +136,7 @@ func executeDownloadWithHLSFallback(
 
 	fallbackSpec, err := buildDownloadCommandWithTempDir(toolchain, request, true, tempDir)
 	if err != nil {
-		return firstResult, initialSpec, &DownloadFailure{
+		return splitResult, splitSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
 			Message: "영상 스트림 구조 문제를 감지했지만 대체 다운로드를 준비하지 못했습니다.",
 			Cause:   err,
@@ -161,6 +181,8 @@ func executeDownloadWithHLSFallback(
 	fallbackResult.DiagnosticLines = mergeHLSFallbackDiagnostics(
 		firstResult.DiagnosticLines,
 		firstErr,
+		splitResult.DiagnosticLines,
+		splitErr,
 		fallbackResult.DiagnosticLines,
 	)
 
@@ -183,7 +205,7 @@ func executeDownloadWithHLSFallback(
 		return fallbackResult, fallbackSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
 			Message: fmt.Sprintf(
-				"대체 다운로드가 시작된 뒤 %d초 동안 진행되지 않아 중단했습니다.",
+				"구간 분할 처리 후에도 대체 다운로드가 %d초 동안 진행되지 않아 중단했습니다.",
 				seconds,
 			),
 			Cause: fmt.Errorf(
@@ -198,7 +220,7 @@ func executeDownloadWithHLSFallback(
 		}
 		return fallbackResult, fallbackSpec, &DownloadFailure{
 			Kind:    DownloadFailureHLSInitializationFragmentOrder,
-			Message: "영상 스트림 구조 문제로 대체 다운로드 방식까지 시도했지만 실패했습니다.",
+			Message: "HLS 구간 분할과 대체 다운로드 방식까지 시도했지만 실패했습니다.",
 			Cause:   fallbackErr,
 		}
 	}
@@ -243,6 +265,11 @@ func runMonitoredHLSFallback(
 		handler(DownloadProgress{Status: progressStatusFallbackPreparing})
 	}
 
+	startedAt := time.Now()
+	lastSample := startedAt
+	lastGrowth := startedAt
+	lastBytes, _ := temporaryDownloadSize(tempDir)
+
 	go func() {
 		result, err := run(
 			fallbackCtx,
@@ -272,10 +299,6 @@ func runMonitoredHLSFallback(
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	startedAt := time.Now()
-	lastSample := startedAt
-	lastGrowth := startedAt
-	lastBytes, _ := temporaryDownloadSize(tempDir)
 	downloaderStarted := false
 
 	reportDownloading := func() {
@@ -356,41 +379,59 @@ func isFFmpegDownloaderStartLine(line string) bool {
 func mergeHLSFallbackDiagnostics(
 	first []OutputLine,
 	firstErr error,
-	second []OutputLine,
+	split []OutputLine,
+	splitErr error,
+	ffmpeg []OutputLine,
 ) []OutputLine {
-	const firstLimit = 190
+	const (
+		nativeLimit = 70
+		splitLimit  = 110
+	)
 
 	merged := make([]OutputLine, 0, maxDiagnosticLines)
-	merged = append(merged, OutputLine{
+	merged = appendDiagnosticLine(merged, OutputLine{
 		Stream: StreamStderr,
 		Text:   "--- native HLS attempt ---",
 	})
-	if len(first) > firstLimit {
-		first = first[len(first)-firstLimit:]
+	if len(first) > nativeLimit {
+		first = first[len(first)-nativeLimit:]
 	}
-	merged = append(merged, first...)
+	merged = appendDiagnosticLines(merged, first...)
 
 	rawFirstErr := firstErr
 	if unwrapped := errors.Unwrap(firstErr); unwrapped != nil {
 		rawFirstErr = unwrapped
 	}
-	merged = append(merged, OutputLine{
+	merged = appendDiagnosticLine(merged, OutputLine{
 		Stream: StreamStderr,
 		Text:   fmt.Sprintf("native HLS error: %v", rawFirstErr),
 	})
-	merged = append(merged, OutputLine{
+
+	merged = appendDiagnosticLine(merged, OutputLine{
+		Stream: StreamStderr,
+		Text:   "--- discontinuity split HLS attempt ---",
+	})
+	if len(split) > splitLimit {
+		split = split[len(split)-splitLimit:]
+	}
+	merged = appendDiagnosticLines(merged, split...)
+	merged = appendDiagnosticLine(merged, OutputLine{
+		Stream: StreamStderr,
+		Text:   fmt.Sprintf("discontinuity split error: %v", splitErr),
+	})
+
+	merged = appendDiagnosticLine(merged, OutputLine{
 		Stream: StreamStderr,
 		Text:   "--- ffmpeg HLS fallback attempt ---",
 	})
-
 	remaining := maxDiagnosticLines - len(merged)
 	if remaining < 0 {
 		remaining = 0
 	}
-	if len(second) > remaining {
-		second = second[len(second)-remaining:]
+	if len(ffmpeg) > remaining {
+		ffmpeg = ffmpeg[len(ffmpeg)-remaining:]
 	}
-	merged = append(merged, second...)
+	merged = appendDiagnosticLines(merged, ffmpeg...)
 	return merged
 }
 

@@ -1011,7 +1011,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-C5. 완료 다운로드의 폴더 열기 / 목록 삭제 및 실패 다운로드의 목록 삭제 액션 — 구현 완료, Windows Explorer 및 Persistence 통합 검증 대기
 - [ ] UX-C6. VOD별 임시 다운로드 경로 격리 및 임시 데이터 충돌 복구 액션 — 구현 완료, 실제 Windows 다운로드 검증 대기
 - [ ] UX-C7. 다운로드 실패 진단 로그 저장 및 실패 항목 로그 파일 열기 — 구현 완료, 실제 반복 실패 VOD 검증 대기
-- [ ] UX-C8. HLS initialization fragment 순서 오류 감지, ffmpeg 자동 fallback 및 실행 상태 관측 — 구현 완료, VOD 15461111 실제 검증 대기
+- [ ] UX-C8. HLS initialization fragment 순서 오류 감지, discontinuity 분할 다운로드 + ffmpeg fallback 및 실행 상태 관측 — 구현 완료, VOD 15461111 실제 검증 대기
 
 #### Phase 6-UX-D — Settings / Feedback / Accessibility
 
@@ -1066,14 +1066,16 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
 - 다운로드 중간 파일은 최종 저장 경로와 분리해 `.chzzk-temp/{videoNo}`에 격리하고, `--continue`로 정상적인 부분 다운로드 재개를 허용한다.
 - 실제 임시 데이터 충돌 실패는 `errorCode=partial_data_conflict` 복구 경로를 유지하며, 실패 항목의 `임시 파일 정리 후 재시도` 액션은 해당 VOD 임시 디렉터리만 삭제한 뒤 새 Queue 작업을 생성한다. 최종 영상 파일은 삭제하지 않는다.
-- `initialization fragment found after media fragments`는 임시 파일 충돌이 아니라 `hls_initialization_fragment_order`로 분류한다. 최초 native HLS 다운로드가 이 오류로 실패하면 native 임시 파일을 삭제하지 않고 `.chzzk-temp/{videoNo}/fallback-{runId}` 독립 경로를 만든 뒤 `--downloader m3u8:ffmpeg`를 적용해 자동으로 1회 fallback한다.
-- native 다운로드는 `.chzzk-temp/{videoNo}/native`를 사용하고, ffmpeg fallback은 매 시도마다 새로운 `fallback-{runId}`를 사용해 Windows에서 native `.part` 파일이 잠겨 있어도 fallback 시작을 막지 않는다.
-- fallback 명령에는 다운로드 가속 설정의 `--concurrent-fragments` 값을 유지하고, 번들 ffmpeg 디렉터리를 PATH 선두에 명시하며 `--downloader-args "ffmpeg:-nostdin"`을 적용한다. fallback에서는 `--paths`의 home과 temp를 모두 현재 `fallback-{runId}`로 지정해 외부 downloader가 어느 출력 단계에 쓰더라도 동일 경로에서 파일 증가를 관측한다.
-- `--print`가 quiet를 암시하는 yt-dlp 동작을 고려해 fallback에만 `--verbose --no-quiet`를 추가한다. verbose 로그의 URL query/fragment는 저장 전에 `<redacted>`로 마스킹해 서명된 스트림 정보가 실패 로그에 남지 않도록 한다.
+- `initialization fragment found after media fragments`는 임시 파일 충돌이 아니라 `hls_initialization_fragment_order`로 분류한다. 최초 native HLS 다운로드가 이 오류로 실패하면 native 임시 파일을 삭제하지 않고 HLS discontinuity 분할 다운로드를 먼저 시도하고, 분할 처리까지 실패한 경우에만 ffmpeg external downloader를 최종 fallback으로 사용한다.
+- discontinuity 분할 fallback은 원래 format selector로 선택되는 format ID를 probe한 뒤 `--hls-split-discontinuity` + `m3u8:native`로 동일 format ID의 `-0`, `-1`, `-2` 등 구간을 모두 별도 파일로 다운로드한다. 구간 누락 여부를 확인한 뒤 ffmpeg concat demuxer로 순서대로 합치고, 영상/오디오가 분리된 선택이면 각각 concat 후 최종 mux한다.
+- native 다운로드는 `.chzzk-temp/{videoNo}/native`를 사용하고, 분할 fallback/ffmpeg fallback은 각각 새로운 `fallback-split-{runId}` / `fallback-{runId}` 경로를 사용해 Windows에서 native `.part` 파일이 잠겨 있어도 대체 다운로드 시작을 막지 않는다.
+- ffmpeg fallback 명령에는 다운로드 가속 설정의 `--concurrent-fragments` 값을 유지하고, 번들 ffmpeg 디렉터리를 PATH 선두에 명시하며 `--downloader-args "ffmpeg:-nostdin"`을 적용한다. fallback에서는 `--paths`의 home과 temp를 모두 현재 `fallback-{runId}`로 지정해 외부 downloader가 어느 출력 단계에 쓰더라도 동일 경로에서 파일 증가를 관측한다.
+- `--print`가 quiet를 암시하는 yt-dlp 동작을 고려해 ffmpeg fallback에만 `--verbose --no-quiet`를 추가한다. verbose 로그의 URL query/fragment뿐 아니라 CHZZK CDN의 `hdntl`/`hdnts`/`hmac` 서명 path segment도 저장 전에 `<redacted>`로 마스킹한다.
 - fallback 진입 직후에는 `fallback_preparing` 상태를 유지한다. 일반 디버그 출력만으로 다운로드 중 상태로 전환하지 않고 `Invoking ffmpeg downloader` / ffmpeg command line 또는 실제 fallback 파일 증가가 확인될 때만 `fallback_downloading`으로 전환한다.
 - fallback 준비 단계와 다운로드 단계를 별도 timeout으로 관리한다. ffmpeg downloader가 120초 내 시작되지 않으면 preparation timeout으로 중단하고, downloader 시작 후에는 fallback 파일 크기가 60초 동안 증가하지 않을 때만 stalled로 판단해 프로세스 트리를 취소한다.
+- ffmpeg fallback의 파일 크기 baseline은 프로세스를 시작하기 전에 측정해, 프로세스 시작 직후 빠르게 기록된 바이트가 진행량에서 누락되지 않도록 한다.
 - Runner는 `\n`뿐 아니라 ffmpeg가 진행 상태에 사용하는 `\r`도 라인 구분자로 처리한다.
-- ffmpeg HLS fallback까지 실패하면 사용자에게 대체 방식까지 실패했음을 표시하고, 실패 로그의 recent process output에 1차 native HLS 시도와 2차 ffmpeg HLS 시도 출력을 함께 남긴다.
+- discontinuity 분할과 ffmpeg HLS fallback까지 모두 실패하면 사용자에게 대체 방식까지 실패했음을 표시하고, 실패 로그의 recent process output에 native → discontinuity split → ffmpeg 시도 순서와 각 실패 원인을 함께 남긴다.
 - fallback 성공 파일은 검증된 `fallback-{runId}` 내부 경로에서 실제 다운로드 폴더로 이동한 뒤 완료 처리한다. 이동 시 동일 파일이 이미 있으면 덮어쓰지 않으며 Windows 파일 핸들 해제 지연을 고려해 짧게 재시도한다.
 - 다운로드 실패 시 다운로드 폴더의 `.chzzk-logs`에 VOD별 진단 로그를 남긴다. 로그에는 UTC 시각, VOD URL, 출력 설정, 사용자 오류/원인 체인, 마지막 진행 상태, 민감 인자를 마스킹한 실행 인자, 최근 400줄의 stdout/stderr를 기록한다.
 - 실패 Task의 `logPath`를 SQLite에 영속화하고 다운로드 탭에서 `로그 파일 열기`를 제공한다. 목록 삭제/임시 파일 정리 후 재시도 시에도 기존 로그 파일 자체는 보존한다.
@@ -1110,9 +1112,9 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - VOD별 temp 경로가 `.chzzk-temp/{videoNo}`로 분리되고 최종 저장 경로와 별도 `--paths temp:` 인자로 전달되는 구조 정적 확인
 - `partial_data_conflict` 오류 코드의 Queue → SQLite → Frontend 타입 연결 및 복구 API/버튼 경로 정적 확인
 - 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
-- HLS initialization fragment 오류 분류 → native temp 보존 → 독립 `fallback-{runId}` temp 생성 → `m3u8:ffmpeg` command fallback → fallback 실패 시 양쪽 시도 진단 로그 병합 경로 정적 확인
+- HLS initialization fragment 오류 분류 → native temp 보존 → 원래 선택 format probe → `--hls-split-discontinuity` 구간 다운로드/누락 검증/concat → 실패 시 독립 `fallback-{runId}`의 `m3u8:ffmpeg` 최종 fallback → 3단계 진단 로그 병합 경로 정적 확인
 - 최신 main의 다운로드 가속 `--concurrent-fragments` 정책과 HLS fallback command를 함께 유지하도록 충돌 병합 확인
-- fallback command의 ffmpeg PATH 주입 / `--verbose --no-quiet`, staged home+temp 경로, downloader start marker 감지, 120초 preparation timeout / 60초 file-growth stall 분리, `\r` 출력 분리, verbose URL query 마스킹, 성공 파일 promote 경로 테스트 추가
+- discontinuity split format probe/selector/`-0` 포함 구간 index 누락 검증, split 성공 시 ffmpeg fallback 미실행, ffmpeg PATH 주입 / `--verbose --no-quiet`, staged home+temp 경로, 프로세스 시작 전 file-size baseline, downloader start marker 감지, 120초 preparation timeout / 60초 file-growth stall 분리, `\r` 출력 분리, query/fragment 및 CDN path 서명 마스킹, 성공 파일 promote 경로 테스트 추가
 - Download Manager의 `대체 방식 재시도` 상태 Tag, 준비/연결/다운로드 중 문구 및 전체 크기를 알 수 없는 fallback metrics 표시 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:

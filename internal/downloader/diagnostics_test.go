@@ -97,6 +97,19 @@ func TestRedactDiagnosticTextRedactsURLQueryAndFragment(t *testing.T) {
 	}
 }
 
+func TestRedactDiagnosticTextRedactsSignedCDNPathToken(t *testing.T) {
+	input := `[https] Opening 'https://cdn.example.com/chzzk/1080p/hdntl=exp=123~acl=*/kr/*~data=hdntl~hmac=secret-signature/segment.m4v' for reading`
+	got := redactDiagnosticText(input)
+	if strings.Contains(got, "secret-signature") ||
+		strings.Contains(got, "exp=123") ||
+		strings.Contains(got, "~hmac=") {
+		t.Fatalf("signed CDN path token was not redacted: %q", got)
+	}
+	if !strings.Contains(got, "https://cdn.example.com/chzzk/1080p/<redacted>/segment.m4v") {
+		t.Fatalf("unexpected signed path redaction: %q", got)
+	}
+}
+
 func TestAppendDiagnosticLineKeepsLatestLines(t *testing.T) {
 	lines := make([]OutputLine, 0, maxDiagnosticLines)
 	for index := 0; index < maxDiagnosticLines+5; index++ {
