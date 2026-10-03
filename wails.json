@@ -8,11 +8,13 @@
   "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "./frontend/src/wailsjs",
   "author": {
-    "name": "MoonKim-isMe"
+    "name": "MoonKim"
   },
   "info": {
     "productName": "CHZZK Video Downloader",
     "productVersion": "0.1.0",
-    "comments": "CHZZK VOD downloader powered by Wails and yt-dlp"
+    "comments": "CHZZK VOD downloader",
+    "companyName": "MoonKim",
+    "copyright": "Copyright © 2026 MoonKim"
   }
 }

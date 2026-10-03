@@ -1143,6 +1143,22 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 ## Phase 7 — Windows 패키징
 
+### Phase 7-A — Windows 배포 메타데이터
+
+- [x] PKG-7A-1. 개인 취미 프로젝트 배포자명을 `MoonKim`으로 적용
+- [x] PKG-7A-2. Windows 제품 메타데이터에 `companyName`, 저작권, 사용자용 설명 적용
+- [ ] PKG-7A-3. Windows 빌드 산출물의 파일 속성 및 Installer 표시값 실제 검증
+
+#### Phase 7-A 메타데이터 기준
+
+- 법인/회사명을 의미하는 별도 브랜드를 사용하지 않고 개인 배포자명은 `MoonKim`으로 통일한다.
+- Wails의 `companyName` 필드는 Windows 리소스 메타데이터 필드명이며, 값은 개인 배포자명 `MoonKim`을 사용한다.
+- 제품명은 `CHZZK Video Downloader`를 유지한다.
+- 현재 개발 버전은 `0.1.0`을 유지하고 정식 배포 시 별도 버전 정책에 따라 갱신한다.
+- 저작권 표기는 `Copyright © 2026 MoonKim`을 사용한다.
+- 사용자용 제품 설명에서는 내부 구현 도구명을 직접 노출하지 않고 `CHZZK VOD downloader`로 표시한다.
+- 실제 EXE/Installer의 Windows 파일 속성 반영 여부는 Phase 7 패키징 검증에서 확인한다.
+
 - [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용 — Phase 3-D에서 executable bundle 기반 선행 구현, 최종 installer 검증은 Phase 7에서 수행
 - [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용
 - [ ] PKG-3. 최종 Windows 패키징 검증
