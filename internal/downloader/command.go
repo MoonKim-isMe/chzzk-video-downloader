@@ -14,6 +14,7 @@ const (
 	DefaultFormatSelector      = "bv*+ba/b"
 	DefaultOutputTemplate      = "%(title)s [%(id)s].%(ext)s"
 	DefaultConcurrentFragments = 2
+	ytDLPOutputEncoding        = "utf-8"
 	progressTemplate           = progressPrefix + "%(progress.status)s\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t%(progress.speed)s\t%(progress.eta)s\t%(progress._percent_str)s"
 )
 
@@ -99,9 +100,10 @@ func buildDownloadCommandWithTempDir(
 		outputHomeDir = tempDir
 	}
 
-	var env []string
+	env := ytDLPUTF8Env()
 	args := []string{
 		"--ignore-config",
+		"--encoding", ytDLPOutputEncoding,
 		"--no-simulate",
 		"--progress",
 		"--newline",
@@ -153,6 +155,10 @@ func buildDownloadCommandWithTempDir(
 	args = append(args, videoURL)
 
 	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: env}, nil
+}
+
+func ytDLPUTF8Env() []string {
+	return []string{"PYTHONIOENCODING=" + ytDLPOutputEncoding}
 }
 
 func normalizeVideoURL(raw string) (string, error) {
