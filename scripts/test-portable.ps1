@@ -9,7 +9,7 @@ function Assert-Throws {
     param([scriptblock]$Action, [string]$Expected)
     $caught = $false
     try { & $Action } catch {
-        if ($_.Exception.Message -notlike "*$Expected*") { throw }
+        if ($_.Exception.Message.IndexOf($Expected, [StringComparison]::OrdinalIgnoreCase) -lt 0) { throw }
         $caught = $true
     }
     if (-not $caught) { throw "Expected rejection: $Expected" }
@@ -41,6 +41,7 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $fixture "scripts") -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "build-windows.ps1") -Destination (Join-Path $fixture "scripts")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "verify-portable.ps1") -Destination (Join-Path $fixture "scripts")
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "windows-info.json") -Destination (Join-Path $fixture "scripts")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\wails.json") -Destination $fixture
     New-Item -ItemType Directory -Path (Join-Path $fixture "frontend") -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "../frontend/package.json") -Destination (Join-Path $fixture "frontend")
@@ -77,6 +78,22 @@ try {
             $global:LASTEXITCODE = 1
             return
         }
+        # Read the resource actually supplied to Wails, rather than synthesizing
+        # metadata directly from wails.json (which hid missing FileVersion).
+        $config = [IO.File]::ReadAllText((Join-Path $fixture "wails.json")) | ConvertFrom-Json
+        $resourceText = [IO.File]::ReadAllText((Join-Path $fixture "build/windows/info.json"))
+        $resourceText = [Regex]::Replace($resourceText, '{{\.Info\.(\w+)}}', [Text.RegularExpressions.MatchEvaluator]{
+            param($match)
+            $property = $match.Groups[1].Value
+            $encoded = [string]($config.info.$property | ConvertTo-Json -Compress)
+            return $encoded.Substring(1, $encoded.Length - 2)
+        })
+        $resource = $resourceText | ConvertFrom-Json
+        if ($resource.fixed.file_version -cne $config.info.productVersion -or
+            $resource.fixed.product_version -cne $config.info.productVersion) {
+            throw "Fixed resource versions must match the current build version"
+        }
+        $script:mockVersionInfo = $resource.info.'0000'
         New-Item -ItemType Directory -Path "build/bin" -Force | Out-Null
         $bytes = New-Object byte[] 256
         $bytes[0] = 0x4d; $bytes[1] = 0x5a; $bytes[60] = 128
@@ -87,14 +104,18 @@ try {
     }
     function Get-Item {
         param([string]$LiteralPath)
-        $config = Get-Content -LiteralPath (Join-Path $fixture "wails.json") -Encoding UTF8 -Raw | ConvertFrom-Json
-        [pscustomobject]@{ VersionInfo = [pscustomobject]@{
-            CompanyName = $config.info.companyName
-            ProductName = $config.info.productName
-            ProductVersion = $config.info.productVersion
-            LegalCopyright = $config.info.copyright
-        }}
+        $values = [ordered]@{}
+        foreach ($field in @("FileVersion", "CompanyName", "ProductName", "ProductVersion", "LegalCopyright")) {
+            # Simulate .NET Framework's fallback losing strings when the neutral
+            # resource has no FileVersion. This is not a real Windows API check.
+            $values[$field] = if ([string]::IsNullOrEmpty($script:mockVersionInfo.FileVersion) -or $mockEmptyMetadata) { "" }
+                elseif ($mockMetadataOverrides.ContainsKey($field)) { $mockMetadataOverrides[$field] }
+                else { $script:mockVersionInfo.$field }
+        }
+        [pscustomobject]@{ VersionInfo = [pscustomobject]$values }
     }
+    $mockMetadataOverrides = @{}
+    $mockEmptyMetadata = $false
     $env:OS = "Windows_NT"
     $build = Join-Path $fixture "scripts/build-windows.ps1"
     $startVersion = [string]$config.info.productVersion
@@ -126,6 +147,9 @@ try {
     $bytes[133] = 0x14
     [IO.File]::WriteAllBytes($exe, $bytes)
     Assert-Throws { & $verify -ReleaseDir $releaseDir } "amd64 PE"
+    # Rebuild over an old local resource with missing FileVersion/stale values.
+    $resourcePath = Join-Path $fixture "build/windows/info.json"
+    [IO.File]::WriteAllText($resourcePath, '{"fixed":{"file_version":"0.0.0"},"info":{"0000":{"CompanyName":"Old publisher"}}}')
     & $build -NoVersionBump
     Copy-Item -LiteralPath $exe -Destination (Join-Path $releaseDir "Setup.exe")
     Assert-Throws { & $verify -ReleaseDir $releaseDir } "exactly one"
@@ -152,6 +176,27 @@ try {
     $packagePath = Join-Path $fixture "frontend/package.json"
     $wailsBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($wailsPath))
     $packageBefore = [Convert]::ToBase64String([IO.File]::ReadAllBytes($packagePath))
+    & $build -NoVersionBump
+    Assert-UnchangedVersions $wailsBefore $packageBefore
+    # Missing/wrong properties must be reported and roll back both versions.
+    $nextParts = $expectedMajor.Split('.')
+    $nextVersion = "$($nextParts[0]).$($nextParts[1]).$([int]$nextParts[2] + 1)"
+    foreach ($field in @("FileVersion", "CompanyName", "ProductName", "ProductVersion", "LegalCopyright")) {
+        $mockMetadataOverrides[$field] = ""
+        Assert-Throws { & $build } "${field}: expected='"
+        Assert-Throws { & $build } "actual='<empty>'"
+        Assert-UnchangedVersions $wailsBefore $packageBefore
+        $mockMetadataOverrides.Clear()
+    }
+    $mockMetadataOverrides["CompanyName"] = "Old publisher"
+    Assert-Throws { & $build } "CompanyName: expected='MoonKim', actual='Old publisher'"
+    Assert-UnchangedVersions $wailsBefore $packageBefore
+    $mockMetadataOverrides.Clear()
+    $mockEmptyMetadata = $true
+    Assert-Throws { & $build } "FileVersion: expected='$nextVersion', actual='<empty>'"
+    Assert-Throws { & $build -NoVersionBump } "ProductVersion: expected='$expectedMajor', actual='<empty>'"
+    Assert-UnchangedVersions $wailsBefore $packageBefore
+    $mockEmptyMetadata = $false
     & $build -NoVersionBump
     Assert-UnchangedVersions $wailsBefore $packageBefore
     $mockBuildFailure = $true

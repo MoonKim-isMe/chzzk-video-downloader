@@ -1235,6 +1235,24 @@ Windows 실 검증 대기:
 - Repository의 저장 버전 자체는 이번 스크립트 구현 요청에서 수동 증가시키지 않았다. 실제 Windows 빌드가 성공하면 버전 변경 파일도 이후 commit에 포함한다.
 - 기존 Windows 실제 실행 검증 대기 및 전체 테스트 차단 사항은 그대로 유지한다. 이번 추가 수정은 PowerShell/문서 범위이며 기존 Go 테스트 오류를 임의 수정하지 않는다.
 
+### Phase 7-D — Windows 메타데이터 읽기 호환성 수정
+
+- [x] PKG-7D-1. 저장소에서 관리하는 `scripts/windows-info.json`에 문자열 `FileVersion` 및 파일·제품 숫자 버전 추가
+- [x] PKG-7D-2. Portable 빌드마다 로컬 `build/windows/info.json`을 공통 템플릿으로 갱신해 기존 파일의 누락/오래된 값 방지
+- [x] PKG-7D-3. 파일 버전까지 메타데이터 검사에 포함하고 불일치 시 EXE 경로·필드별 예상값/실제값/빈 값 표시
+- [x] PKG-7D-4. 계약 테스트를 실제 입력 리소스 템플릿 기반으로 개선하고 최초 생성·오래된 로컬 파일 교체·메타데이터 실패 시 버전 복원 검증
+- [x] PKG-7D-5. README에 템플릿 관리 및 오류 후 동일 버전 재빌드 절차 기록
+- [ ] PKG-7D-6. Windows PowerShell 5.1에서 실제 Wails EXE의 `FileVersion`/제품명/배포자/제품 버전/저작권 조회 및 Portable 빌드 성공 확인
+
+#### Phase 7-D 검증 및 관리 기준
+
+- Windows PowerShell/.NET Framework는 문자열 `FileVersion`이 없으면 다른 언어 테이블을 조회하는 과정에서 제품 메타데이터를 빈 값으로 덮어쓸 수 있다. 기존 Wails 기본 템플릿의 `fixed.file_version`만으로는 이 문자열을 대신할 수 없다.
+- 공통 템플릿은 모든 제품 메타데이터를 현재 `wails.json`의 `info`에서 읽도록 구성한다. `build/windows/info.json`은 빌드 시 덮어쓰는 로컬 산출물로 계속 Git에서 제외한다.
+- PowerShell 7.4.6에서 Portable 계약 테스트 통과: 첫 빌드 시 템플릿 생성, 문자열/숫자 버전 동기화, 오래된 로컬 리소스 교체, 다섯 필드의 빈 값 및 잘못된 배포자 진단, 메타데이터 실패 시 두 버전 파일의 바이트 단위 복원, 버전 유지 재빌드.
+- PowerShell 스크립트 구문 검사 통과. 별도 임시 fixture에서 문자열 `FileVersion`만 제거했을 때 메타데이터 검사로 실패하는 것을 확인해 기존 누락을 테스트가 감지하도록 검증했다.
+- 계약 테스트는 Wails 템플릿 입력을 읽는 mock builder 및 mock VersionInfo를 사용한다. .NET Framework의 빈 메타데이터 동작은 모의하며 실제 Windows API 검증을 완료한 것으로 간주하지 않는다.
+- 기본 patch/명시적 minor·major/버전 유지 정책을 유지하고 저장소 버전은 이번 오류 수정으로 증가시키지 않는다.
+
 ## Version 0.2 — CHZZK/YouTube 통합
 
 ### v0.2 제품 목표
@@ -1373,4 +1391,3 @@ v0.2 기본 범위에서 YouTube 재생목록 전체 다운로드, YouTube 채�
 - 제품 표시 이름과 Windows 배포 메타데이터는 `CHZZK/YouTube Video Downloader`로 일치한다.
 - Portable 파일명은 Windows 파일명 제약에 맞춰 `CHZZK-YouTube-Video-Downloader-v{version}-portable.exe`를 사용한다.
 - 기존 v0.1 사용자 데이터 호환성과 Windows 실 다운로드 검증이 완료되어야 v0.2 계획 항목을 완료 처리한다.
-

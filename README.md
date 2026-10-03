@@ -354,6 +354,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -NoVersionB
 
 빌드 전에 두 파일의 버전이 다르면 중단합니다. 빌드·메타데이터 검사·최종 배포 검증 중 실패하면 두 JSON 파일을 변경 전 바이트로 복원합니다. 성공하면 새 버전이 두 파일에 유지되므로 이후 commit에 함께 포함합니다. `-NoVersionBump`는 두 버전 파일을 쓰지 않고 같은 버전의 산출물을 다시 생성합니다.
 
+매 빌드 전에 `scripts/windows-info.json`을 `build/windows/info.json`으로 복사해 Windows 메타데이터 템플릿을 갱신합니다. 기존 로컬 `info.json`은 덮어쓰므로 제품 메타데이터는 `wails.json`의 `info`에서 관리합니다. 파일·제품 버전의 숫자 리소스와 문자열 `FileVersion`/`ProductVersion`을 함께 기록합니다. 문자열 `FileVersion`은 Windows PowerShell의 .NET Framework가 다른 메타데이터까지 빈 값으로 읽는 문제를 방지하는 데 필요합니다.
+
+`Portable EXE product metadata does not match wails.json` 오류에는 검사한 EXE 경로, 불일치 필드의 예상값과 실제값이 표시됩니다. 빈 값은 `<empty>`로 표시합니다. 실패하면 버전 파일을 복원하므로 실패한 EXE의 버전과 복원된 `wails.json` 버전이 다를 수 있습니다. 수정 반영 후 `-NoVersionBump`로 버전을 유지해 재빌드할 수 있으며, 로컬 `info.json`을 수동 수정할 필요는 없습니다.
+
 ```text
 build/portable/v0.1.1/
   CHZZK-Video-Downloader-v0.1.1-portable.exe
