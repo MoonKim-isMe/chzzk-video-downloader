@@ -25,6 +25,19 @@ func TestBuildHLSFormatProbeCommandUsesOriginalSelector(t *testing.T) {
 	if !slices.Contains(spec.Args, "--simulate") {
 		t.Fatalf("format probe must not download media: %#v", spec.Args)
 	}
+	for _, pair := range [][2]string{
+		{"--print", hlsFormatProbeRequestedPrefix + "%(requested_formats.:.{format_id,vcodec,acodec,ext})j"},
+		{"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})j"},
+	} {
+		if !hasArgumentPair(spec.Args, pair[0], pair[1]) {
+			t.Fatalf("compact JSON probe template missing: %#v in %#v", pair, spec.Args)
+		}
+	}
+	for _, arg := range spec.Args {
+		if strings.Contains(arg, "#j") {
+			t.Fatalf("pretty JSON probe template must not be used: %#v", spec.Args)
+		}
+	}
 }
 
 func TestProbeHLSSelectedFormatsPrefersRequestedFormats(t *testing.T) {

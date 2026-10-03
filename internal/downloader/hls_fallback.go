@@ -155,8 +155,8 @@ func buildHLSFormatProbeCommand(toolchain ToolchainStatus, request DownloadReque
 		"--color", "never",
 		"--output-na-placeholder", "",
 		"--format", formatSelector,
-		"--print", hlsFormatProbeRequestedPrefix + "%(requested_formats.:.{format_id,vcodec,acodec,ext})#j",
-		"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})#j",
+		"--print", hlsFormatProbeRequestedPrefix + "%(requested_formats.:.{format_id,vcodec,acodec,ext})j",
+		"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})j",
 		videoURL,
 	}
 	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args}, nil
