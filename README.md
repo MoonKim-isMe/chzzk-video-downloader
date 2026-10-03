@@ -329,6 +329,8 @@ URL 입력 영역은 상단에 고정되고, 조회된 단일 VOD는 **좌측 16
 
 ## Windows Portable EXE 배포
 
+Windows에서는 다운로드 도구의 상태 확인·영상 다운로드/처리·취소용 백그라운드 프로세스를 콘솔 창 없이 실행합니다. 진행률과 오류 로그는 앱에서 계속 확인할 수 있습니다. 다른 PC에서 실행할 때도 이 설정이 적용되려면 수정된 코드로 Portable EXE를 다시 빌드해 교체합니다.
+
 Windows amd64에서 프로젝트 루트의 아래 명령으로 빌드합니다. Go/Wails CLI, Node.js, Yarn이 설치되어 있어야 합니다.
 
 ```powershell
@@ -356,6 +358,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -NoVersionB
 버전 옵션은 하나만 지정할 수 있으며 각 옵션에 `-RefreshTools`를 함께 사용할 수 있습니다. 마이너 증가 시 패치는 0으로, 메이저 증가 시 마이너·패치는 0으로 초기화합니다. 기본 패치는 마이너로 자동 올림되지 않습니다.
 
 빌드 전에 두 파일의 버전이 다르면 중단합니다. 빌드·메타데이터 검사·최종 배포 검증 중 실패하면 두 JSON 파일을 변경 전 바이트로 복원합니다. 성공하면 새 버전이 두 파일에 유지되므로 이후 commit에 함께 포함합니다. `-NoVersionBump`는 두 버전 파일을 쓰지 않고 같은 버전의 산출물을 다시 생성합니다.
+
+매 빌드 전에 `scripts/windows-info.json`을 `build/windows/info.json`으로 복사해 Windows 메타데이터 템플릿을 갱신합니다. 기존 로컬 `info.json`은 덮어쓰므로 제품 메타데이터는 `wails.json`의 `info`에서 관리합니다. 파일·제품 버전의 숫자 리소스와 문자열 `FileVersion`/`ProductVersion`을 함께 기록합니다. 문자열 `FileVersion`은 Windows PowerShell의 .NET Framework가 다른 메타데이터까지 빈 값으로 읽는 문제를 방지하는 데 필요합니다.
+
+`Portable EXE product metadata does not match wails.json` 오류에는 검사한 EXE 경로, 불일치 필드의 예상값과 실제값이 표시됩니다. 빈 값은 `<empty>`로 표시합니다. 실패하면 버전 파일을 복원하므로 실패한 EXE의 버전과 복원된 `wails.json` 버전이 다를 수 있습니다. 수정 반영 후 `-NoVersionBump`로 버전을 유지해 재빌드할 수 있으며, 로컬 `info.json`을 수동 수정할 필요는 없습니다.
 
 ```text
 build/portable/v0.1.1/

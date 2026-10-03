@@ -157,7 +157,9 @@ func probeToolVersion(ctx context.Context, path, arg string) (string, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(probeCtx, path, arg).CombinedOutput()
+	cmd := exec.CommandContext(probeCtx, path, arg)
+	hideConsoleWindow(cmd)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if probeCtx.Err() != nil {
 			return "", fmt.Errorf("%s 버전 확인 시간 초과: %w", filepath.Base(path), probeCtx.Err())

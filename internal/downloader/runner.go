@@ -63,6 +63,7 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 	}
 
 	cmd := exec.Command(spec.Path, spec.Args...)
+	hideConsoleWindow(cmd)
 	if len(spec.Env) > 0 {
 		cmd.Env = mergeCommandEnv(os.Environ(), spec.Env)
 	}
@@ -187,7 +188,6 @@ func appendTail(lines []string, line string, max int) []string {
 	return append(lines, line)
 }
 
-
 func terminateProcessTree(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
@@ -201,6 +201,7 @@ func terminateProcessTree(cmd *exec.Cmd) error {
 			"/T",
 			"/F",
 		)
+		hideConsoleWindow(treeKill)
 		treeKill.Stdout = io.Discard
 		treeKill.Stderr = io.Discard
 		if err := treeKill.Run(); err == nil {
@@ -210,7 +211,6 @@ func terminateProcessTree(cmd *exec.Cmd) error {
 
 	return cmd.Process.Kill()
 }
-
 
 func mergeCommandEnv(base, overrides []string) []string {
 	result := append([]string(nil), base...)

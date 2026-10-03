@@ -107,6 +107,9 @@ func init() {
 	case "carriage":
 		fmt.Fprint(os.Stderr, "frame=1\rframe=2\r")
 		os.Exit(0)
+	case "version":
+		fmt.Fprintln(os.Stdout, "1.2.3\nadditional details")
+		os.Exit(0)
 	case "wait":
 		fmt.Fprintln(os.Stdout, "waiting")
 		for {
@@ -116,7 +119,6 @@ func init() {
 		os.Exit(2)
 	}
 }
-
 
 func TestMergeCommandEnvOverridesCaseInsensitive(t *testing.T) {
 	base := []string{

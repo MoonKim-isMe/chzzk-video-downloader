@@ -1233,3 +1233,36 @@ Windows 실 검증 대기:
 - Windows PowerShell의 기본 문자 인코딩에 의존하지 않고 UTF-8 JSON을 읽으며, 버전 변경 외 기존 필드·줄바꿈·BOM을 유지한다.
 - Repository의 저장 버전 자체는 이번 스크립트 구현 요청에서 수동 증가시키지 않았다. 실제 Windows 빌드가 성공하면 버전 변경 파일도 이후 commit에 포함한다.
 - 기존 Windows 실제 실행 검증 대기 및 전체 테스트 차단 사항은 그대로 유지한다. 이번 추가 수정은 PowerShell/문서 범위이며 기존 Go 테스트 오류를 임의 수정하지 않는다.
+
+### Phase 7-D — Windows 메타데이터 읽기 호환성 수정
+
+- [x] PKG-7D-1. 저장소에서 관리하는 `scripts/windows-info.json`에 문자열 `FileVersion` 및 파일·제품 숫자 버전 추가
+- [x] PKG-7D-2. Portable 빌드마다 로컬 `build/windows/info.json`을 공통 템플릿으로 갱신해 기존 파일의 누락/오래된 값 방지
+- [x] PKG-7D-3. 파일 버전까지 메타데이터 검사에 포함하고 불일치 시 EXE 경로·필드별 예상값/실제값/빈 값 표시
+- [x] PKG-7D-4. 계약 테스트를 실제 입력 리소스 템플릿 기반으로 개선하고 최초 생성·오래된 로컬 파일 교체·메타데이터 실패 시 버전 복원 검증
+- [x] PKG-7D-5. README에 템플릿 관리 및 오류 후 동일 버전 재빌드 절차 기록
+- [ ] PKG-7D-6. Windows PowerShell 5.1에서 실제 Wails EXE의 `FileVersion`/제품명/배포자/제품 버전/저작권 조회 및 Portable 빌드 성공 확인
+
+#### Phase 7-D 검증 및 관리 기준
+
+- Windows PowerShell/.NET Framework는 문자열 `FileVersion`이 없으면 다른 언어 테이블을 조회하는 과정에서 제품 메타데이터를 빈 값으로 덮어쓸 수 있다. 기존 Wails 기본 템플릿의 `fixed.file_version`만으로는 이 문자열을 대신할 수 없다.
+- 공통 템플릿은 모든 제품 메타데이터를 현재 `wails.json`의 `info`에서 읽도록 구성한다. `build/windows/info.json`은 빌드 시 덮어쓰는 로컬 산출물로 계속 Git에서 제외한다.
+- PowerShell 7.4.6에서 Portable 계약 테스트 통과: 첫 빌드 시 템플릿 생성, 문자열/숫자 버전 동기화, 오래된 로컬 리소스 교체, 다섯 필드의 빈 값 및 잘못된 배포자 진단, 메타데이터 실패 시 두 버전 파일의 바이트 단위 복원, 버전 유지 재빌드.
+- PowerShell 스크립트 구문 검사 통과. 별도 임시 fixture에서 문자열 `FileVersion`만 제거했을 때 메타데이터 검사로 실패하는 것을 확인해 기존 누락을 테스트가 감지하도록 검증했다.
+- 계약 테스트는 Wails 템플릿 입력을 읽는 mock builder 및 mock VersionInfo를 사용한다. .NET Framework의 빈 메타데이터 동작은 모의하며 실제 Windows API 검증을 완료한 것으로 간주하지 않는다.
+- 기본 patch/명시적 minor·major/버전 유지 정책을 유지하고 저장소 버전은 이번 오류 수정으로 증가시키지 않는다.
+
+### Phase 7-E — Windows 백그라운드 콘솔 창 억제
+
+- [x] PKG-7E-1. Windows 도구 프로세스에 `HideWindow` 및 `CREATE_NO_WINDOW` 공통 적용
+- [x] PKG-7E-2. Runner의 다운로드/영상 처리, Resolver의 버전 확인, 취소용 `taskkill.exe`에 콘솔 숨김 적용
+- [x] PKG-7E-3. 기존 stdout/stderr 진행률·오류 및 취소 처리를 유지하고 비-Windows에서는 기존 실행 방식 유지
+- [x] PKG-7E-4. 실제 자식 프로세스의 콘솔 핸들을 확인하는 Windows 통합 테스트와 버전 조회/실패/취소 회귀 테스트 추가
+- [ ] PKG-7E-5. 실제 Windows Portable EXE에서 시작·도구 상태 확인·다운로드·병합·취소 시 콘솔 창이 뜨지 않는지 확인
+
+#### Phase 7-E 검증 기준
+
+- Windows 전용 프로세스 설정은 명령 실행 전에 적용한다. stdout/stderr 파이프를 유지하며 사용자에게 필요한 진행률/오류를 계속 앱으로 전달한다.
+- Windows 통합 테스트는 Runner 및 버전 조회가 실행한 자식의 `GetConsoleWindow()` 값을 확인한다. Linux에서의 교차 컴파일 성공을 Windows 실제 실행 성공으로 기록하지 않는다.
+- Linux에서 downloader production 소스 전체와 Runner/Resolver/bundle 테스트를 선별해 `go test -race -count=1` 및 `go vet` 통과. Windows amd64 downloader production 빌드와 콘솔 핸들 통합 테스트 교차 컴파일 통과.
+- 전체 downloader 테스트는 기존 `download_test.go` callback 타입 오류 및 `queue_test.go`의 미정의 `immediateErrorExecutor` 때문에 컴파일되지 않는다. 이번 수정과 관련된 Runner/Resolver/bundle 테스트를 별도로 검증하며 해당 기존 오류를 임의 변경하지 않는다.

@@ -80,6 +80,12 @@ foreach ($name in $expectedTools) {
 Push-Location $repoRoot
 $versionsWritten = $false
 try {
+    # Wails reuses local build assets. Always refresh our managed version resource
+    # so old/default info.json files cannot omit the string FileVersion required
+    # by Windows PowerShell's .NET Framework metadata reader.
+    $windowsAssetsDir = Join-Path $repoRoot "build\windows"
+    New-Item -ItemType Directory -Path $windowsAssetsDir -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "windows-info.json") -Destination (Join-Path $windowsAssetsDir "info.json") -Force
     if ($version -cne $currentVersion) {
         $versionsWritten = $true
         $wailsBom = $originalWails.Length -ge 3 -and $originalWails[0] -eq 239 -and $originalWails[1] -eq 187 -and $originalWails[2] -eq 191
@@ -102,11 +108,23 @@ try {
         throw "Wails did not produce $artifactName"
     }
     $fileInfo = (Get-Item -LiteralPath $builtExe).VersionInfo
-    if ($fileInfo.CompanyName -ne $config.info.companyName -or
-        $fileInfo.ProductName -ne $config.info.productName -or
-        $fileInfo.ProductVersion -ne $version -or
-        $fileInfo.LegalCopyright -ne $config.info.copyright) {
-        throw "Portable EXE product metadata does not match wails.json."
+    $expectedMetadata = [ordered]@{
+        FileVersion = $version
+        CompanyName = $config.info.companyName
+        ProductName = $config.info.productName
+        ProductVersion = $version
+        LegalCopyright = $config.info.copyright
+    }
+    $mismatches = @(foreach ($field in $expectedMetadata.Keys) {
+        $actual = [string]$fileInfo.$field
+        $expected = [string]$expectedMetadata[$field]
+        if ($actual -cne $expected) {
+            $actualDisplay = if ([string]::IsNullOrEmpty($actual)) { "<empty>" } else { $actual }
+            "${field}: expected='$expected', actual='$actualDisplay'"
+        }
+    })
+    if ($mismatches.Count -gt 0) {
+        throw ("Portable EXE product metadata does not match wails.json.`nEXE: $builtExe`n" + ($mismatches -join "`n"))
     }
 
     New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
