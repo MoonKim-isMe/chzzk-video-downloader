@@ -46,6 +46,7 @@ func TestWriteDownloadFailureLogCapturesDiagnosticsAndRedactsSecrets(t *testing.
 		DiagnosticLines: []OutputLine{
 			{Stream: StreamStdout, Text: "download output"},
 			{Stream: StreamStderr, Text: "ERROR: raw failure detail"},
+			{Stream: StreamStderr, Text: `[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8?token=secret-token&expires=9999"`},
 		},
 	}
 
@@ -74,8 +75,38 @@ func TestWriteDownloadFailureLogCapturesDiagnosticsAndRedactsSecrets(t *testing.
 			t.Fatalf("missing %q in log:\n%s", expected, text)
 		}
 	}
-	if strings.Contains(text, "secret-password") || strings.Contains(text, "user:pass") {
-		t.Fatalf("sensitive command argument leaked into log:\n%s", text)
+	if strings.Contains(text, "secret-password") ||
+		strings.Contains(text, "user:pass") ||
+		strings.Contains(text, "secret-token") ||
+		strings.Contains(text, "expires=9999") {
+		t.Fatalf("sensitive diagnostic data leaked into log:\n%s", text)
+	}
+	if !strings.Contains(text, "https://example.com/master.m3u8?<redacted>") {
+		t.Fatalf("redacted diagnostic URL missing from log:\n%s", text)
+	}
+}
+
+func TestRedactDiagnosticTextRedactsURLQueryAndFragment(t *testing.T) {
+	input := `[debug] ffmpeg command line: https://cdn.example.com/video.m3u8?token=abc#fragment`
+	got := redactDiagnosticText(input)
+	if strings.Contains(got, "token=abc") || strings.Contains(got, "fragment") {
+		t.Fatalf("sensitive URL data was not redacted: %q", got)
+	}
+	if !strings.Contains(got, "https://cdn.example.com/video.m3u8?<redacted>#<redacted>") {
+		t.Fatalf("unexpected redacted URL: %q", got)
+	}
+}
+
+func TestRedactDiagnosticTextRedactsSignedCDNPathToken(t *testing.T) {
+	input := `[https] Opening 'https://cdn.example.com/chzzk/1080p/hdntl=exp=123~acl=*/kr/*~data=hdntl~hmac=secret-signature/segment.m4v' for reading`
+	got := redactDiagnosticText(input)
+	if strings.Contains(got, "secret-signature") ||
+		strings.Contains(got, "exp=123") ||
+		strings.Contains(got, "~hmac=") {
+		t.Fatalf("signed CDN path token was not redacted: %q", got)
+	}
+	if !strings.Contains(got, "https://cdn.example.com/chzzk/1080p/<redacted>/segment.m4v") {
+		t.Fatalf("unexpected signed path redaction: %q", got)
 	}
 }
 

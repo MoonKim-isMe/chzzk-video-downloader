@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -34,6 +35,26 @@ type CommandSpec struct {
 }
 
 func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (CommandSpec, error) {
+	return buildDownloadCommand(toolchain, request, false)
+}
+
+func buildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest, useFFmpegHLS bool) (CommandSpec, error) {
+	tempDir, err := nativeTemporaryDownloadDirForRequest(request)
+	if useFFmpegHLS {
+		tempDir, err = fallbackTemporaryDownloadDirForRequest(request, "default")
+	}
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	return buildDownloadCommandWithTempDir(toolchain, request, useFFmpegHLS, tempDir)
+}
+
+func buildDownloadCommandWithTempDir(
+	toolchain ToolchainStatus,
+	request DownloadRequest,
+	useFFmpegHLS bool,
+	tempDir string,
+) (CommandSpec, error) {
 	if !toolchain.YTDLP.Available {
 		return CommandSpec{}, fmt.Errorf("영상 다운로드 기능을 사용할 수 없습니다")
 	}
@@ -50,13 +71,9 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	if err != nil {
 		return CommandSpec{}, err
 	}
-	videoNo, err := videoNoFromNormalizedURL(videoURL)
-	if err != nil {
-		return CommandSpec{}, err
-	}
-	tempDir, err := TemporaryDownloadDir(outputDir, videoNo)
-	if err != nil {
-		return CommandSpec{}, err
+	tempDir = filepath.Clean(strings.TrimSpace(tempDir))
+	if tempDir == "" || tempDir == "." {
+		return CommandSpec{}, fmt.Errorf("다운로드 임시 경로가 필요합니다")
 	}
 
 	formatSelector := strings.TrimSpace(request.FormatSelector)
@@ -77,6 +94,12 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		return CommandSpec{}, err
 	}
 
+	outputHomeDir := outputDir
+	if useFFmpegHLS {
+		outputHomeDir = tempDir
+	}
+
+	var env []string
 	args := []string{
 		"--ignore-config",
 		"--no-simulate",
@@ -93,9 +116,25 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 		"--progress-template", "download:" + progressTemplate,
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 		"--format", formatSelector,
-		"--paths", outputDir,
+		"--paths", outputHomeDir,
 		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
+	}
+	if useFFmpegHLS {
+		args = append(
+			args,
+			"--verbose",
+			"--no-quiet",
+			"--downloader", "m3u8:ffmpeg",
+			"--downloader-args", "ffmpeg:-nostdin",
+		)
+
+		ffmpegDir := filepath.Dir(toolchain.FFmpeg.Path)
+		fallbackPath := ffmpegDir
+		if currentPath := strings.TrimSpace(os.Getenv("PATH")); currentPath != "" {
+			fallbackPath += string(os.PathListSeparator) + currentPath
+		}
+		env = append(env, "PATH="+fallbackPath)
 	}
 	if outputFormat != "" {
 		args = append(args,
@@ -113,7 +152,7 @@ func BuildDownloadCommand(toolchain ToolchainStatus, request DownloadRequest) (C
 	}
 	args = append(args, videoURL)
 
-	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args}, nil
+	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: env}, nil
 }
 
 func normalizeVideoURL(raw string) (string, error) {

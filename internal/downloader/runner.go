@@ -64,7 +64,7 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec, handler LineHandler)
 
 	cmd := exec.Command(spec.Path, spec.Args...)
 	if len(spec.Env) > 0 {
-		cmd.Env = append(os.Environ(), spec.Env...)
+		cmd.Env = mergeCommandEnv(os.Environ(), spec.Env)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -144,12 +144,35 @@ func scanOutput(reader io.Reader, stream OutputStream, lines chan<- OutputLine, 
 	defer wg.Done()
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	scanner.Split(splitOutputLines)
 	for scanner.Scan() {
 		lines <- OutputLine{Stream: stream, Text: scanner.Text()}
 	}
 	if err := scanner.Err(); err != nil {
 		errs <- err
 	}
+}
+
+func splitOutputLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for index, value := range data {
+		if value != '\n' && value != '\r' {
+			continue
+		}
+
+		advance = index + 1
+		if value == '\r' && advance < len(data) && data[advance] == '\n' {
+			advance++
+		}
+		if index == 0 {
+			return advance, nil, nil
+		}
+		return advance, data[:index], nil
+	}
+
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 func appendTail(lines []string, line string, max int) []string {
@@ -186,4 +209,45 @@ func terminateProcessTree(cmd *exec.Cmd) error {
 	}
 
 	return cmd.Process.Kill()
+}
+
+
+func mergeCommandEnv(base, overrides []string) []string {
+	result := append([]string(nil), base...)
+	indexes := make(map[string]int, len(result))
+
+	for index, entry := range result {
+		key, ok := commandEnvKey(entry)
+		if !ok {
+			continue
+		}
+		indexes[strings.ToLower(key)] = index
+	}
+
+	for _, entry := range overrides {
+		key, ok := commandEnvKey(entry)
+		if !ok {
+			result = append(result, entry)
+			continue
+		}
+
+		normalized := strings.ToLower(key)
+		if index, exists := indexes[normalized]; exists {
+			result[index] = entry
+			continue
+		}
+
+		indexes[normalized] = len(result)
+		result = append(result, entry)
+	}
+
+	return result
+}
+
+func commandEnvKey(entry string) (string, bool) {
+	index := strings.IndexByte(entry, '=')
+	if index <= 0 {
+		return "", false
+	}
+	return entry[:index], true
 }

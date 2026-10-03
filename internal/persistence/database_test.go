@@ -33,7 +33,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 {
+	if version != 6 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -49,7 +49,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 {
+	if version != 6 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }

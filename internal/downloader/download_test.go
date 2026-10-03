@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -154,10 +156,536 @@ func TestRunPreparedDownloadClassifiesPartialDataConflict(t *testing.T) {
 	}
 
 	kind, ok := downloadFailureKind(err)
-	if !ok || kind != DownloadFailurePartialDataConflict {
+	if !ok || kind != DownloadFailureHLSInitializationFragmentOrder {
 		t.Fatalf("unexpected failure kind: %q %v", kind, err)
 	}
-	if got := err.Error(); got != "이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요." {
+	if got := err.Error(); got != "영상 스트림 구조를 일반 방식으로 처리할 수 없어 대체 다운로드 방식으로 다시 시도합니다." {
 		t.Fatalf("unexpected user message: %q", got)
 	}
 }
+
+
+func commandTemporaryDir(args []string) string {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "--paths" && strings.HasPrefix(args[index+1], "temp:") {
+			return strings.TrimPrefix(args[index+1], "temp:")
+		}
+	}
+	return ""
+}
+
+func useFastFallbackMonitor(t *testing.T) {
+	t.Helper()
+	previousPoll := ffmpegFallbackPollInterval
+	previousPreparation := ffmpegFallbackPreparationTimeout
+	previousStall := ffmpegFallbackStallTimeout
+	ffmpegFallbackPollInterval = 5 * time.Millisecond
+	ffmpegFallbackPreparationTimeout = 80 * time.Millisecond
+	ffmpegFallbackStallTimeout = 80 * time.Millisecond
+	t.Cleanup(func() {
+		ffmpegFallbackPollInterval = previousPoll
+		ffmpegFallbackPreparationTimeout = previousPreparation
+		ffmpegFallbackStallTimeout = previousStall
+	})
+}
+
+func unavailableSplitRawRunner(
+	context.Context,
+	CommandSpec,
+	LineHandler,
+) error {
+	return errors.New("split probe unavailable")
+}
+
+func TestExecuteDownloadWithHLSFallbackUsesDiscontinuitySplitBeforeFFmpeg(t *testing.T) {
+	outputDir := t.TempDir()
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: outputDir,
+	}
+	toolchain := readyToolchain(t.TempDir())
+	attempts := 0
+	rawRuns := 0
+
+	result, usedSpec, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		toolchain,
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(
+			ctx context.Context,
+			spec CommandSpec,
+			progressHandler ProgressHandler,
+			lineHandler LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{
+					DiagnosticLines: []OutputLine{{Stream: StreamStderr, Text: "native failure"}},
+				}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "split required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+
+			if !slices.Contains(spec.Args, "--hls-split-discontinuity") {
+				t.Fatalf("discontinuity split was not selected before ffmpeg: %#v", spec.Args)
+			}
+			splitDir := commandTemporaryDir(spec.Args)
+			if splitDir == "" {
+				t.Fatalf("split temp directory missing: %#v", spec.Args)
+			}
+			first := filepath.Join(splitDir, "sample [15461111].1080p-0.mp4")
+			second := filepath.Join(splitDir, "sample [15461111].1080p-1.mp4")
+			if err := os.WriteFile(first, []byte("part-0"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(second, []byte("part-1"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if lineHandler != nil {
+				lineHandler(OutputLine{
+					Stream: StreamStdout,
+					Text:   hlsSplitFilePrefix + "1080p-0\t" + first,
+				})
+				lineHandler(OutputLine{
+					Stream: StreamStdout,
+					Text:   hlsSplitFilePrefix + "1080p-1\t" + second,
+				})
+			}
+			return DownloadResult{
+				FinalPath: second,
+				LastProgress: DownloadProgress{
+					Status:          "completed",
+					DownloadedBytes: 12,
+					Percent:         100,
+				},
+			}, nil
+		},
+		func(ctx context.Context, spec CommandSpec, lineHandler LineHandler) error {
+			rawRuns++
+			if spec.Path == toolchain.YTDLP.Path {
+				if lineHandler != nil {
+					lineHandler(OutputLine{
+						Stream: StreamStdout,
+						Text: hlsFormatProbeRequestedPrefix +
+							`[{"format_id":"1080p","vcodec":"avc1","acodec":"mp4a","ext":"mp4"}]`,
+					})
+				}
+				return nil
+			}
+			if spec.Path == toolchain.FFmpeg.Path {
+				if len(spec.Args) == 0 {
+					t.Fatal("ffmpeg concat args missing")
+				}
+				return os.WriteFile(spec.Args[len(spec.Args)-1], []byte("joined"), 0o644)
+			}
+			return fmt.Errorf("unexpected raw command: %s", spec.Path)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("ffmpeg yt-dlp fallback should not run after split success: attempts=%d", attempts)
+	}
+	if rawRuns != 2 {
+		t.Fatalf("expected format probe + concat raw runs, got %d", rawRuns)
+	}
+	if !slices.Contains(usedSpec.Args, "--hls-split-discontinuity") {
+		t.Fatalf("unexpected used split spec: %#v", usedSpec)
+	}
+	expected := filepath.Join(outputDir, "sample [15461111].mp4")
+	if result.FinalPath != expected {
+		t.Fatalf("unexpected final path: %q", result.FinalPath)
+	}
+	data, readErr := os.ReadFile(expected)
+	if readErr != nil || string(data) != "joined" {
+		t.Fatalf("assembled split result mismatch: %q %v", string(data), readErr)
+	}
+}
+
+func TestExecuteDownloadWithHLSFallbackRetriesWithFFmpegDownloader(t *testing.T) {
+	useFastFallbackMonitor(t)
+
+	outputDir := t.TempDir()
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: outputDir,
+	}
+	nativeTempDir, err := nativeTemporaryDownloadDirForRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nativeTempDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stalePath := filepath.Join(nativeTempDir, "stale.part")
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	initialSpec := CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}}
+	attempts := 0
+	var progressEvents []DownloadProgress
+	result, usedSpec, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		readyToolchain(t.TempDir()),
+		initialSpec,
+		func(progress DownloadProgress) {
+			progressEvents = append(progressEvents, progress)
+		},
+		func(
+			attemptCtx context.Context,
+			spec CommandSpec,
+			progressHandler ProgressHandler,
+			lineHandler LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{
+					DiagnosticLines: []OutputLine{{Stream: StreamStderr, Text: "native failure"}},
+				}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "fallback required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			if _, statErr := os.Stat(stalePath); statErr != nil {
+				t.Fatalf("native temp data must not be deleted before fallback: %v", statErr)
+			}
+			fallbackTempDir := commandTemporaryDir(spec.Args)
+			if fallbackTempDir == "" {
+				t.Fatalf("fallback temp directory missing: %#v", spec.Args)
+			}
+			if filepath.Clean(fallbackTempDir) == filepath.Clean(nativeTempDir) {
+				t.Fatalf("fallback reused native temp directory: %q", fallbackTempDir)
+			}
+			if !strings.HasPrefix(filepath.Base(fallbackTempDir), fallbackTemporaryDirectoryNamePrefix) {
+				t.Fatalf("unexpected fallback temp directory: %q", fallbackTempDir)
+			}
+
+			found := false
+			for index := 0; index+1 < len(spec.Args); index++ {
+				if spec.Args[index] == "--downloader" && spec.Args[index+1] == "m3u8:ffmpeg" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("ffmpeg HLS downloader was not selected: %#v", spec.Args)
+			}
+
+			if lineHandler != nil {
+				lineHandler(OutputLine{
+					Stream: StreamStderr,
+					Text:   `[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8?token=secret"`,
+				})
+			}
+			if err := os.WriteFile(
+				filepath.Join(fallbackTempDir, "fallback.part"),
+				make([]byte, 512),
+				0o644,
+			); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(20 * time.Millisecond)
+
+			finalPath := filepath.Join(fallbackTempDir, "done.mp4")
+			if err := os.WriteFile(finalPath, []byte("completed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return DownloadResult{
+				FinalPath:    finalPath,
+				LastProgress: DownloadProgress{Status: "completed", Percent: 100},
+			}, nil
+		},
+		unavailableSplitRawRunner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("unexpected attempt count: %d", attempts)
+	}
+	expectedFinalPath := filepath.Join(outputDir, "done.mp4")
+	if result.FinalPath != expectedFinalPath {
+		t.Fatalf("unexpected fallback result: %#v", result)
+	}
+	if data, statErr := os.ReadFile(expectedFinalPath); statErr != nil || string(data) != "completed" {
+		t.Fatalf("fallback result was not promoted: %q %v", string(data), statErr)
+	}
+	if usedSpec.Path == initialSpec.Path && slices.Equal(usedSpec.Args, initialSpec.Args) {
+		t.Fatalf("fallback command was not returned: %#v", usedSpec)
+	}
+
+	sawPreparing := false
+	sawDownloading := false
+	for _, progress := range progressEvents {
+		sawPreparing = sawPreparing || progress.Status == progressStatusFallbackPreparing
+		sawDownloading = sawDownloading ||
+			(progress.Status == progressStatusFallbackDownloading && progress.DownloadedBytes >= 512)
+	}
+	if !sawPreparing || !sawDownloading {
+		t.Fatalf("fallback activity was not surfaced: %#v", progressEvents)
+	}
+}
+
+func TestExecuteDownloadWithHLSFallbackMergesDiagnosticsWhenFallbackFails(t *testing.T) {
+	useFastFallbackMonitor(t)
+
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: t.TempDir(),
+	}
+	attempts := 0
+	result, _, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		readyToolchain(t.TempDir()),
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(
+			context.Context,
+			CommandSpec,
+			ProgressHandler,
+			LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{
+					DiagnosticLines: []OutputLine{{Stream: StreamStderr, Text: "first-attempt-output"}},
+				}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "fallback required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			return DownloadResult{
+				DiagnosticLines: []OutputLine{{Stream: StreamStderr, Text: "fallback-output"}},
+			}, errors.New("fallback failed")
+		},
+		unavailableSplitRawRunner,
+	)
+	if err == nil {
+		t.Fatal("expected fallback failure")
+	}
+	if kind, ok := downloadFailureKind(err); !ok || kind != DownloadFailureHLSInitializationFragmentOrder {
+		t.Fatalf("unexpected fallback failure kind: %q %v", kind, err)
+	}
+
+	var text strings.Builder
+	for _, line := range result.DiagnosticLines {
+		text.WriteString(line.Text)
+		text.WriteByte('\n')
+	}
+	diagnostics := text.String()
+	for _, expected := range []string{
+		"--- native HLS attempt ---",
+		"first-attempt-output",
+		"--- discontinuity split HLS attempt ---",
+		"discontinuity split error:",
+		"--- ffmpeg HLS fallback attempt ---",
+		"fallback-output",
+	} {
+		if !strings.Contains(diagnostics, expected) {
+			t.Fatalf("missing %q in diagnostics:\n%s", expected, diagnostics)
+		}
+	}
+}
+
+func TestRunMonitoredHLSFallbackCapturesImmediateFileGrowth(t *testing.T) {
+	useFastFallbackMonitor(t)
+
+	tempDir := t.TempDir()
+	var events []DownloadProgress
+	result, err, reason := runMonitoredHLSFallback(
+		context.Background(),
+		tempDir,
+		CommandSpec{Path: "yt-dlp.exe"},
+		func(progress DownloadProgress) {
+			events = append(events, progress)
+		},
+		func(
+			context.Context,
+			CommandSpec,
+			ProgressHandler,
+			LineHandler,
+		) (DownloadResult, error) {
+			if err := os.WriteFile(filepath.Join(tempDir, "fast.part"), make([]byte, 4096), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(20 * time.Millisecond)
+			return DownloadResult{}, errors.New("expected test stop")
+		},
+	)
+	if err == nil || reason != fallbackMonitorStopNone {
+		t.Fatalf("unexpected monitored result: %#v %v %q", result, err, reason)
+	}
+	found := false
+	for _, event := range events {
+		if event.Status == progressStatusFallbackDownloading && event.DownloadedBytes >= 4096 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("immediate fallback growth was not observed: %#v", events)
+	}
+}
+
+func TestExecuteDownloadWithHLSFallbackStopsPreparationTimeout(t *testing.T) {
+	useFastFallbackMonitor(t)
+	ffmpegFallbackPreparationTimeout = 30 * time.Millisecond
+	ffmpegFallbackStallTimeout = 200 * time.Millisecond
+
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: t.TempDir(),
+	}
+	attempts := 0
+	result, _, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		readyToolchain(t.TempDir()),
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(
+			attemptCtx context.Context,
+			CommandSpec,
+			ProgressHandler,
+			lineHandler LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "fallback required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+
+			ticker := time.NewTicker(5 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-attemptCtx.Done():
+					return DownloadResult{}, attemptCtx.Err()
+				case <-ticker.C:
+					if lineHandler != nil {
+						lineHandler(OutputLine{
+							Stream: StreamStderr,
+							Text:   "[debug] Extracting URL metadata",
+						})
+					}
+				}
+			}
+		},
+		unavailableSplitRawRunner,
+	)
+	if err == nil || !strings.Contains(err.Error(), "대체 다운로드 준비가") {
+		t.Fatalf("unexpected preparation timeout error: %v", err)
+	}
+	if result.LastProgress.Status != progressStatusFallbackPreparing {
+		t.Fatalf("unexpected preparation progress: %#v", result.LastProgress)
+	}
+
+	var diagnostics strings.Builder
+	for _, line := range result.DiagnosticLines {
+		diagnostics.WriteString(line.Text)
+		diagnostics.WriteByte('\n')
+	}
+	if !strings.Contains(diagnostics.String(), "ffmpeg downloader did not start") {
+		t.Fatalf("preparation timeout diagnostic missing:\n%s", diagnostics.String())
+	}
+}
+
+func TestExecuteDownloadWithHLSFallbackStopsStalledFallback(t *testing.T) {
+	useFastFallbackMonitor(t)
+	ffmpegFallbackPreparationTimeout = 200 * time.Millisecond
+	ffmpegFallbackStallTimeout = 30 * time.Millisecond
+
+	request := DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/15461111",
+		OutputDir: t.TempDir(),
+	}
+	attempts := 0
+	result, _, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		request,
+		readyToolchain(t.TempDir()),
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(
+			attemptCtx context.Context,
+			CommandSpec,
+			ProgressHandler,
+			lineHandler LineHandler,
+		) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{}, &DownloadFailure{
+					Kind:    DownloadFailureHLSInitializationFragmentOrder,
+					Message: "fallback required",
+					Cause:   errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			if lineHandler != nil {
+				lineHandler(OutputLine{
+					Stream: StreamStderr,
+					Text:   `[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8?token=secret"`,
+				})
+			}
+
+			ticker := time.NewTicker(5 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-attemptCtx.Done():
+					return DownloadResult{}, attemptCtx.Err()
+				case <-ticker.C:
+					if lineHandler != nil {
+						lineHandler(OutputLine{Stream: StreamStderr, Text: "ffmpeg heartbeat"})
+					}
+				}
+			}
+		},
+		unavailableSplitRawRunner,
+	)
+	if err == nil || !strings.Contains(err.Error(), "구간 분할 처리 후에도 대체 다운로드가") {
+		t.Fatalf("unexpected stall error: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("unexpected attempt count: %d", attempts)
+	}
+	if result.LastProgress.Status != progressStatusFallbackDownloading {
+		t.Fatalf("unexpected stalled progress: %#v", result.LastProgress)
+	}
+
+	var diagnostics strings.Builder
+	for _, line := range result.DiagnosticLines {
+		diagnostics.WriteString(line.Text)
+		diagnostics.WriteByte('\n')
+	}
+	if !strings.Contains(diagnostics.String(), "no fallback file growth") {
+		t.Fatalf("stall diagnostic missing:\n%s", diagnostics.String())
+	}
+}
+
+func TestIsFFmpegDownloaderStartLine(t *testing.T) {
+	for _, line := range []string{
+		`[debug] Invoking ffmpeg downloader on "https://example.com/master.m3u8"`,
+		`[debug] ffmpeg command line: ffmpeg -i https://example.com/master.m3u8`,
+	} {
+		if !isFFmpegDownloaderStartLine(line) {
+			t.Fatalf("expected downloader start line: %q", line)
+		}
+	}
+	if isFFmpegDownloaderStartLine("[debug] Extracting URL metadata") {
+		t.Fatal("metadata output must not mark ffmpeg downloader as started")
+	}
+}
+

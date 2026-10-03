@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,21 @@ func TestRunnerStreamsOutput(t *testing.T) {
 	}
 	if !foundStdout || !foundStderr {
 		t.Fatalf("unexpected output: %#v", lines)
+	}
+}
+
+func TestRunnerSplitsCarriageReturnProgress(t *testing.T) {
+	var lines []OutputLine
+	err := NewRunner().Run(context.Background(), helperCommand("carriage"), func(line OutputLine) {
+		lines = append(lines, line)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 ||
+		lines[0].Text != "frame=1" ||
+		lines[1].Text != "frame=2" {
+		t.Fatalf("unexpected carriage-return output: %#v", lines)
 	}
 }
 
@@ -88,6 +104,9 @@ func init() {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "failed-line")
 		os.Exit(7)
+	case "carriage":
+		fmt.Fprint(os.Stderr, "frame=1\rframe=2\r")
+		os.Exit(0)
 	case "wait":
 		fmt.Fprintln(os.Stdout, "waiting")
 		for {
@@ -96,4 +115,40 @@ func init() {
 	default:
 		os.Exit(2)
 	}
+}
+
+
+func TestMergeCommandEnvOverridesCaseInsensitive(t *testing.T) {
+	base := []string{
+		"Path=C:\\Windows\\System32",
+		"KEEP=value",
+	}
+	merged := mergeCommandEnv(base, []string{
+		"PATH=C:\\Tools;C:\\Windows\\System32",
+		"NEW=value",
+	})
+
+	pathCount := 0
+	for _, entry := range merged {
+		if strings.EqualFold(commandEnvName(entry), "PATH") {
+			pathCount++
+			if entry != "PATH=C:\\Tools;C:\\Windows\\System32" {
+				t.Fatalf("unexpected PATH override: %q", entry)
+			}
+		}
+	}
+	if pathCount != 1 {
+		t.Fatalf("expected one PATH entry, got %d in %#v", pathCount, merged)
+	}
+	if !slices.Contains(merged, "KEEP=value") || !slices.Contains(merged, "NEW=value") {
+		t.Fatalf("environment merge lost entries: %#v", merged)
+	}
+}
+
+func commandEnvName(entry string) string {
+	index := strings.IndexByte(entry, '=')
+	if index <= 0 {
+		return entry
+	}
+	return entry[:index]
 }

@@ -3,8 +3,10 @@ package downloader
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -14,7 +16,10 @@ const (
 	maxDiagnosticLines       = 400
 )
 
+var diagnosticURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
+
 func appendDiagnosticLine(lines []OutputLine, line OutputLine) []OutputLine {
+	line.Text = redactDiagnosticText(line.Text)
 	if len(lines) >= maxDiagnosticLines {
 		copy(lines, lines[1:])
 		lines[len(lines)-1] = line
@@ -56,14 +61,14 @@ func writeDownloadFailureLog(
 	fmt.Fprintln(&builder, "CHZZK Video Downloader - Download Failure Log")
 	fmt.Fprintf(&builder, "timestamp_utc: %s\n", timestamp.Format(time.RFC3339Nano))
 	fmt.Fprintf(&builder, "video_no: %d\n", videoNo)
-	fmt.Fprintf(&builder, "video_url: %s\n", videoURL)
+	fmt.Fprintf(&builder, "video_url: %s\n", redactDiagnosticText(videoURL))
 	fmt.Fprintf(&builder, "output_dir: %s\n", outputDir)
 	fmt.Fprintf(&builder, "format_selector: %s\n", strings.TrimSpace(request.FormatSelector))
 	fmt.Fprintf(&builder, "output_format: %s\n", strings.TrimSpace(request.OutputFormat))
 	if kind, ok := downloadFailureKind(downloadErr); ok {
 		fmt.Fprintf(&builder, "error_code: %s\n", kind)
 	}
-	fmt.Fprintf(&builder, "error: %s\n", downloadErr)
+	fmt.Fprintf(&builder, "error: %s\n", redactDiagnosticText(downloadErr.Error()))
 	fmt.Fprintf(
 		&builder,
 		"last_progress: status=%s percent=%.1f downloaded=%d total=%d speed=%.0f eta=%d\n",
@@ -81,7 +86,13 @@ func writeDownloadFailureLog(
 	fmt.Fprintln(&builder, "")
 	fmt.Fprintln(&builder, "[error chain]")
 	for depth, current := 0, downloadErr; current != nil && depth < 12; depth++ {
-		fmt.Fprintf(&builder, "%d: %T: %v\n", depth, current, current)
+		fmt.Fprintf(
+			&builder,
+			"%d: %T: %s\n",
+			depth,
+			current,
+			redactDiagnosticText(current.Error()),
+		)
 		current = errors.Unwrap(current)
 	}
 
@@ -91,7 +102,7 @@ func writeDownloadFailureLog(
 		fmt.Fprintln(&builder, "(no process output captured)")
 	} else {
 		for _, line := range result.DiagnosticLines {
-			fmt.Fprintf(&builder, "[%s] %s\n", line.Stream, line.Text)
+			fmt.Fprintf(&builder, "[%s] %s\n", line.Stream, redactDiagnosticText(line.Text))
 		}
 	}
 
@@ -131,4 +142,52 @@ func redactCommandArgs(args []string) []string {
 	}
 
 	return redacted
+}
+
+
+func redactDiagnosticText(text string) string {
+	return diagnosticURLPattern.ReplaceAllStringFunc(text, func(raw string) string {
+		core, suffix := splitDiagnosticURLSuffix(raw)
+		parsed, err := url.Parse(core)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return raw
+		}
+
+		safePath := redactDiagnosticURLPath(parsed.EscapedPath())
+		safe := parsed.Scheme + "://" + parsed.Host + safePath
+		if parsed.RawQuery != "" {
+			safe += "?<redacted>"
+		}
+		if parsed.Fragment != "" {
+			safe += "#<redacted>"
+		}
+		return safe + suffix
+	})
+}
+
+func splitDiagnosticURLSuffix(raw string) (string, string) {
+	index := len(raw)
+	for index > 0 {
+		switch raw[index-1] {
+		case ')', ']', '}', ',', ';', '.':
+			index--
+		default:
+			return raw[:index], raw[index:]
+		}
+	}
+	return raw, ""
+}
+
+
+func redactDiagnosticURLPath(path string) string {
+	segments := strings.Split(path, "/")
+	for index, segment := range segments {
+		lower := strings.ToLower(segment)
+		if strings.HasPrefix(lower, "hdntl=") ||
+			strings.HasPrefix(lower, "hdnts=") ||
+			strings.Contains(lower, "~hmac=") {
+			segments[index] = "<redacted>"
+		}
+	}
+	return strings.Join(segments, "/")
 }

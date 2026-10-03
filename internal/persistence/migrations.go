@@ -110,6 +110,20 @@ var migrations = []migration{
 				WHERE id = 1`,
 		},
 	},
+	{
+		version: 6,
+		statements: []string{
+			`UPDATE download_tasks
+				SET error_code = 'hls_initialization_fragment_order',
+					error = '영상 스트림 구조 문제로 다운로드에 실패했습니다. 새로 다운로드하면 대체 방식으로 자동 재시도합니다.'
+				WHERE status = 'failed'
+					AND error_code = 'partial_data_conflict'
+					AND error IN (
+						'이전 다운로드의 임시 데이터와 충돌했습니다. 다운로드를 처음부터 다시 시도해 주세요.',
+						'이전 다운로드의 임시 데이터와 충돌했습니다. 임시 파일을 정리한 뒤 다시 시도해 주세요.'
+					)`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

@@ -59,3 +59,107 @@ func TestCleanupTemporaryDownloadRemovesOnlyTargetVideo(t *testing.T) {
 		t.Fatalf("final file was removed: %v", err)
 	}
 }
+
+
+func TestTemporaryDownloadSizeTracksRegularFiles(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "video.part"), make([]byte, 128), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "audio.part"), make([]byte, 64), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	size, err := temporaryDownloadSize(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 192 {
+		t.Fatalf("unexpected temporary size: %d", size)
+	}
+}
+
+func TestTemporaryDownloadSizeMissingDirectoryIsZero(t *testing.T) {
+	size, err := temporaryDownloadSize(filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 0 {
+		t.Fatalf("unexpected missing directory size: %d", size)
+	}
+}
+
+
+func TestDownloadAttemptTemporaryDirectoriesAreSeparated(t *testing.T) {
+	outputDir := t.TempDir()
+	root, err := TemporaryDownloadDir(outputDir, 15461111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeDir, err := nativeTemporaryDownloadDir(outputDir, 15461111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackDir, err := fallbackTemporaryDownloadDir(outputDir, 15461111, "123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if nativeDir != filepath.Join(root, "native") {
+		t.Fatalf("unexpected native temp dir: %q", nativeDir)
+	}
+	if fallbackDir != filepath.Join(root, "fallback-123456789") {
+		t.Fatalf("unexpected fallback temp dir: %q", fallbackDir)
+	}
+	if nativeDir == fallbackDir {
+		t.Fatalf("native and fallback temp directories must differ: %q", nativeDir)
+	}
+}
+
+
+func TestPromoteFallbackDownloadMovesCompletedFile(t *testing.T) {
+	outputDir := t.TempDir()
+	fallbackDir := filepath.Join(outputDir, ".chzzk-temp", "15461111", "fallback-test")
+	if err := os.MkdirAll(filepath.Join(fallbackDir, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(fallbackDir, "nested", "done.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	finalPath, err := promoteFallbackDownload(fallbackDir, outputDir, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(outputDir, "nested", "done.mp4")
+	if finalPath != expected {
+		t.Fatalf("unexpected promoted path: %q", finalPath)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("fallback source still exists: %v", err)
+	}
+	if data, err := os.ReadFile(expected); err != nil || string(data) != "video" {
+		t.Fatalf("promoted file mismatch: %q %v", string(data), err)
+	}
+}
+
+func TestPromoteFallbackDownloadRejectsPathOutsideFallback(t *testing.T) {
+	outputDir := t.TempDir()
+	fallbackDir := filepath.Join(outputDir, ".chzzk-temp", "15461111", "fallback-test")
+	if err := os.MkdirAll(fallbackDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(outputDir, "outside.mp4")
+	if err := os.WriteFile(outside, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := promoteFallbackDownload(fallbackDir, outputDir, outside); err == nil {
+		t.Fatal("expected outside fallback path rejection")
+	}
+}

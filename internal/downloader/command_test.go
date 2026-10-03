@@ -3,6 +3,7 @@ package downloader
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -32,7 +33,7 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if !hasArgumentPair(spec.Args, "--concurrent-fragments", "2") {
 		t.Fatalf("default acceleration missing: %#v", spec.Args)
 	}
-	expectedTempDir, err := TemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
+	expectedTempDir, err := nativeTemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestBuildDownloadCommandRejectsSplitToolDirectories(t *testing.T) {
 }
 
 
-func TestBuildDownloadCommandDoesNotResumeCancelledPartialData(t *testing.T) {
+func TestBuildDownloadCommandUsesResumeInsideVideoTempDirectory(t *testing.T) {
 	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
 		URL:       "https://chzzk.naver.com/video/12345",
 		OutputDir: t.TempDir(),
@@ -161,13 +162,70 @@ func TestBuildDownloadCommandDoesNotResumeCancelledPartialData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !slices.Contains(spec.Args, "--no-continue") {
-		t.Fatalf("retry safety flag missing: %#v", spec.Args)
+	if !slices.Contains(spec.Args, "--continue") {
+		t.Fatalf("partial resume flag missing: %#v", spec.Args)
 	}
-	if slices.Contains(spec.Args, "--continue") {
-		t.Fatalf("partial resume must be disabled after cancellation: %#v", spec.Args)
+	if slices.Contains(spec.Args, "--no-continue") {
+		t.Fatalf("partial resume must remain enabled inside the isolated VOD temp directory: %#v", spec.Args)
 	}
 	if !slices.Contains(spec.Args, "--no-keep-fragments") {
 		t.Fatalf("fragment cleanup flag missing: %#v", spec.Args)
 	}
+}
+
+func TestBuildDownloadCommandUsesFFmpegForHLSFallback(t *testing.T) {
+	toolDir := t.TempDir()
+	spec, err := buildDownloadCommand(readyToolchain(toolDir), DownloadRequest{
+		URL:                 "https://chzzk.naver.com/video/12345",
+		OutputDir:           t.TempDir(),
+		ConcurrentFragments: 8,
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedPairs := [][2]string{
+		{"--downloader", "m3u8:ffmpeg"},
+		{"--downloader-args", "ffmpeg:-nostdin"},
+		{"--concurrent-fragments", "8"},
+	}
+	for _, pair := range expectedPairs {
+		if !hasArgumentPair(spec.Args, pair[0], pair[1]) {
+			t.Fatalf("ffmpeg HLS fallback argument pair missing: %#v in %#v", pair, spec.Args)
+		}
+	}
+	for _, flag := range []string{"--verbose", "--no-quiet"} {
+		if !slices.Contains(spec.Args, flag) {
+			t.Fatalf("fallback diagnostic flag %q missing: %#v", flag, spec.Args)
+		}
+	}
+
+	pathInjected := false
+	for _, entry := range spec.Env {
+		if strings.HasPrefix(strings.ToUpper(entry), "PATH=") &&
+			strings.Contains(strings.ToLower(entry), strings.ToLower(toolDir)) {
+			pathInjected = true
+			break
+		}
+	}
+	if !pathInjected {
+		t.Fatalf("ffmpeg tool directory was not injected into PATH: %#v", spec.Env)
+	}
+
+	fallbackTemp := commandTempPath(spec.Args)
+	if fallbackTemp == "" {
+		t.Fatalf("fallback temp path missing: %#v", spec.Args)
+	}
+	if !hasArgumentPair(spec.Args, "--paths", fallbackTemp) {
+		t.Fatalf("fallback home path must be staged with temp path: %#v", spec.Args)
+	}
+}
+
+func commandTempPath(args []string) string {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "--paths" && strings.HasPrefix(args[index+1], "temp:") {
+			return strings.TrimPrefix(args[index+1], "temp:")
+		}
+	}
+	return ""
 }
