@@ -1251,3 +1251,18 @@ Windows 실 검증 대기:
 - PowerShell 스크립트 구문 검사 통과. 별도 임시 fixture에서 문자열 `FileVersion`만 제거했을 때 메타데이터 검사로 실패하는 것을 확인해 기존 누락을 테스트가 감지하도록 검증했다.
 - 계약 테스트는 Wails 템플릿 입력을 읽는 mock builder 및 mock VersionInfo를 사용한다. .NET Framework의 빈 메타데이터 동작은 모의하며 실제 Windows API 검증을 완료한 것으로 간주하지 않는다.
 - 기본 patch/명시적 minor·major/버전 유지 정책을 유지하고 저장소 버전은 이번 오류 수정으로 증가시키지 않는다.
+
+### Phase 7-E — Windows 백그라운드 콘솔 창 억제
+
+- [x] PKG-7E-1. Windows 도구 프로세스에 `HideWindow` 및 `CREATE_NO_WINDOW` 공통 적용
+- [x] PKG-7E-2. Runner의 다운로드/영상 처리, Resolver의 버전 확인, 취소용 `taskkill.exe`에 콘솔 숨김 적용
+- [x] PKG-7E-3. 기존 stdout/stderr 진행률·오류 및 취소 처리를 유지하고 비-Windows에서는 기존 실행 방식 유지
+- [x] PKG-7E-4. 실제 자식 프로세스의 콘솔 핸들을 확인하는 Windows 통합 테스트와 버전 조회/실패/취소 회귀 테스트 추가
+- [ ] PKG-7E-5. 실제 Windows Portable EXE에서 시작·도구 상태 확인·다운로드·병합·취소 시 콘솔 창이 뜨지 않는지 확인
+
+#### Phase 7-E 검증 기준
+
+- Windows 전용 프로세스 설정은 명령 실행 전에 적용한다. stdout/stderr 파이프를 유지하며 사용자에게 필요한 진행률/오류를 계속 앱으로 전달한다.
+- Windows 통합 테스트는 Runner 및 버전 조회가 실행한 자식의 `GetConsoleWindow()` 값을 확인한다. Linux에서의 교차 컴파일 성공을 Windows 실제 실행 성공으로 기록하지 않는다.
+- Linux에서 downloader production 소스 전체와 Runner/Resolver/bundle 테스트를 선별해 `go test -race -count=1` 및 `go vet` 통과. Windows amd64 downloader production 빌드와 콘솔 핸들 통합 테스트 교차 컴파일 통과.
+- 전체 downloader 테스트는 기존 `download_test.go` callback 타입 오류 및 `queue_test.go`의 미정의 `immediateErrorExecutor` 때문에 컴파일되지 않는다. 이번 수정과 관련된 Runner/Resolver/bundle 테스트를 별도로 검증하며 해당 기존 오류를 임의 변경하지 않는다.

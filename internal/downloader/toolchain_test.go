@@ -8,6 +8,29 @@ import (
 	"testing"
 )
 
+func TestProbeToolVersionReadsFirstLine(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	version, err := probeToolVersion(context.Background(), os.Args[0], "version")
+	if err != nil || version != "1.2.3" {
+		t.Fatalf("unexpected tool version: %q, error: %v", version, err)
+	}
+}
+
+func TestProbeToolVersionReportsProcessFailure(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	if _, err := probeToolVersion(context.Background(), os.Args[0], "fail"); err == nil {
+		t.Fatal("failed version probe must return an error")
+	}
+}
+
+func TestProbeToolVersionRespectsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := probeToolVersion(ctx, os.Args[0], "version"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected canceled probe, got %v", err)
+	}
+}
+
 func TestResolverPrefersConfiguredDirectory(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe"} {
@@ -54,7 +77,6 @@ func TestResolverReportsUnusableBinary(t *testing.T) {
 	}
 }
 
-
 func TestResolverPrefersManagedBundleBeforeAppAndPath(t *testing.T) {
 	managed := t.TempDir()
 	appDir := t.TempDir()
@@ -93,8 +115,8 @@ func TestResolverPrefersManagedBundleBeforeAppAndPath(t *testing.T) {
 
 func TestAppendBundleErrorOnlyTouchesUnavailableTools(t *testing.T) {
 	status := ToolchainStatus{
-		YTDLP: ToolStatus{Name: "yt-dlp", Available: false, Error: "not found"},
-		FFmpeg: ToolStatus{Name: "ffmpeg", Available: true},
+		YTDLP:   ToolStatus{Name: "yt-dlp", Available: false, Error: "not found"},
+		FFmpeg:  ToolStatus{Name: "ffmpeg", Available: true},
 		FFprobe: ToolStatus{Name: "ffprobe", Available: false},
 	}
 	result := appendBundleError(status, errors.New("bundle missing"))
