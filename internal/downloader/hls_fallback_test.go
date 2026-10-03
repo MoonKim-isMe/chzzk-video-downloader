@@ -26,6 +26,10 @@ func TestBuildHLSFormatProbeCommandUsesOriginalSelector(t *testing.T) {
 	if !slices.Contains(spec.Args, "--simulate") {
 		t.Fatalf("format probe must not download media: %#v", spec.Args)
 	}
+	if !hasArgumentPair(spec.Args, "--encoding", ytDLPOutputEncoding) ||
+		!slices.Contains(spec.Env, "PYTHONIOENCODING="+ytDLPOutputEncoding) {
+		t.Fatalf("format probe UTF-8 output settings missing: args=%#v env=%#v", spec.Args, spec.Env)
+	}
 	for _, pair := range [][2]string{
 		{"--print", hlsFormatProbeRequestedPrefix + "%(requested_formats.:.{format_id,vcodec,acodec,ext})j"},
 		{"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})j"},
@@ -114,6 +118,10 @@ func TestBuildHLSSplitFormatProbeCommand(t *testing.T) {
 			t.Fatalf("missing split probe flag %q: %#v", flag, spec.Args)
 		}
 	}
+	if !hasArgumentPair(spec.Args, "--encoding", ytDLPOutputEncoding) ||
+		!slices.Contains(spec.Env, "PYTHONIOENCODING="+ytDLPOutputEncoding) {
+		t.Fatalf("split probe UTF-8 output settings missing: args=%#v env=%#v", spec.Args, spec.Env)
+	}
 	if !hasArgumentPair(
 		spec.Args,
 		"--print",
@@ -176,6 +184,7 @@ func TestBuildHLSDiscontinuitySegmentDownloadCommandUsesExactFormat(t *testing.T
 		}
 	}
 	for _, pair := range [][2]string{
+		{"--encoding", ytDLPOutputEncoding},
 		{"--format", "hls-8384-1"},
 		{"--downloader", "m3u8:native"},
 		{"--concurrent-fragments", "4"},
@@ -185,6 +194,9 @@ func TestBuildHLSDiscontinuitySegmentDownloadCommandUsesExactFormat(t *testing.T
 		if !hasArgumentPair(spec.Args, pair[0], pair[1]) {
 			t.Fatalf("missing split segment argument pair %#v in %#v", pair, spec.Args)
 		}
+	}
+	if !slices.Contains(spec.Env, "PYTHONIOENCODING="+ytDLPOutputEncoding) {
+		t.Fatalf("split segment UTF-8 environment missing: %#v", spec.Env)
 	}
 }
 
@@ -365,4 +377,28 @@ func testCommandTempDir(args []string) string {
 		}
 	}
 	return ""
+}
+
+
+func TestResolveHLSSplitCompletedFileFindsActualUTF8Filename(t *testing.T) {
+	dir := t.TempDir()
+	actual := filepath.Join(dir, "조은아침~! [15461111].hls-8384-1.mp4")
+	if err := os.WriteFile(actual, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, info, err := resolveHLSSplitCompletedFile(
+		dir,
+		"hls-8384-1",
+		filepath.Join(dir, "Ń∂ņļĺ∆ńß~! [15461111].hls-8384-1.mp4"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved != actual {
+		t.Fatalf("unexpected resolved path: %q", resolved)
+	}
+	if info.Size() != int64(len("video")) {
+		t.Fatalf("unexpected resolved size: %d", info.Size())
+	}
 }

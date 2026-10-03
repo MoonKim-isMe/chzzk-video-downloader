@@ -30,3 +30,12 @@ func TestParseFinalPath(t *testing.T) {
 		t.Fatalf("unexpected path: %q, ok=%v", path, ok)
 	}
 }
+
+
+func TestParseFinalPathPreservesUTF8KoreanFilename(t *testing.T) {
+	expected := `C:\Users\forca\Downloads\CHZZK Video Downloader\.chzzk-temp\15461111\fallback-split-1\조은아침~! [15461111].hls-8384-1.mp4`
+	path, ok := parseFinalPath(finalPathPrefix + expected)
+	if !ok || path != expected {
+		t.Fatalf("UTF-8 final path was not preserved: %q, ok=%v", path, ok)
+	}
+}

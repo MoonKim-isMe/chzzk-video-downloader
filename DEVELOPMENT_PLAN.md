@@ -1076,6 +1076,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - native 다운로드는 `.chzzk-temp/{videoNo}/native`를 사용하고, 분할 fallback/ffmpeg fallback은 각각 새로운 `fallback-split-{runId}` / `fallback-{runId}` 경로를 사용해 Windows에서 native `.part` 파일이 잠겨 있어도 대체 다운로드 시작을 막지 않는다.
 - ffmpeg fallback 명령에는 다운로드 가속 설정의 `--concurrent-fragments` 값을 유지하고, 번들 ffmpeg 디렉터리를 PATH 선두에 명시하며 `--downloader-args "ffmpeg:-nostdin"`을 적용한다. fallback에서는 `--paths`의 home과 temp를 모두 현재 `fallback-{runId}`로 지정해 외부 downloader가 어느 출력 단계에 쓰더라도 동일 경로에서 파일 증가를 관측한다.
 - `--print`가 quiet를 암시하는 yt-dlp 동작을 고려해 ffmpeg fallback에만 `--verbose --no-quiet`를 추가한다. verbose 로그의 URL query/fragment뿐 아니라 CHZZK CDN의 `hdntl`/`hdnts`/`hmac` 서명 path segment도 저장 전에 `<redacted>`로 마스킹한다.
+- Windows 시스템 코드페이지와 무관하게 yt-dlp가 출력하는 최종 파일 경로/probe JSON을 UTF-8로 읽을 수 있도록 모든 yt-dlp command에 `--encoding utf-8`과 `PYTHONIOENCODING=utf-8`을 적용한다. split 완료 경로 문자열로 파일을 찾지 못하면 `fallback-split-*` 디렉터리에서 해당 exact format ID를 포함한 실제 파일을 다시 탐색해 한글 파일명 mojibake 때문에 성공 다운로드를 폐기하지 않는다.
 - fallback 진입 직후에는 `fallback_preparing` 상태를 유지한다. 일반 디버그 출력만으로 다운로드 중 상태로 전환하지 않고 `Invoking ffmpeg downloader` / ffmpeg command line 또는 실제 fallback 파일 증가가 확인될 때만 `fallback_downloading`으로 전환한다.
 - fallback 준비 단계와 다운로드 단계를 별도 timeout으로 관리한다. ffmpeg downloader가 120초 내 시작되지 않으면 preparation timeout으로 중단하고, downloader 시작 후에는 fallback 파일 크기가 60초 동안 증가하지 않을 때만 stalled로 판단해 프로세스 트리를 취소한다.
 - ffmpeg fallback의 파일 크기 baseline은 프로세스를 시작하기 전에 측정해, 프로세스 시작 직후 빠르게 기록된 바이트가 진행량에서 누락되지 않도록 한다.
@@ -1122,7 +1123,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 실패 진단 로그의 최근 프로세스 출력 캡처, 민감 실행 인자 마스킹, `logPath` Queue → SQLite → Frontend 연결 및 로그 파일 열기 경로 정적 확인
 - HLS initialization fragment 오류 분류 → native temp 보존 → 원래 선택 format probe → `--hls-split-discontinuity` 구간 다운로드/누락 검증/concat → 실패 시 독립 `fallback-{runId}`의 `m3u8:ffmpeg` 최종 fallback → 3단계 진단 로그 병합 경로 정적 확인
 - 최신 main의 다운로드 가속 `--concurrent-fragments` 정책과 HLS fallback command를 함께 유지하도록 충돌 병합 확인
-- discontinuity split format probe의 compact JSON(`j`, pretty-print `#j` 미사용), 실제 split format ID 재조회, exact format별 독립 다운로드, leading/trailing empty boundary 허용 / 중간 empty 거부, split 성공 시 ffmpeg fallback 미실행, ffmpeg PATH 주입 / `--verbose --no-quiet`, staged home+temp 경로, 프로세스 시작 전 file-size baseline, downloader start marker 감지, 120초 preparation timeout / 60초 file-growth stall 분리, `\r` 출력 분리, query/fragment 및 CDN path 서명 마스킹, 성공 파일 promote 경로 테스트 추가
+- discontinuity split format probe의 compact JSON(`j`, pretty-print `#j` 미사용), 실제 split format ID 재조회, exact format별 독립 다운로드, leading/trailing empty boundary 허용 / 중간 empty 거부, 모든 yt-dlp command의 UTF-8 출력 강제, 한글 최종 경로 보존 및 mojibake 경로의 실제 split 파일 재탐색, split 성공 시 ffmpeg fallback 미실행, ffmpeg PATH 주입 / `--verbose --no-quiet`, staged home+temp 경로, 프로세스 시작 전 file-size baseline, downloader start marker 감지, 120초 preparation timeout / 60초 file-growth stall 분리, `\r` 출력 분리, query/fragment 및 CDN path 서명 마스킹, 성공 파일 promote 경로 테스트 추가
 - Download Manager의 `대체 방식 재시도` 상태 Tag, 준비/연결/다운로드 중 문구 및 전체 크기를 알 수 없는 fallback metrics 표시 경로 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:

@@ -164,20 +164,19 @@ func executeDiscontinuitySplitFallback(
 			)
 		}
 
-		if strings.TrimSpace(segmentResult.FinalPath) == "" {
-			return result, segmentSpec, fmt.Errorf(
-				"HLS 구간 %s의 완료 파일 경로를 확인할 수 없습니다",
-				candidate.Format.FormatID,
-			)
-		}
-		info, statErr := os.Stat(segmentResult.FinalPath)
-		if statErr != nil {
+		resolvedPath, info, resolveErr := resolveHLSSplitCompletedFile(
+			splitDir,
+			candidate.Format.FormatID,
+			segmentResult.FinalPath,
+		)
+		if resolveErr != nil {
 			return result, segmentSpec, fmt.Errorf(
 				"HLS 구간 %s 완료 파일을 확인할 수 없습니다: %w",
 				candidate.Format.FormatID,
-				statErr,
+				resolveErr,
 			)
 		}
+		segmentResult.FinalPath = resolvedPath
 		if info.Size() <= 0 {
 			emptyCandidates = append(emptyCandidates, candidate)
 			result.DiagnosticLines = appendDiagnosticLine(
@@ -263,6 +262,7 @@ func buildHLSFormatProbeCommand(toolchain ToolchainStatus, request DownloadReque
 
 	args := []string{
 		"--ignore-config",
+		"--encoding", ytDLPOutputEncoding,
 		"--simulate",
 		"--no-playlist",
 		"--color", "never",
@@ -272,7 +272,11 @@ func buildHLSFormatProbeCommand(toolchain ToolchainStatus, request DownloadReque
 		"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})j",
 		videoURL,
 	}
-	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args}, nil
+	return CommandSpec{
+		Path: toolchain.YTDLP.Path,
+		Args: args,
+		Env:  ytDLPUTF8Env(),
+	}, nil
 }
 
 func probeHLSSelectedFormats(
@@ -341,6 +345,7 @@ func buildHLSSplitFormatProbeCommand(
 		Path: toolchain.YTDLP.Path,
 		Args: []string{
 			"--ignore-config",
+			"--encoding", ytDLPOutputEncoding,
 			"--simulate",
 			"--no-playlist",
 			"--color", "never",
@@ -350,6 +355,7 @@ func buildHLSSplitFormatProbeCommand(
 			hlsSplitFormatProbePrefix + "%(formats.:.{format_id,vcodec,acodec,ext})j",
 			videoURL,
 		},
+		Env: ytDLPUTF8Env(),
 	}, nil
 }
 
@@ -467,6 +473,7 @@ func buildHLSDiscontinuitySegmentDownloadCommand(
 
 	args := []string{
 		"--ignore-config",
+		"--encoding", ytDLPOutputEncoding,
 		"--no-simulate",
 		"--progress",
 		"--newline",
@@ -495,7 +502,73 @@ func buildHLSDiscontinuitySegmentDownloadCommand(
 		args = append(args, "--ffmpeg-location", location)
 	}
 	args = append(args, videoURL)
-	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args}, nil
+	return CommandSpec{
+		Path: toolchain.YTDLP.Path,
+		Args: args,
+		Env:  ytDLPUTF8Env(),
+	}, nil
+}
+
+func resolveHLSSplitCompletedFile(
+	splitDir string,
+	formatID string,
+	reportedPath string,
+) (string, os.FileInfo, error) {
+	reportedPath = strings.TrimSpace(reportedPath)
+	if reportedPath != "" {
+		if info, err := os.Stat(reportedPath); err == nil && info.Mode().IsRegular() {
+			return reportedPath, info, nil
+		}
+	}
+
+	entries, err := os.ReadDir(splitDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("구간 분할 임시 폴더를 읽을 수 없습니다: %w", err)
+	}
+
+	marker := "." + formatID + "."
+	type match struct {
+		path string
+		info os.FileInfo
+	}
+	var matches []match
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.Contains(entry.Name(), marker) {
+			continue
+		}
+		lowerName := strings.ToLower(entry.Name())
+		if strings.HasSuffix(lowerName, ".part") ||
+			strings.HasSuffix(lowerName, ".ytdl") ||
+			strings.HasSuffix(lowerName, ".ffconcat") {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		matches = append(matches, match{
+			path: filepath.Join(splitDir, entry.Name()),
+			info: info,
+		})
+	}
+
+	switch len(matches) {
+	case 0:
+		if reportedPath == "" {
+			return "", nil, fmt.Errorf("yt-dlp 완료 파일 경로가 비어 있고 실제 결과 파일도 찾지 못했습니다")
+		}
+		return "", nil, fmt.Errorf(
+			"yt-dlp가 보고한 완료 파일을 찾지 못했습니다: %s",
+			reportedPath,
+		)
+	case 1:
+		return matches[0].path, matches[0].info, nil
+	default:
+		return "", nil, fmt.Errorf(
+			"포맷 %s의 완료 파일이 여러 개라 안전하게 선택할 수 없습니다",
+			formatID,
+		)
+	}
 }
 
 func isEmptyHLSDownloadError(err error) bool {

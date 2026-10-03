@@ -33,6 +33,12 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if !hasArgumentPair(spec.Args, "--concurrent-fragments", "2") {
 		t.Fatalf("default acceleration missing: %#v", spec.Args)
 	}
+	if !hasArgumentPair(spec.Args, "--encoding", ytDLPOutputEncoding) {
+		t.Fatalf("yt-dlp UTF-8 output encoding missing: %#v", spec.Args)
+	}
+	if !slices.Contains(spec.Env, "PYTHONIOENCODING="+ytDLPOutputEncoding) {
+		t.Fatalf("yt-dlp UTF-8 environment missing: %#v", spec.Env)
+	}
 	expectedTempDir, err := nativeTemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
 	if err != nil {
 		t.Fatal(err)
