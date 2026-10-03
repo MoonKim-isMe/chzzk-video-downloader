@@ -1,5 +1,4 @@
 import {
-  Alert,
   App as AntdApp,
   Button,
   Divider,
@@ -10,10 +9,9 @@ import {
   Segmented,
   Select,
   Skeleton,
-  Space,
   Typography,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   getSettings,
@@ -59,15 +57,22 @@ const themeOptions: Array<{ label: string; value: ThemeMode }> = [
 interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
+  onThemePreview: (theme: ThemeMode) => void;
   onSettingsUpdated: (settings: AppSettings) => void;
 }
 
-function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProps) {
+function SettingsDrawer({
+  open,
+  onClose,
+  onThemePreview,
+  onSettingsUpdated,
+}: SettingsDrawerProps) {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<AppSettings>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
+  const persistedTheme = useRef<ThemeMode | undefined>(undefined);
 
   useEffect(() => {
     if (!open) {
@@ -75,12 +80,15 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
     }
 
     let active = true;
+    persistedTheme.current = undefined;
     setLoading(true);
 
     getSettings()
       .then((settings) => {
         if (active) {
+          persistedTheme.current = settings.theme;
           form.setFieldsValue(settings);
+          onThemePreview(settings.theme);
         }
       })
       .catch((cause) => {
@@ -97,7 +105,14 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
     return () => {
       active = false;
     };
-  }, [form, message, open]);
+  }, [form, message, onThemePreview, open]);
+
+  const handleClose = () => {
+    if (persistedTheme.current) {
+      onThemePreview(persistedTheme.current);
+    }
+    onClose();
+  };
 
   const handleSelectDirectory = async () => {
     setSelectingDirectory(true);
@@ -124,6 +139,7 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
         downloadDir: values.downloadDir.trim(),
       });
       form.setFieldsValue(updated);
+      persistedTheme.current = updated.theme;
       onSettingsUpdated(updated);
       message.success('설정을 저장했습니다.');
       onClose();
@@ -143,11 +159,11 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
       placement="right"
       width={460}
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       destroyOnHidden
       footer={
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose} disabled={saving}>
+          <Button onClick={handleClose} disabled={saving}>
             취소
           </Button>
           <Button type="primary" loading={saving} disabled={loading} onClick={() => void handleSave()}>
@@ -170,7 +186,11 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
             </Paragraph>
 
             <Form.Item name="theme" label="테마" rules={[{ required: true }]}>
-              <Segmented block options={themeOptions} />
+              <Segmented
+                block
+                options={themeOptions}
+                onChange={(value) => onThemePreview(value as ThemeMode)}
+              />
             </Form.Item>
           </section>
 
@@ -241,30 +261,6 @@ function SettingsDrawer({ open, onClose, onSettingsUpdated }: SettingsDrawerProp
             </Form.Item>
           </section>
 
-          <Alert
-            className="mt-2"
-            type="info"
-            showIcon
-            message="설정 적용"
-            description={
-              <Space direction="vertical" size={2}>
-                <Text className="!text-xs">
-                  테마는 저장 즉시 전체 화면에 적용됩니다.
-                </Text>
-                <Text className="!text-xs">
-                  경로·해상도·포맷·다운로드 가속은 새 Queue 작업부터, 동시 다운로드 수는 Scheduler에 즉시 적용됩니다.
-                </Text>
-              </Space>
-            }
-          />
-
-          <Alert
-            className="mt-3"
-            type="success"
-            showIcon
-            message="설정은 자동으로 보관됩니다."
-            description="SQLite에 저장되며 앱을 다시 실행해도 그대로 유지됩니다."
-          />
         </Form>
       )}
     </Drawer>

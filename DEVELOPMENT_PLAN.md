@@ -1058,9 +1058,11 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 저장 채널 사용자 용어는 화면에서 `북마크 채널`로 통일한다.
 - 북마크 목록에서는 텍스트 `삭제` 버튼 대신 채워진 별 아이콘을 표시하고, 별 클릭 시 북마크를 해제해 해당 항목을 목록에서 즉시 제거한다.
 - 북마크 목록의 별 아이콘은 검색 결과용 공용 즐겨찾기 버튼 위치 규칙과 분리해 카드 우측 세로 중앙에 고정한다.
-- Settings Drawer에 Light / Dark 선택을 추가하고 저장 즉시 Ant Design theme과 앱 surface token에 적용한다.
+- Settings Drawer의 Light / Dark 선택은 값을 클릭하는 즉시 Ant Design theme과 앱 surface token에 미리보기로 적용한다. 저장 시 영속화하고 취소/X 닫기 시 기존 저장 테마로 복원한다.
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
 - `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
+- Settings Drawer 최하단의 `설정 적용`, `설정은 자동으로 보관됩니다.` 안내 블록은 제거하고 실제 설정 Form과 저장/취소 액션만 유지한다.
+- 과거 빌드의 migration version 충돌로 `schema_migrations`에는 최신 버전이 기록됐지만 `app_settings.download_acceleration` 컬럼이 없는 DB를 시작 시 감지해 컬럼과 설정 schema_version을 자동 복구한다.
 - 다운로드 탭은 헤더 아래 남은 높이를 채우는 단일 Workspace로 구성하고 `진행 중 / 완료 / 실패` 섹션을 내부 스크롤 영역에서 분리한다.
 - 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
 - Windows 실행 취소는 직접 프로세스만 종료하지 않고 `taskkill /T /F`로 다운로드/후처리 하위 프로세스 트리를 함께 종료한다.
@@ -1103,6 +1105,9 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 북마크 별 위치 selector 우선순위 확인: 공용 `top: 9px`보다 북마크 전용 `top: 50% + translateY(-50%)`가 우선 적용되도록 확인
 - Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
+- 테마 선택 즉시 preview 적용, 저장 시 유지, 취소/X 닫기 시 저장 테마 복원 경로 추가
+- Settings Drawer 최하단의 설정 안내 Alert 2개 제거
+- legacy SQLite의 누락된 `download_acceleration` 컬럼 자동 복구 및 기본값 `standard` 복원 테스트 추가
 - Download Manager의 cancelled 숨김 / 완료 액션 / 기능 중심 tool 상태 문구 구조 정적 확인
 - Queue 취소/삭제 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
 - running 취소 즉시 cancelled event 발생 및 executor 종료 전 Scheduler slot 유지 검증
