@@ -130,9 +130,8 @@ func executeDiscontinuitySplitFallback(
 				progress.TotalBytesEstimated = false
 				progress.ETASeconds = 0
 				if len(candidates) > 0 {
-					progress.Percent = (
-						float64(candidateIndex) + progress.Percent/100
-					) / float64(len(candidates)) * 100
+					progress.Percent = (float64(candidateIndex) + progress.Percent/100) /
+						float64(len(candidates)) * 100
 				}
 				handler(progress)
 			},
