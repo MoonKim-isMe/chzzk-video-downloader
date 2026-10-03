@@ -134,3 +134,46 @@ func hashBytes(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
+
+func TestPortableBundleReusesManagedToolAndRepairsMissingFile(t *testing.T) {
+	data := []byte("bundled-tool")
+	manifest := bundledToolManifest{
+		BundleID: "portable-bundle",
+		Platform: "windows/amd64",
+		Tools:    []bundledToolFile{{Name: "yt-dlp.exe", SHA256: hashBytes(data)}},
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := fstest.MapFS{
+		"bundle/" + bundleManifestName: {Data: manifestBytes},
+		"bundle/yt-dlp.exe":            {Data: data},
+	}
+	target := filepath.Join(t.TempDir(), "user data", "CHZZK Video Downloader", "tools")
+	if err := materializeBundledTools(bundle, "bundle", target); err != nil {
+		t.Fatal(err)
+	}
+	toolPath := filepath.Join(target, "yt-dlp.exe")
+	updated := []byte("user-updated-tool")
+	if err := os.WriteFile(toolPath, updated, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := materializeBundledTools(bundle, "bundle", target); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := os.ReadFile(toolPath)
+	if err != nil || string(actual) != string(updated) {
+		t.Fatalf("same bundle must preserve a managed tool across launches: %q, %v", actual, err)
+	}
+	if err := os.Remove(toolPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := materializeBundledTools(bundle, "bundle", target); err != nil {
+		t.Fatal(err)
+	}
+	actual, err = os.ReadFile(toolPath)
+	if err != nil || string(actual) != string(data) {
+		t.Fatalf("missing managed tool must be restored from EXE: %q, %v", actual, err)
+	}
+}

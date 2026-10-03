@@ -102,7 +102,7 @@ Windows amd64에서는 사용자가 yt-dlp / ffmpeg / ffprobe를 별도로 설�
 %LOCALAPPDATA%\CHZZK Video Downloader\tools
 ```
 
-따라서 설치 디렉터리가 Program Files여도 런타임 쓰기 권한이 필요하지 않습니다.
+EXE가 있는 폴더에는 런타임 파일을 쓰지 않습니다. 읽기 전용 폴더에 EXE를 두어도 사용자 데이터 폴더에 쓰기 권한이 있으면 실행할 수 있습니다.
 
 도구 탐색 우선순위:
 
@@ -171,7 +171,11 @@ wails build
 
 ## Windows WebView2
 
-Wails v2 Windows 애플리케이션은 WebView2 Runtime을 사용합니다. Windows 11에는 일반적으로 포함되어 있으며, 최종 패키징 단계에서 WebView2 부트스트래퍼 포함 정책을 확정합니다.
+Wails v2 Windows 애플리케이션은 Microsoft WebView2 Runtime을 사용합니다. Portable 빌드는 `-webview2 embed`로 공식 부트스트래퍼를 EXE에 포함합니다. 기존 Runtime이 있으면 바로 실행하며, 없거나 너무 오래된 경우 공식 Runtime 설치를 안내합니다. 부트스트래퍼는 Runtime 본체가 아니므로 이 경우 인터넷 연결이 필요하며, 설치를 취소하면 앱을 실행할 수 없습니다.
+
+앱 자체에는 설치 프로그램이 없지만 WebView2가 없는 PC에는 Runtime 설치가 필요합니다. Runtime까지 내장하는 완전 오프라인 배포는 현재 범위에 포함하지 않습니다.
+
+WebView2 데이터는 `%LOCALAPPDATA%\CHZZK Video Downloader\webview2`에 저장합니다. 배포 버전에 따라 EXE 파일명이 바뀌어도 같은 경로를 사용합니다. 기존 기본 경로의 WebView2 캐시는 이 경로로 이관하지 않으며, 앱 설정·북마크·다운로드 기록은 기존 SQLite 경로를 그대로 사용합니다.
 
 ## 개발 계획
 
@@ -297,29 +301,51 @@ https://chzzk.naver.com/video/{videoNo}
 URL 입력 영역은 상단에 고정되고, 조회된 단일 VOD는 **좌측 16:9 썸네일 / 우측 영상 정보**의 상세 레이아웃으로 표시합니다. 우측에는 제목, 채널, 게시일, 재생시간, 조회수, 태그와 다운로드 추가 CTA를 표시합니다. 결과 영역은 독립 스크롤되며 900px 이하에서는 썸네일 위 / 영상 정보 아래의 1열로 전환됩니다.
 
 
-## Windows 빌드 및 설치 패키지의 다운로드 도구
+## Windows Portable EXE 배포
 
-일반 Windows executable 빌드:
+Windows amd64에서 프로젝트 루트의 아래 명령으로 빌드합니다. Go/Wails CLI, Node.js, Yarn이 설치되어 있어야 합니다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1
 ```
 
-NSIS 설치 패키지 빌드:
+버전은 `wails.json`의 `info.productVersion`을 기준으로 합니다. 현재 `0.1.0`이며 빌드 시 임의로 `1.0.0`으로 올리지 않습니다. 정식 배포 버전을 바꾸려면 프론트엔드 `package.json` 버전도 함께 맞춥니다.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer
+```text
+build/portable/v0.1.0/
+  CHZZK-Video-Downloader-v0.1.0-portable.exe
+  CHZZK-Video-Downloader-v0.1.0-portable.exe.sha256
+  release-metadata.json
+  THIRD_PARTY_NOTICES.md
 ```
 
-Release build에서 최신 다운로드 도구를 다시 준비하려면 `-RefreshTools`를 함께 사용합니다.
+사용자는 **Portable EXE 하나를 내려받아 실행**합니다. 나머지 파일은 배포 무결성·도구 출처·라이선스 안내용으로 함께 게시하며, 실행에 필요한 외부 파일은 아닙니다. 앱 설치/제거, Setup EXE, NSIS, ZIP, UPX 압축은 사용하지 않습니다. 코드 서명도 현재 적용하지 않습니다.
+
+빌드 스크립트는 준비된 도구 3종의 SHA-256을 다시 확인한 뒤 빌드합니다. 빌드 결과의 제품명·버전·개인 배포자 `MoonKim`·저작권을 확인하고, EXE의 SHA-256 및 도구 bundle manifest를 기록합니다. 도구가 누락되거나 손상되면 빌드를 중단합니다.
+
+최신 다운로드 도구로 새 배포본을 만들려면:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Installer -RefreshTools
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -RefreshTools
 ```
 
-다운로드 도구가 Go executable에 embed되므로 Wails NSIS installer가 별도의 yt-dlp/ffmpeg 설치 프로그램을 실행할 필요가 없습니다. 설치 후 첫 Toolchain 확인 시 embedded 도구가 LocalAppData에 자동 materialize됩니다.
+도구는 Go EXE에 내장되며, 첫 Toolchain 확인 시 `%LOCALAPPDATA%\CHZZK Video Downloader\tools`로 추출합니다. 동일 bundle 재실행 시 기존 파일을 재사용하고, 누락된 파일이 있으면 내장본에서 복원합니다. EXE만 다른 폴더로 옮기거나 교체해도 설정·북마크·다운로드 기록은 `%APPDATA%\CHZZK Video Downloader\data.sqlite3`에 유지됩니다. 앱에 도구 자동 업데이트 UI는 아직 없으며, 새 bundle의 EXE로 교체하면 해당 내장 도구로 갱신됩니다. 직접 갱신한 managed 도구는 동일 bundle 재실행에서는 유지되지만 bundle이 바뀌면 내장본으로 교체됩니다.
 
-현재 bundle 대상은 Windows amd64입니다. Windows arm64 bundle은 별도 패키징 작업으로 취급합니다. Third-party 도구 출처와 라이선스 안내는 `THIRD_PARTY_NOTICES.md`를 참고합니다.
+배포 파일 단일 amd64 PE EXE 여부 및 무결성 확인:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-portable.ps1 -ReleaseDir .\build\portable\v0.1.0
+```
+
+패키징 스크립트 계약 검증(실제 Wails/도구 실행을 fixture로 대체):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-portable.ps1
+```
+
+실제 배포 전에 Windows 10/11에서 EXE만 별도 폴더로 복사하여 실행하고, 도구 PATH 없이 다운로드·병합·취소·재시작을 확인해야 합니다. 한글/공백 경로, 기존 설정 유지, WebView2 미설치 시 안내, Windows 파일 속성도 확인합니다. 서명되지 않은 EXE에는 Windows SmartScreen 확인 화면이 표시될 수 있습니다.
+
+현재 bundle 대상은 Windows amd64입니다. Windows arm64는 별도 작업으로 취급합니다. Third-party 도구 출처와 라이선스 안내는 `THIRD_PARTY_NOTICES.md`를 참고합니다.
 
 
 ## Phase 6 UX — Shell / Channel Search / Theme

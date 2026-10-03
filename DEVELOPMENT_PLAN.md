@@ -426,7 +426,7 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - [ ] DL-3D-3. Windows 빌드 시 다운로드 도구를 Go executable에 embed — 구현 완료, 실제 Wails build 검증 대기
 - [x] DL-3D-4. 앱 최초 실행 시 embedded 도구를 사용자 LocalAppData 관리 디렉터리로 자동 추출
 - [x] DL-3D-5. Resolver에 managed bundled tools 경로를 추가해 PATH 없이 실행 가능하게 구성
-- [ ] DL-3D-6. Windows dev/build wrapper 및 NSIS build helper를 bundle 준비 단계와 연결 — 구현 완료, Windows Wails/NSIS 실행 검증 대기
+- [ ] DL-3D-6. Windows dev/build wrapper 및 Portable build helper를 bundle 준비 단계와 연결 — 구현 완료, Windows Wails/Portable 실행 검증 대기 (Phase 7에서 NSIS 배포 제외)
 - [x] DL-3D-7. 기존 환경변수 / app-tools / PATH fallback 호환성 유지
 
 #### Phase 3-D 배포 기준
@@ -439,7 +439,7 @@ GET https://api.chzzk.naver.com/service/v1/channels/{channelId}/videos
 - Program Files 등 설치 디렉터리에 런타임 쓰기를 시도하지 않는다.
 - Resolver 탐색 우선순위는 환경변수 override → managed bundle → 앱 옆 tools → 앱 디렉터리 → PATH 순으로 유지한다.
 - Windows 개발/빌드는 `scripts/dev.ps1`, `scripts/build-windows.ps1`을 단일 진입점으로 사용하고 `$PSScriptRoot` 기반 절대경로로 tool 준비 스크립트를 호출한다.
-- Wails NSIS installer는 앱 executable 안에 다운로드 도구가 포함되므로 별도 외부 tool 파일 설치 규칙 없이 동일하게 동작한다.
+- Phase 7 배포 방식은 단일 Portable EXE로 확정했다. 도구는 앱 executable 안에 포함하며 별도 외부 tool 파일 설치 규칙 없이 추출한다.
 - Windows arm64 bundle은 현재 범위에 포함하지 않고 amd64 패키징을 기준으로 한다.
 
 #### Phase 3-D 검증 현황
@@ -460,7 +460,7 @@ Windows 검증 대기:
 - `scripts/prepare-windows-tools.ps1` 실제 실행 및 SHA-256 검증
 - `scripts/dev.ps1` 실행 후 managed bundle Toolchain Ready 확인
 - `scripts/build-windows.ps1` 실행 후 executable 내부 bundle materialize 확인
-- NSIS 설치본에서 PATH에 yt-dlp/ffmpeg가 없는 환경의 Toolchain Ready 확인
+- Portable EXE에서 PATH에 yt-dlp/ffmpeg가 없는 환경의 Toolchain Ready 확인 (Phase 7에서 NSIS 배포 제외)
 
 ## Phase 4 — 다운로드 탭 및 Download Manager
 
@@ -1147,7 +1147,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 
 - [x] PKG-7A-1. 개인 취미 프로젝트 배포자명을 `MoonKim`으로 적용
 - [x] PKG-7A-2. Windows 제품 메타데이터에 `companyName`, 저작권, 사용자용 설명 적용
-- [ ] PKG-7A-3. Windows 빌드 산출물의 파일 속성 및 Installer 표시값 실제 검증
+- [ ] PKG-7A-3. Windows Portable EXE의 파일 속성 실제 검증 — 빌드 스크립트에 메타데이터 검사 구현, Windows 실 빌드 검증 대기
 
 #### Phase 7-A 메타데이터 기준
 
@@ -1157,8 +1157,57 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 현재 개발 버전은 `0.1.0`을 유지하고 정식 배포 시 별도 버전 정책에 따라 갱신한다.
 - 저작권 표기는 `Copyright © 2026 MoonKim`을 사용한다.
 - 사용자용 제품 설명에서는 내부 구현 도구명을 직접 노출하지 않고 `CHZZK VOD downloader`로 표시한다.
-- 실제 EXE/Installer의 Windows 파일 속성 반영 여부는 Phase 7 패키징 검증에서 확인한다.
+- 실제 Portable EXE의 Windows 파일 속성 반영 여부는 Phase 7 패키징 검증에서 확인한다.
 
-- [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용 — Phase 3-D에서 executable bundle 기반 선행 구현, 최종 installer 검증은 Phase 7에서 수행
-- [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용
+- [ ] PKG-1. yt-dlp/ffmpeg/ffprobe 배포 전략 적용 — Phase 3-D에서 executable bundle 기반 선행 구현, 최종 Portable EXE 실 실행 검증은 Phase 7에서 수행
+- [ ] PKG-2. Windows 빌드 및 WebView2 배포 정책 적용 — Portable/embedded-bootstrapper 구현 완료, 실제 Windows 환경 검증 대기
 - [ ] PKG-3. 최종 Windows 패키징 검증
+
+
+### Phase 7-B — 단일 Portable EXE 패키징
+
+- [x] PKG-7B-1. 기존 PR #17의 `MoonKim` 메타데이터와 버전 `0.1.0` 유지
+- [x] PKG-7B-2. `build-windows.ps1`을 단일 Portable EXE 빌드로 변경하고 Installer 옵션 제거
+- [x] PKG-7B-3. 도구 bundle 파일 존재/중복/플랫폼/SHA-256 검사 및 누락·손상 시 빌드 중단
+- [x] PKG-7B-4. 버전별 EXE, SHA-256, release metadata, third-party 안내를 `build/portable/v{version}`에 생성하는 스크립트 구현·계약 검증
+- [x] PKG-7B-5. 배포 파일 단일 amd64 PE EXE/체크섬/안내문 검증 스크립트 및 정상·변조·누락·옵션 거부 계약 테스트
+- [x] PKG-7B-6. 동일 bundle의 managed 도구 재사용, 직접 갱신본 유지, 누락 파일 복원, 공백 경로 단위 검증
+- [ ] PKG-7B-7. `-webview2 embed` 및 버전과 무관한 WebView2 사용자 데이터 경로 적용 — 코드 구현 완료, 실제 Windows 실행 검증 대기
+- [x] PKG-7B-8. Portable 실행/빌드/검증/도구 갱신/사용자 데이터 정책을 README에 반영
+
+#### Phase 7 배포 기준
+
+- 공식 기본 배포물은 `CHZZK-Video-Downloader-v{version}-portable.exe`이며 앱 설치 프로그램과 ZIP을 생성하지 않는다.
+- 현재 버전은 `0.1.0`이다. 개인 배포자명 `MoonKim`과 저작권을 유지하고 코드 서명을 적용하지 않는다.
+- 프로젝트는 Wails 기반이다. 기존 Go embed 및 LocalAppData 도구 관리 방식을 재사용하며 Electron portable/asar 구조로 전환하지 않는다.
+- yt-dlp/ffmpeg/ffprobe는 EXE에 내장하며 런타임에는 `%LOCALAPPDATA%/CHZZK Video Downloader/tools`에서 실행한다.
+- 동일 bundle에서 managed 도구는 재사용한다. 파일 누락 또는 bundle 변경 시 내장본을 추출한다. 새 bundle은 직접 갱신한 도구도 내장본으로 교체한다. 별도 도구 자동 업데이트 기능은 이번 범위에 추가하지 않는다.
+- 앱 설정·북마크·다운로드 기록은 기존 `%APPDATA%/CHZZK Video Downloader/data.sqlite3`에 유지한다.
+- WebView2 데이터 경로는 `%LOCALAPPDATA%/CHZZK Video Downloader/webview2`로 고정한다. 기존 WebView2 캐시는 이관하지 않는다.
+- `-webview2 embed`로 공식 bootstrapper를 포함한다. Runtime이 없는 PC에는 별도 Runtime 설치/인터넷 연결이 필요하므로 완전 오프라인 실행을 보장하지 않는다.
+- SHA-256 및 release metadata와 third-party 안내는 EXE와 함께 게시하되 실행 의존 파일로 사용하지 않는다.
+
+#### Phase 7 검증 현황
+
+완료:
+
+- PowerShell 7.4.6에서 빌드/배포 검증 스크립트 구문 확인
+- 실제 filesystem/hash + mock Wails/Windows VersionInfo를 사용한 패키징 계약 검증: 정상 생성, 변조, 잘못된 PE 아키텍처, 외부 EXE 혼입, 안내문/도구 누락, bundle 손상, Installer 옵션 거부, 비-Windows 빌드 거부
+- 실제 Wails binding 생성 후 Yarn 4.9.2 `yarn build` 성공 (타입 검사 포함, 기존 큰 chunk 경고 있음)
+- `go build ./internal/...`, bundle/Resolver `go test -race` 및 `go vet` 성공
+- `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build` 및 Wails 2.15.0 `wails build -platform windows/amd64 -s -skipbindings -webview2 embed` 교차 빌드 성공. 실제 frontend를 포함하되 도구 bundle은 README placeholder 상태이므로 배포 가능한 다운로드 도구 내장본으로 간주하지 않는다.
+- 교차 빌드 EXE의 Windows resource에서 제품명/버전/MoonKim/저작권 문자열 확인. 실제 Windows 파일 속성 검사는 별도로 대기한다.
+- 기존 App 설정/SQLite persistence 관련 테스트만 선별 실행하여 통과
+- Go 번들 및 Resolver 관련 테스트: 최초 추출, 동일 bundle 재사용, 변경 bundle 교체, checksum 오류, managed 도구 직접 갱신본 보존, 누락 복원, 공백 경로
+
+Windows 실 검증 대기:
+
+- 실제 `build-windows.ps1`에서 도구 준비/실행 및 Wails Portable EXE 생성, `MoonKim` 파일 속성 확인
+- EXE만 별도 한글/공백·읽기 전용 경로로 이동 후 PATH 없이 다운로드/병합/취소/재시작 확인
+- 새 EXE 교체 후 기존 SQLite 설정·북마크·다운로드 기록 유지 확인
+- WebView2 설치/미설치/설치 취소 환경 확인, Windows 10/11 실행 및 SmartScreen 표시 확인
+
+관련 검증 차단 사항:
+
+- 기존 `go test ./internal/...`에서 `download_test.go`의 두 callback에 타입/이름이 혼용된 파라미터가 있고, `queue_test.go`에서 미정의 `immediateErrorExecutor`를 참조하여 downloader 전체 테스트가 컴파일되지 않는다. Portable 변경 이전 코드의 오류이며 관련 bundle/Resolver 테스트와 production compile은 별도로 수행한다. 전체 테스트 통과로 기록하지 않는다.
+- `go test app.go app_download_test.go app_persistence_test.go app_settings_test.go`는 기존 3개 Queue 테스트가 기본 동시 다운로드 1을 기대하지만 현재 기본값은 3이어서 실패했다. 관련 설정/저장 테스트는 선별 통과했으며 이 요청에서는 다운로드 테스트를 임의 수정하지 않는다.
