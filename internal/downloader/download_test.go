@@ -214,10 +214,10 @@ func TestExecuteDownloadWithHLSFallbackUsesDiscontinuitySplitBeforeFFmpeg(t *tes
 		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
 		nil,
 		func(
-			ctx context.Context,
+			_ context.Context,
 			spec CommandSpec,
-			progressHandler ProgressHandler,
-			lineHandler LineHandler,
+			_ ProgressHandler,
+			_ LineHandler,
 		) (DownloadResult, error) {
 			attempts++
 			if attempts == 1 {
@@ -233,40 +233,40 @@ func TestExecuteDownloadWithHLSFallbackUsesDiscontinuitySplitBeforeFFmpeg(t *tes
 			if !slices.Contains(spec.Args, "--hls-split-discontinuity") {
 				t.Fatalf("discontinuity split was not selected before ffmpeg: %#v", spec.Args)
 			}
+			formatID := argumentValue(spec.Args, "--format")
+			if formatID != "1080p-0" && formatID != "1080p-1" {
+				t.Fatalf("unexpected split format: %q", formatID)
+			}
 			splitDir := commandTemporaryDir(spec.Args)
 			if splitDir == "" {
 				t.Fatalf("split temp directory missing: %#v", spec.Args)
 			}
-			first := filepath.Join(splitDir, "sample [15461111].1080p-0.mp4")
-			second := filepath.Join(splitDir, "sample [15461111].1080p-1.mp4")
-			if err := os.WriteFile(first, []byte("part-0"), 0o644); err != nil {
+			path := filepath.Join(splitDir, "sample [15461111]."+formatID+".mp4")
+			if err := os.WriteFile(path, []byte(formatID), 0o644); err != nil {
 				t.Fatal(err)
-			}
-			if err := os.WriteFile(second, []byte("part-1"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if lineHandler != nil {
-				lineHandler(OutputLine{
-					Stream: StreamStdout,
-					Text:   hlsSplitFilePrefix + "1080p-0\t" + first,
-				})
-				lineHandler(OutputLine{
-					Stream: StreamStdout,
-					Text:   hlsSplitFilePrefix + "1080p-1\t" + second,
-				})
 			}
 			return DownloadResult{
-				FinalPath: second,
+				FinalPath: path,
 				LastProgress: DownloadProgress{
 					Status:          "completed",
-					DownloadedBytes: 12,
+					DownloadedBytes: int64(len(formatID)),
 					Percent:         100,
 				},
 			}, nil
 		},
-		func(ctx context.Context, spec CommandSpec, lineHandler LineHandler) error {
+		func(_ context.Context, spec CommandSpec, lineHandler LineHandler) error {
 			rawRuns++
 			if spec.Path == toolchain.YTDLP.Path {
+				if slices.Contains(spec.Args, "--hls-split-discontinuity") {
+					if lineHandler != nil {
+						lineHandler(OutputLine{
+							Stream: StreamStdout,
+							Text: hlsSplitFormatProbePrefix +
+								`[{"format_id":"1080p-0","vcodec":"avc1","acodec":"mp4a","ext":"mp4"},{"format_id":"1080p-1","vcodec":"avc1","acodec":"mp4a","ext":"mp4"}]`,
+						})
+					}
+					return nil
+				}
 				if lineHandler != nil {
 					lineHandler(OutputLine{
 						Stream: StreamStdout,
@@ -288,13 +288,13 @@ func TestExecuteDownloadWithHLSFallbackUsesDiscontinuitySplitBeforeFFmpeg(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if attempts != 2 {
+	if attempts != 3 {
 		t.Fatalf("ffmpeg yt-dlp fallback should not run after split success: attempts=%d", attempts)
 	}
-	if rawRuns != 2 {
-		t.Fatalf("expected format probe + concat raw runs, got %d", rawRuns)
+	if rawRuns != 3 {
+		t.Fatalf("expected selected-format probe + split-format probe + concat, got %d", rawRuns)
 	}
-	if !slices.Contains(usedSpec.Args, "--hls-split-discontinuity") {
+	if !hasArgumentPair(usedSpec.Args, "--format", "1080p-1") {
 		t.Fatalf("unexpected used split spec: %#v", usedSpec)
 	}
 	expected := filepath.Join(outputDir, "sample [15461111].mp4")
