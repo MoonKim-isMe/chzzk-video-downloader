@@ -1266,3 +1266,17 @@ Windows 실 검증 대기:
 - Windows 통합 테스트는 Runner 및 버전 조회가 실행한 자식의 `GetConsoleWindow()` 값을 확인한다. Linux에서의 교차 컴파일 성공을 Windows 실제 실행 성공으로 기록하지 않는다.
 - Linux에서 downloader production 소스 전체와 Runner/Resolver/bundle 테스트를 선별해 `go test -race -count=1` 및 `go vet` 통과. Windows amd64 downloader production 빌드와 콘솔 핸들 통합 테스트 교차 컴파일 통과.
 - 전체 downloader 테스트는 기존 `download_test.go` callback 타입 오류 및 `queue_test.go`의 미정의 `immediateErrorExecutor` 때문에 컴파일되지 않는다. 이번 수정과 관련된 Runner/Resolver/bundle 테스트를 별도로 검증하며 해당 기존 오류를 임의 변경하지 않는다.
+
+### Phase 7-F — 앱 아이콘 교체
+
+- [x] PKG-7F-1. 사용자 제공 녹색 `C` 아이콘을 Windows 배포용 원본 자산으로 추가
+- [x] PKG-7F-2. Portable 빌드마다 원본 자산을 `build/appicon.png`으로 갱신하고 기존 `build/windows/icon.ico`를 제거해 Wails가 새 아이콘을 재생성하도록 적용
+- [x] PKG-7F-3. 아이콘 자산의 정사각형 규격, 투명 모서리 및 빌드 스크립트의 갱신 경로 확인
+- [ ] PKG-7F-4. 실제 Windows Portable EXE의 탐색기/작업표시줄 아이콘 표시 확인
+
+#### Phase 7-F 검증 기준
+
+- 저장소 원본은 `assets/appicon.png`으로 관리하고 `build/appicon.png`, `build/windows/icon.ico`는 기존과 같이 빌드 산출물로 유지한다.
+- 아이콘 원본은 256×256 RGBA PNG이며 네 모서리가 투명한 상태임을 확인한다.
+- `build-windows.ps1`은 Wails 실행 직전에 원본 PNG를 복사하고 기존 생성 ICO를 제거하므로 이전 로컬 아이콘이 남아 새 아이콘 생성을 막지 않는다.
+- 실제 Windows Shell의 아이콘 캐시까지 포함한 최종 표시는 Windows Portable EXE 실 빌드 후 확인한다.

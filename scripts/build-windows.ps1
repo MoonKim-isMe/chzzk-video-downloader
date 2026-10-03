@@ -86,6 +86,17 @@ try {
     $windowsAssetsDir = Join-Path $repoRoot "build\windows"
     New-Item -ItemType Directory -Path $windowsAssetsDir -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "windows-info.json") -Destination (Join-Path $windowsAssetsDir "info.json") -Force
+    # Keep the packaged Windows icon in sync with the repository-managed source.
+    # Wails only regenerates build/windows/icon.ico when that generated file is absent.
+    $appIconSource = Join-Path $repoRoot "assets\appicon.png"
+    if (-not (Test-Path -LiteralPath $appIconSource -PathType Leaf)) {
+        throw "Missing application icon source: $appIconSource"
+    }
+    Copy-Item -LiteralPath $appIconSource -Destination (Join-Path $repoRoot "build\appicon.png") -Force
+    $generatedWindowsIcon = Join-Path $windowsAssetsDir "icon.ico"
+    if (Test-Path -LiteralPath $generatedWindowsIcon -PathType Leaf) {
+        Remove-Item -LiteralPath $generatedWindowsIcon -Force
+    }
     if ($version -cne $currentVersion) {
         $versionsWritten = $true
         $wailsBom = $originalWails.Length -ge 3 -and $originalWails[0] -eq 239 -and $originalWails[1] -eq 187 -and $originalWails[2] -eq 191
