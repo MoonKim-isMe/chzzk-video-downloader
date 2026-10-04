@@ -158,10 +158,26 @@ function AuthenticationDrawer({
             </Form.Item>
 
             <Alert
+              type="info"
+              showIcon
+              className="!mb-3"
+              message="cookies.txt 생성 방법"
+              description={
+                <ol className="!mb-0 !mt-2 list-decimal space-y-1 pl-4">
+                  <li>브라우저에서 CHZZK에 로그인한 뒤 다운로드할 영상 페이지를 한 번 열어 주세요.</li>
+                  <li>쿠키 내보내기 기능 또는 신뢰할 수 있는 확장 프로그램으로 CHZZK 쿠키를 내보내세요.</li>
+                  <li>파일은 Mozilla/Netscape 형식의 <code>cookies.txt</code>로 저장되어야 합니다.</li>
+                  <li>파일 첫 줄이 <code># Netscape HTTP Cookie File</code> 또는 <code># HTTP Cookie File</code>인지 확인해 주세요.</li>
+                  <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
+                </ol>
+              }
+            />
+
+            <Alert
               type="warning"
               showIcon
               message="cookies.txt에는 로그인 세션 정보가 포함되어 있습니다."
-              description="계정 권한이 있는 콘텐츠에만 사용해 주세요. 앱은 파일 내용을 별도로 저장하지 않고 선택한 파일 경로만 저장합니다."
+              description="다른 사람과 공유하지 마세요. 로그인 세션이 만료되면 cookies.txt를 다시 생성해야 합니다. 앱은 파일 내용을 별도로 저장하지 않고 선택한 파일 경로만 저장합니다."
             />
           </section>
         </Form>
