@@ -3,6 +3,7 @@ package chzzk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,24 @@ const (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+}
+
+type APIError struct {
+	HTTPStatusCode int
+	Code           int
+	Message        string
+}
+
+func (e *APIError) Error() string {
+	return e.Message
+}
+
+func IsAuthenticationRequired(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.HTTPStatusCode == http.StatusUnauthorized || apiErr.Code == http.StatusUnauthorized
 }
 
 type apiChannel struct {
@@ -174,7 +193,11 @@ func (c *Client) getWithCookiesFile(
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("치지직 API가 HTTP %d를 반환했습니다", resp.StatusCode)
+		return &APIError{
+			HTTPStatusCode: resp.StatusCode,
+			Code:           resp.StatusCode,
+			Message:        fmt.Sprintf("치지직 API가 HTTP %d를 반환했습니다", resp.StatusCode),
+		}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -194,7 +217,10 @@ func (c *Client) getWithCookiesFile(
 		if status.Message != nil && strings.TrimSpace(*status.Message) != "" {
 			message = *status.Message
 		}
-		return fmt.Errorf("%s (code=%d)", message, status.Code)
+		return &APIError{
+			Code:    status.Code,
+			Message: fmt.Sprintf("%s (code=%d)", message, status.Code),
+		}
 	}
 
 	return nil

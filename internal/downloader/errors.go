@@ -19,6 +19,14 @@ type DownloadFailure struct {
 	Cause   error
 }
 
+func NewAuthenticationRequiredFailure(cause error) *DownloadFailure {
+	return &DownloadFailure{
+		Kind:    DownloadFailureAuthenticationRequired,
+		Message: "로그인이 필요한 콘텐츠입니다. 상단의 인증 설정에서 cookies.txt 파일 또는 인증 사용 여부를 확인해 주세요.",
+		Cause:   cause,
+	}
+}
+
 func (e *DownloadFailure) Error() string {
 	return e.Message
 }
@@ -44,12 +52,9 @@ func classifyDownloadFailure(err error) error {
 		"authentication required",
 		"age-restricted",
 		"age restricted",
+		"the json object must be str, bytes or bytearray, not nonetype",
 	):
-		return &DownloadFailure{
-			Kind:    DownloadFailureAuthenticationRequired,
-			Message: "로그인이 필요한 콘텐츠입니다. 상단의 토큰 인증에서 cookies.txt 파일과 해당 계정의 접근 권한을 확인해 주세요.",
-			Cause:   err,
-		}
+		return NewAuthenticationRequiredFailure(err)
 
 	case strings.Contains(text, "initialization fragment found after media fragments"):
 		return &DownloadFailure{

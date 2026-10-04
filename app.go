@@ -57,6 +57,8 @@ type App struct {
 	filePicker      func(context.Context, runtime.OpenDialogOptions) (string, error)
 	folderOpener    func(string) error
 	fileOpener      func(string) error
+
+	videoAccessChecker func(context.Context, int64, string) error
 }
 
 type AppInfo struct {
@@ -75,6 +77,12 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if a.videoAccessChecker == nil {
+		a.videoAccessChecker = func(ctx context.Context, videoNo int64, cookiesFilePath string) error {
+			_, err := a.chzzkClient.GetVideoWithCookiesFile(ctx, videoNo, cookiesFilePath)
+			return err
+		}
+	}
 	if err := a.initializePersistence(); err != nil {
 		runtime.LogErrorf(ctx, "Persistence 초기화에 실패했습니다: %v", err)
 	}
@@ -354,6 +362,12 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 	if err := request.Validate(); err != nil {
 		return downloader.DownloadTask{}, err
 	}
+	if err := a.preflightDownloadVideoAccess(
+		request.VideoNo,
+		request.Authentication.CookiesFilePath,
+	); err != nil {
+		return downloader.DownloadTask{}, err
+	}
 
 	toolchain := a.downloadManager.ToolchainStatus(a.appContext())
 	if !toolchain.DownloadReady {
@@ -364,6 +378,24 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 	}
 
 	return a.ensureDownloadQueue().Enqueue(request)
+}
+
+func (a *App) preflightDownloadVideoAccess(videoNo int64, cookiesFilePath string) error {
+	if a.videoAccessChecker == nil {
+		return nil
+	}
+
+	err := a.videoAccessChecker(a.appContext(), videoNo, cookiesFilePath)
+	if err == nil {
+		return nil
+	}
+	if chzzk.IsAuthenticationRequired(err) {
+		return downloader.NewAuthenticationRequiredFailure(err)
+	}
+
+	// The CHZZK API preflight is only used to intercept explicit authentication
+	// failures. Transient API failures must not block the existing yt-dlp path.
+	return nil
 }
 
 func (a *App) GetDownloadTasks() []downloader.DownloadTask {

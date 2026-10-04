@@ -111,6 +111,39 @@ func TestSearchChannelsWithCookiesFile(t *testing.T) {
 	}
 }
 
+func TestGetVideoHTTP401IsAuthenticationRequired(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	client := newClient(server.URL, server.Client())
+	_, err := client.GetVideo(context.Background(), 12345)
+	if err == nil {
+		t.Fatal("expected HTTP 401 error")
+	}
+	if !IsAuthenticationRequired(err) {
+		t.Fatalf("expected authentication-required error, got %T: %v", err, err)
+	}
+}
+
+func TestGetVideoEnvelope401IsAuthenticationRequired(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":401,"message":"Unauthorized","content":null}`))
+	}))
+	defer server.Close()
+
+	client := newClient(server.URL, server.Client())
+	_, err := client.GetVideo(context.Background(), 12345)
+	if err == nil {
+		t.Fatal("expected API code 401 error")
+	}
+	if !IsAuthenticationRequired(err) {
+		t.Fatalf("expected authentication-required error, got %T: %v", err, err)
+	}
+}
+
 func TestGetChannel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

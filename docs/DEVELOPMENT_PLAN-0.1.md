@@ -972,6 +972,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-25. 저장된 인증 설정이 `enabled=true`/빈 경로인 경우 시작 시 인증을 비활성화해 SQLite를 자동 복구하고 Persistence 전체 초기화 실패 방지
 - [x] SET-5E-26. 선택 채널 VOD 목록이 표시된 상태에서 인증 사용 여부가 변경되면 VOD 첫 페이지를 즉시 재조회
 - [x] SET-5E-27. `cookies.txt 생성 방법` 도움말을 Chrome 웹 스토어의 `Get cookies.txt LOCALLY` 설치 안내부터 시작하도록 보강
+- [x] SET-5E-28. 다운로드 Queue 등록 전 CHZZK VOD 접근 preflight를 수행해 401이면 yt-dlp 실행을 차단하고 인증 설정 안내로 변환
 
 #### Phase 5-E 인증 기준
 
@@ -992,6 +993,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 최초 인증 활성화를 위해 인증이 꺼진 상태에서도 `cookies.txt` 경로는 선택할 수 있으며, 경로가 없는 상태에서 활성화를 시도하면 활성화하지 않고 파일 선택을 안내한다.
 - CHZZK API 조회는 인증 활성 시 `SearchChannels`, `GetChannelVideos`, `GetVideo` 요청에 동일 `cookies.txt`를 적용하고, 인증 비활성 시 기존 비인증 요청을 유지한다.
 - 선택 채널의 VOD 목록이 표시 중인 경우 인증 사용 여부(`enabled`)가 바뀌면 현재 목록을 초기화하고 `GetChannelVideos` 첫 페이지를 다시 요청해 변경된 인증 상태를 즉시 반영한다.
+- 다운로드 시작 시에는 Queue 등록 전에 현재 인증 상태로 CHZZK VOD API 접근을 확인한다. HTTP 401 또는 API code 401이면 yt-dlp를 실행하지 않고 `authentication_required`로 반환해 yt-dlp 내부의 `NoneType` JSON 파싱 오류가 사용자에게 노출되지 않도록 한다.
+- 다운로드 preflight의 401 이외 오류는 네트워크 일시 장애 등으로 yt-dlp 정상 다운로드까지 막지 않도록 차단 조건으로 사용하지 않는다.
 - API 요청용 `cookies.txt`는 Netscape 형식의 domain/path/secure/expiry 조건을 적용해 요청 URL에 일치하는 쿠키만 `Cookie` 헤더로 전달한다.
 - 썸네일 및 채널 이미지 로딩 방식은 이번 범위에서 변경하지 않는다.
 - 인증 토큰/쿠키 원문은 앱 설정이나 다운로드 이력에 별도로 저장하지 않는다.
@@ -1020,6 +1023,10 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 동일 잘못된 DB 상태에서 `initializePersistence()`가 실패하지 않고 인증 비활성 상태로 시작하는 회귀 테스트 추가
 - `ChannelVideoList`가 `authenticationEnabled` 변경을 첫 페이지 조회 effect의 dependency로 사용해 인증 상태 변경 시 VOD 목록을 재조회하는 구조 정적 확인
 - `cookies.txt 생성 방법` 도움말이 Chrome 웹 스토어 설치 안내부터 시작하고 기존 CHZZK 쿠키 내보내기 흐름이 2~4단계로 유지되는지 정적 확인
+- CHZZK Client가 HTTP 401 / API code 401을 typed APIError로 반환하고 인증 필요 여부를 상태 코드로 판별하는 테스트 추가
+- 다운로드 preflight에서 401이면 Queue/yt-dlp를 시작하지 않고 `authentication_required`로 종료하는 회귀 테스트 추가
+- 401 이외 preflight 오류는 기존 yt-dlp 다운로드 경로를 유지하는 회귀 테스트 추가
+- yt-dlp의 `the JSON object must be str, bytes or bytearray, not NoneType` 예외는 CHZZK 인증 응답 파싱 실패 fallback으로 `authentication_required` 분류
 
 실 환경 검증 대기:
 
@@ -1189,7 +1196,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - fallback 성공 파일은 검증된 `fallback-{runId}` 내부 경로에서 실제 다운로드 폴더로 이동한 뒤 완료 처리한다. 이동 시 동일 파일이 이미 있으면 덮어쓰지 않으며 Windows 파일 핸들 해제 지연을 고려해 짧게 재시도한다.
 - 다운로드 실패 시 다운로드 폴더의 `.chzzk-logs`에 VOD별 진단 로그를 남긴다. 로그에는 UTC 시각, VOD URL, 출력 설정, 사용자 오류/원인 체인, 마지막 진행 상태, 민감 인자를 마스킹한 실행 인자, 최근 400줄의 stdout/stderr를 기록한다.
 - 실패 Task의 `logPath`를 SQLite에 영속화하고 다운로드 탭에서 `로그 파일 열기`를 제공한다. 목록 삭제/임시 파일 정리 후 재시도 시에도 기존 로그 파일 자체는 보존한다.
-- HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.`를 표시한다.
+- HTTP 401/Unauthorized 및 로그인 필요 신호는 `authentication_required`로 분류하고 사용자에게 `로그인이 필요한 콘텐츠입니다. 상단의 인증 설정에서 cookies.txt 파일 또는 인증 사용 여부를 확인해 주세요.`를 표시한다.
 - 기존 `initialization fragment found after media fragments`의 `partial_data_conflict` 분류는 제거하고 HLS 구조 오류 자동 fallback으로 대체한다.
 - cancelled 상태는 다운로드 이력 UI에서 표시하지 않으며 정상 취소 시 SQLite 이력을 삭제한다.
 - 완료 Task에는 `폴더 열기`와 `목록에서 삭제`를 제공하고, 실패 Task에는 `목록에서 삭제`를 제공한다. 삭제는 파일이 아니라 앱의 다운로드 이력만 제거한다.
