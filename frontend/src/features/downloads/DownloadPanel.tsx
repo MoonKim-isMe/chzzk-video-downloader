@@ -4,6 +4,7 @@ import {
   Card,
   Empty,
   Image,
+  Popconfirm,
   Progress,
   Skeleton,
   Tag,
@@ -542,14 +543,23 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
               onTaskRemoved={onTaskRemoved}
               onTaskRecovered={onTaskRecovered}
               action={(
-                <Button
-                  danger
-                  size="small"
-                  loading={deletingCompleted}
-                  onClick={() => void handleDeleteCompleted()}
+                <Popconfirm
+                  title="완료 목록을 비울까요?"
+                  description="다운로드된 파일은 유지되고 완료 이력만 목록에서 삭제됩니다."
+                  okText="모두 삭제"
+                  cancelText="취소"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() => void handleDeleteCompleted()}
                 >
-                  완료항목 모두 삭제
-                </Button>
+                  <Button
+                    danger
+                    type="primary"
+                    size="small"
+                    loading={deletingCompleted}
+                  >
+                    완료 목록 비우기 ({completedTasks.length})
+                  </Button>
+                </Popconfirm>
               )}
             />
             <DownloadSection
