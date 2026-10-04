@@ -179,7 +179,7 @@ function AuthenticationDrawer({
                       <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
                     </ol>
                     <Button
-                      className="!mt-3 !h-7 !rounded-full !border-[#91caff] !bg-[#e6f4ff] !px-3 !text-xs !font-semibold !text-[#1677ff] !shadow-none hover:!border-[#4096ff] hover:!bg-[#bae0ff] hover:!text-[#0958d9]"
+                      className="authentication-help-chip !mt-3 !h-7 !rounded-full !px-3 !text-xs !font-semibold !shadow-none"
                       onClick={() => setHelpOpen(true)}
                     >
                       Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요
