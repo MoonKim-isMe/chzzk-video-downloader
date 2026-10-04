@@ -1273,13 +1273,14 @@ Windows 실 검증 대기:
 - [x] PKG-7F-2. Portable 빌드마다 원본 자산을 `build/appicon.png`으로 갱신하고 기존 `build/windows/icon.ico`를 제거해 Wails가 새 아이콘을 재생성하도록 적용
 - [x] PKG-7F-3. 아이콘 자산의 정사각형 규격, 투명 모서리 및 빌드 스크립트의 갱신 경로 확인
 - [ ] PKG-7F-4. 실제 Windows Portable EXE의 탐색기/작업표시줄 아이콘 표시 확인
+- [x] PKG-7F-5. `wails dev`가 즉시 새 아이콘을 사용하도록 `build/appicon.png` 및 `build/windows/icon.ico`를 저장소 관리 자산으로 포함
 
 #### Phase 7-F 검증 기준
 
-- 저장소 원본은 `assets/appicon.png`으로 관리하고 `build/appicon.png`, `build/windows/icon.ico`는 기존과 같이 빌드 산출물로 유지한다.
+- 저장소 원본은 `assets/appicon.png`과 `assets/appicon.ico`로 관리하고, Wails가 `wails dev`에서 바로 읽는 `build/appicon.png`, `build/windows/icon.ico`도 동일 내용으로 저장소에 포함한다.
 - 아이콘 원본은 256×256 RGBA PNG이며 네 모서리가 투명한 상태임을 확인한다.
-- `build-windows.ps1`은 Wails 실행 직전에 원본 PNG를 복사하고 기존 생성 ICO를 제거하므로 이전 로컬 아이콘이 남아 새 아이콘 생성을 막지 않는다.
-- 실제 Windows Shell의 아이콘 캐시까지 포함한 최종 표시는 Windows Portable EXE 실 빌드 후 확인한다.
+- `build-windows.ps1`은 Wails 실행 직전에 PNG와 ICO를 모두 원본 자산에서 덮어써 개발/배포 실행 간 아이콘이 달라지지 않도록 한다.
+- `wails dev`용 PNG/ICO가 저장소에 직접 포함되는 구조와 빌드 동기화 경로를 확인했다. 실제 Windows Shell의 아이콘 캐시까지 포함한 Portable EXE 최종 표시는 실 빌드 후 확인한다.
 
 ### Phase 7-G — 라이선스 및 제3자 고지 정리
 

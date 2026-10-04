@@ -1,8 +1,6 @@
 # Go / Wails
 build/bin/
 build/portable/
-build/appicon.png
-build/windows/icon.ico
 build/windows/info.json
 build/windows/wails.exe.manifest
 *.exe
