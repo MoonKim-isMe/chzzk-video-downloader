@@ -39,7 +39,6 @@ function AuthenticationDrawer({
   const [updatingEnabled, setUpdatingEnabled] = useState(false);
   const [selectingFile, setSelectingFile] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const enabled = Form.useWatch('enabled', form) ?? false;
 
   useEffect(() => {
     if (!open) return;
