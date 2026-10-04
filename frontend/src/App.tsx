@@ -305,22 +305,22 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     </div>
   );
 
-  const content = activeTab === 'search'
-    ? searchWorkspace
-    : activeTab === 'url'
+  const secondaryContent = activeTab === 'url'
+    ? (
+        <VideoUrlTab
+          activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+          onQueueVideo={handleQueueVideo}
+        />
+      )
+    : activeTab === 'downloads'
       ? (
-          <VideoUrlTab
-            activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-            onQueueVideo={handleQueueVideo}
-          />
-        )
-      : (
           <DownloadPanel
             tasks={downloadTasks}
             onTaskRemoved={handleDownloadTaskRemoved}
             onTaskRecovered={handleDownloadTaskRecovered}
           />
-        );
+        )
+      : null;
 
   return (
     <Layout className="app-shell" data-theme={themeMode}>
@@ -373,7 +373,19 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       </Header>
 
       <Content className="app-content">
-        <main className="app-content-inner">{content}</main>
+        <main className="app-content-inner">
+          <div
+            className="app-main-tab-view"
+            hidden={activeTab !== 'search'}
+          >
+            {searchWorkspace}
+          </div>
+          {secondaryContent && (
+            <div className="app-main-tab-view">
+              {secondaryContent}
+            </div>
+          )}
+        </main>
       </Content>
 
       <AuthenticationDrawer
