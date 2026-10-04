@@ -178,6 +178,54 @@ func TestUpdateSettingsPersistsStorageRecord(t *testing.T) {
 	}
 }
 
+func TestAuthenticationSettingsPersistAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.sqlite3")
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.databasePath = func() (string, error) { return path, nil }
+	if err := app.initializePersistence(); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := appsettings.AuthenticationSettings{
+		Enabled:         true,
+		CookiesFilePath: filepath.Join(t.TempDir(), "auth", "cookies.txt"),
+	}
+	updated, err := app.UpdateAuthenticationSettings(expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated != appsettings.NormalizeAuthentication(expected) {
+		t.Fatalf("unexpected updated authentication settings: %#v", updated)
+	}
+
+	if err := app.database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	app.database = nil
+
+	restarted := NewApp()
+	restarted.ctx = context.Background()
+	restarted.databasePath = func() (string, error) { return path, nil }
+	if err := restarted.initializePersistence(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if restarted.database != nil {
+			_ = restarted.database.Close()
+		}
+	})
+
+	restored, err := restarted.GetAuthenticationSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored != appsettings.NormalizeAuthentication(expected) {
+		t.Fatalf("unexpected restored authentication settings: %#v", restored)
+	}
+}
+
 func TestDownloadStateEventPersistsHistory(t *testing.T) {
 	database, err := persistence.Open(filepath.Join(t.TempDir(), "app.sqlite3"))
 	if err != nil {
