@@ -131,3 +131,53 @@ func TestAppendBundleErrorOnlyTouchesUnavailableTools(t *testing.T) {
 		t.Fatalf("unexpected ffprobe error: %q", result.FFprobe.Error)
 	}
 }
+
+
+func TestDownloadReadinessErrorIncludesToolDiagnostics(t *testing.T) {
+	status := ToolchainStatus{
+		YTDLP: ToolStatus{
+			Name:      "yt-dlp",
+			Path:      `C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe`,
+			Found:     true,
+			Available: false,
+			Error:     "yt-dlp.exe 버전 확인 시간 초과: context deadline exceeded",
+		},
+		DownloadReady: false,
+	}
+
+	err := status.DownloadReadinessError()
+	if err == nil {
+		t.Fatal("unavailable yt-dlp must return a readiness error")
+	}
+	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [경로: C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe, 사용 가능: 아니오, 오류: yt-dlp.exe 버전 확인 시간 초과: context deadline exceeded]`
+	if err.Error() != expected {
+		t.Fatalf("unexpected readiness error:\nwant: %s\n got: %s", expected, err)
+	}
+}
+
+func TestMergeReadinessErrorIncludesOnlyUnavailableTools(t *testing.T) {
+	status := ToolchainStatus{
+		FFmpeg: ToolStatus{
+			Name:      "ffmpeg",
+			Path:      `C:\tools\ffmpeg.exe`,
+			Found:     true,
+			Available: true,
+		},
+		FFprobe: ToolStatus{
+			Name:      "ffprobe",
+			Found:     false,
+			Available: false,
+			Error:     "ffprobe 실행 파일을 찾을 수 없습니다",
+		},
+		MergeReady: false,
+	}
+
+	err := status.MergeReadinessError()
+	if err == nil {
+		t.Fatal("unavailable ffprobe must return a readiness error")
+	}
+	expected := `다운로드 후 영상 처리 환경이 준비되지 않았습니다: ffprobe [경로: 찾지 못함, 사용 가능: 아니오, 오류: ffprobe 실행 파일을 찾을 수 없습니다]`
+	if err.Error() != expected {
+		t.Fatalf("unexpected merge readiness error:\nwant: %s\n got: %s", expected, err)
+	}
+}

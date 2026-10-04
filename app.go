@@ -370,11 +370,11 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 	}
 
 	toolchain := a.downloadManager.ToolchainStatus(a.appContext())
-	if !toolchain.DownloadReady {
-		return downloader.DownloadTask{}, fmt.Errorf("영상 다운로드 실행 환경이 준비되지 않았습니다")
+	if err := toolchain.DownloadReadinessError(); err != nil {
+		return downloader.DownloadTask{}, err
 	}
-	if !toolchain.MergeReady {
-		return downloader.DownloadTask{}, fmt.Errorf("다운로드 후 영상 처리 환경이 준비되지 않았습니다")
+	if err := toolchain.MergeReadinessError(); err != nil {
+		return downloader.DownloadTask{}, err
 	}
 
 	return a.ensureDownloadQueue().Enqueue(request)

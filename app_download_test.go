@@ -53,6 +53,45 @@ func testStartRequest(t *testing.T) downloader.StartDownloadRequest {
 	}
 }
 
+func TestStartDownloadReportsDetailedToolchainFailure(t *testing.T) {
+	service := &fakeDownloadService{
+		status: downloader.ToolchainStatus{
+			YTDLP: downloader.ToolStatus{
+				Name:      "yt-dlp",
+				Path:      `C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe`,
+				Found:     true,
+				Available: false,
+				Error:     "yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1",
+			},
+			DownloadReady: false,
+		},
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			t.Fatal("toolchain failure must stop before download execution")
+			return downloader.DownloadResult{}, nil
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	_, err := app.StartDownload(testStartRequest(t))
+	if err == nil {
+		t.Fatal("expected toolchain readiness error")
+	}
+	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [경로: C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe, 사용 가능: 아니오, 오류: yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1]`
+	if err.Error() != expected {
+		t.Fatalf("unexpected toolchain error:\nwant: %s\n got: %s", expected, err)
+	}
+	if tasks := app.GetDownloadTasks(); len(tasks) != 0 {
+		t.Fatalf("toolchain failure must not enqueue a task: %#v", tasks)
+	}
+}
+
 func TestStartDownloadStopsBeforeYTDLPWhenCHZZKRequiresAuthentication(t *testing.T) {
 	downloadCalled := false
 	service := &fakeDownloadService{
