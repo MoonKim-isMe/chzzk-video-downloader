@@ -168,7 +168,7 @@ function AuthenticationDrawer({
               <Alert
                 type="info"
                 showIcon
-                className="!mb-3"
+                className="authentication-info-alert !mb-3"
                 message="cookies.txt 생성 방법"
                 description={
                   <div>
@@ -179,7 +179,7 @@ function AuthenticationDrawer({
                       <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
                     </ol>
                     <Button
-                      className="!mt-3 !h-7 !rounded-full !border-[var(--app-border)] !bg-[var(--app-surface-strong)] !px-3 !text-xs !font-semibold !text-[var(--app-text-secondary)] !shadow-none"
+                      className="!mt-3 !h-7 !rounded-full !border-[#91caff] !bg-[#e6f4ff] !px-3 !text-xs !font-semibold !text-[#1677ff] !shadow-none hover:!border-[#4096ff] hover:!bg-[#bae0ff] hover:!text-[#0958d9]"
                       onClick={() => setHelpOpen(true)}
                     >
                       Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요
@@ -191,7 +191,7 @@ function AuthenticationDrawer({
               <Alert
                 type="warning"
                 showIcon
-                className="!mt-4"
+                className="authentication-warning-alert !mt-4"
                 message="주의사항"
                 description={
                   <ul className="!mb-0 list-disc space-y-1 pl-4">

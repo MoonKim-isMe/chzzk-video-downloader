@@ -1333,3 +1333,9 @@ select {
 :root[data-theme="light"] .download-task-thumbnail {
   background: #edf1f4;
 }
+
+.authentication-info-alert .ant-alert-icon,
+.authentication-warning-alert .ant-alert-icon {
+  font-size: 14px !important;
+  margin-inline-end: 8px !important;
+}
