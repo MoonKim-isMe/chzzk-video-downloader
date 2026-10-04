@@ -951,11 +951,14 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-6. 일반 다운로드와 HLS probe/구간 분할/ffmpeg fallback의 모든 yt-dlp 호출에 동일 인증 인자 적용
 - [x] SET-5E-7. 실패 로그의 쿠키/브라우저 인증 인자 마스킹 경로 보강
 - [ ] SET-5E-8. 실제 Windows에서 Whale/Chrome/Edge/Firefox/Brave/Vivaldi 로그인 세션 및 cookies.txt 인증 다운로드 검증
+- [x] SET-5E-9. 인증 활성 시 헤더 버튼에 현재 인증 방식 표시
 
 #### Phase 5-E 인증 기준
 
 - 인증 기능은 일반 설정 Drawer에 포함하지 않고 앱 헤더 우측의 별도 `인증` 버튼에서 관리한다.
 - 인증 사용 여부는 헤더 버튼 상태로 표시하고, 전용 Drawer에서 활성화/비활성화한다.
+- 브라우저 인증이 활성화된 경우 헤더 버튼은 `Whale 인증`, `Chrome 인증`처럼 현재 브라우저명과 `인증`을 함께 표시한다.
+- `cookies.txt` 인증이 활성화된 경우 헤더 버튼은 `cookies.txt 인증`으로 표시한다.
 - 인증 방식은 `브라우저 로그인 정보`와 `cookies.txt` 두 가지를 제공한다.
 - 브라우저 방식은 Chrome / Edge / Whale / Firefox / Brave / Vivaldi를 지원하고 선택한 브라우저 및 선택적 프로필 이름을 yt-dlp `--cookies-from-browser`에 전달한다.
 - cookies.txt 방식은 파일 자체를 데이터베이스에 복사하지 않고 선택한 파일 경로만 저장하며 yt-dlp `--cookies`에 전달한다.

@@ -47,6 +47,15 @@ const navigationItems: Array<{ key: AppTab; label: string }> = [
 
 const messageTopOffset = 84;
 
+const authenticationBrowserLabels: Record<AuthenticationSettings['browser'], string> = {
+  chrome: 'Chrome',
+  edge: 'Edge',
+  whale: 'Whale',
+  firefox: 'Firefox',
+  brave: 'Brave',
+  vivaldi: 'Vivaldi',
+};
+
 function AuthenticationIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -92,7 +101,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const hiddenDownloadTaskIds = useRef(new Set<string>());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authenticationOpen, setAuthenticationOpen] = useState(false);
-  const [authenticationEnabled, setAuthenticationEnabled] = useState(false);
+  const [authenticationSettings, setAuthenticationSettings] = useState<AuthenticationSettings>();
 
   useEffect(() => {
     getSavedChannels()
@@ -106,7 +115,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     let active = true;
     getAuthenticationSettings()
       .then((settings) => {
-        if (active) setAuthenticationEnabled(settings.enabled);
+        if (active) setAuthenticationSettings(settings);
       })
       .catch((cause) => {
         if (active) message.error(cause instanceof Error ? cause.message : String(cause));
@@ -153,6 +162,13 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       unsubscribe();
     };
   }, [message]);
+
+  const authenticationEnabled = authenticationSettings?.enabled ?? false;
+  const authenticationButtonLabel = !authenticationEnabled
+    ? '인증'
+    : authenticationSettings?.mode === 'browser'
+      ? `${authenticationBrowserLabels[authenticationSettings.browser]} 인증`
+      : 'cookies.txt 인증';
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
@@ -334,7 +350,10 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         </nav>
 
         <div className="app-header-actions">
-          <Tooltip title={authenticationEnabled ? '인증 사용 중' : '인증'} placement="bottom">
+          <Tooltip
+            title={authenticationEnabled ? `${authenticationButtonLabel} 사용 중` : '인증'}
+            placement="bottom"
+          >
             <Button
               aria-label="인증 열기"
               type="default"
@@ -342,7 +361,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               icon={<AuthenticationIcon />}
               onClick={() => setAuthenticationOpen(true)}
             >
-              <span className="authentication-button-label">인증</span>
+              <span className="authentication-button-label">{authenticationButtonLabel}</span>
               {authenticationEnabled && <span className="authentication-status-dot" aria-hidden="true" />}
             </Button>
           </Tooltip>
@@ -365,9 +384,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       <AuthenticationDrawer
         open={authenticationOpen}
         onClose={() => setAuthenticationOpen(false)}
-        onAuthenticationUpdated={(settings: AuthenticationSettings) =>
-          setAuthenticationEnabled(settings.enabled)
-        }
+        onAuthenticationUpdated={setAuthenticationSettings}
       />
 
       <SettingsDrawer
