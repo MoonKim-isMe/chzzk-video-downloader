@@ -194,10 +194,10 @@ function AuthenticationDrawer({
                 className="!mt-4"
                 message="주의사항"
                 description={
-                  <div className="space-y-1">
-                    <div>갑자기 동작하지 않으면 세션이 만료된 것일 수 있습니다. cookies.txt를 다시 발급해 주세요.</div>
-                    <div>cookies.txt에는 로그인 세션 정보가 포함되어 있습니다. 다른 사람과 공유하지 마세요.</div>
-                  </div>
+                  <ul className="!mb-0 list-disc space-y-1 pl-4">
+                    <li>갑자기 동작하지 않으면 세션이 만료된 것일 수 있습니다. cookies.txt를 다시 발급해 주세요.</li>
+                    <li>cookies.txt에는 로그인 세션 정보가 포함되어 있습니다. 다른 사람과 공유하지 마세요.</li>
+                  </ul>
                 }
               />
             </section>
