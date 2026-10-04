@@ -33,6 +33,19 @@ if ($distFiles.Count -eq 0) {
     }
 }
 
+$appIconSource = Join-Path $repoRoot "assets\appicon.png"
+if (-not (Test-Path -LiteralPath $appIconSource -PathType Leaf)) {
+    throw "Missing application icon source: $appIconSource"
+}
+$buildDir = Join-Path $repoRoot "build"
+$windowsAssetsDir = Join-Path $buildDir "windows"
+New-Item -ItemType Directory -Path $windowsAssetsDir -Force | Out-Null
+Copy-Item -LiteralPath $appIconSource -Destination (Join-Path $buildDir "appicon.png") -Force
+$generatedWindowsIcon = Join-Path $windowsAssetsDir "icon.ico"
+if (Test-Path -LiteralPath $generatedWindowsIcon -PathType Leaf) {
+    Remove-Item -LiteralPath $generatedWindowsIcon -Force
+}
+
 & (Join-Path $PSScriptRoot "prepare-windows-tools.ps1") -Force:$RefreshTools
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to prepare Windows download tools."
