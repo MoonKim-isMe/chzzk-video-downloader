@@ -252,7 +252,7 @@ function SettingsDrawer({
             <Form.Item
               name="downloadRateLimitMBps"
               label="다운로드 속도 제한"
-              extra="각 다운로드 작업 기준입니다. 0이면 속도를 제한하지 않습니다."
+              extra="각 다운로드 기준입니다. 0이면 속도를 제한하지 않습니다."
               rules={[
                 { required: true, message: '다운로드 속도 제한을 입력해 주세요.' },
                 { type: 'number', min: 0, message: '0 이상의 값을 입력해 주세요.' },

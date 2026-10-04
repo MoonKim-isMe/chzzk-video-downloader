@@ -840,6 +840,7 @@ Validation:
 - [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-5. 다운로드 가속 `안정 / 기본 / 고속 / 초고속` 선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-6. 다운로드 속도 제한 MB/s 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [x] SET-5C-7. 다운로드 속도 제한 안내 문구를 `각 다운로드 기준입니다. 0이면 속도를 제한하지 않습니다.`로 간결화
 
 #### Phase 5-C UI 기준
 
@@ -877,6 +878,7 @@ Validation:
 - AppSettings Form, 다운로드 경로 선택, Select/InputNumber 값 타입, 저장 호출 타입 확인
 - Header 설정 버튼 / 우측 Drawer 연결 구조 확인
 - backend wrapper의 SelectDownloadDirectory 계약 추가
+- 다운로드 속도 제한 안내 문구가 `각 다운로드 기준입니다. 0이면 속도를 제한하지 않습니다.`로 반영된 것을 정적 확인
 
 현재 실행 환경 제약으로 검증 대기:
 
