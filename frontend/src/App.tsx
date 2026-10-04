@@ -47,15 +47,6 @@ const navigationItems: Array<{ key: AppTab; label: string }> = [
 
 const messageTopOffset = 84;
 
-const authenticationBrowserLabels: Record<AuthenticationSettings['browser'], string> = {
-  chrome: 'Chrome',
-  edge: 'Edge',
-  whale: 'Whale',
-  firefox: 'Firefox',
-  brave: 'Brave',
-  vivaldi: 'Vivaldi',
-};
-
 function AuthenticationIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -164,11 +155,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   }, [message]);
 
   const authenticationEnabled = authenticationSettings?.enabled ?? false;
-  const authenticationButtonLabel = !authenticationEnabled
-    ? '인증 미사용'
-    : authenticationSettings?.mode === 'browser'
-      ? `${authenticationBrowserLabels[authenticationSettings.browser]} 인증`
-      : '인증 토큰 인증';
+  const authenticationButtonLabel = authenticationEnabled ? '토큰 인증' : '인증 미사용';
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),

@@ -12,9 +12,9 @@ import (
 func (d *Database) LoadAuthenticationSettings() (appsettings.AuthenticationSettings, bool, error) {
 	var value appsettings.AuthenticationSettings
 	var enabled int
-	err := d.db.QueryRow(`SELECT enabled, mode, browser, browser_profile, cookies_file_path
+	err := d.db.QueryRow(`SELECT enabled, cookies_file_path
 		FROM authentication_settings WHERE id = 1`).Scan(
-		&enabled, &value.Mode, &value.Browser, &value.BrowserProfile, &value.CookiesFilePath,
+		&enabled, &value.CookiesFilePath,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return appsettings.AuthenticationSettings{}, false, nil
@@ -36,17 +36,13 @@ func (d *Database) SaveAuthenticationSettings(value appsettings.AuthenticationSe
 		return err
 	}
 	_, err := d.db.Exec(`INSERT INTO authentication_settings (
-		id, enabled, mode, browser, browser_profile, cookies_file_path, updated_at
-	) VALUES (1, ?, ?, ?, ?, ?, ?)
+		id, enabled, cookies_file_path, updated_at
+	) VALUES (1, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		enabled = excluded.enabled,
-		mode = excluded.mode,
-		browser = excluded.browser,
-		browser_profile = excluded.browser_profile,
 		cookies_file_path = excluded.cookies_file_path,
 		updated_at = excluded.updated_at`,
-		boolInt(value.Enabled), string(value.Mode), string(value.Browser),
-		value.BrowserProfile, value.CookiesFilePath, time.Now().UTC().Format(time.RFC3339Nano),
+		boolInt(value.Enabled), value.CookiesFilePath, time.Now().UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return fmt.Errorf("인증 설정을 SQLite에 저장할 수 없습니다: %w", err)

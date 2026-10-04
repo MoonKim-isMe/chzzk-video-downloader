@@ -88,12 +88,12 @@ func TestWriteDownloadFailureLogCapturesDiagnosticsAndRedactsSecrets(t *testing.
 
 func TestRedactDiagnosticTextRedactsAuthenticationArguments(t *testing.T) {
 	inputs := []string{
-		`[debug] Command-line config: ['--cookies-from-browser', 'whale:Profile 1']`,
+		`[debug] Command-line config: ['--cookies', 'C:\\Users\\tester\\cookies.txt']`,
 		`yt-dlp --cookies "C:\\Users\\tester\\cookies.txt" https://example.com/video`,
 	}
 	for _, input := range inputs {
 		got := redactDiagnosticText(input)
-		if strings.Contains(got, "Profile 1") || strings.Contains(got, "cookies.txt") {
+		if strings.Contains(got, "cookies.txt") {
 			t.Fatalf("authentication argument leaked: %q", got)
 		}
 		if !strings.Contains(got, "<redacted>") {

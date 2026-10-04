@@ -111,26 +111,22 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	}
 }
 
-func TestApplyAuthenticationSettingsSnapshotsBrowserSession(t *testing.T) {
+func TestApplyAuthenticationSettingsSnapshotsCookiesFile(t *testing.T) {
+	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
 	request, err := ApplyAuthenticationSettings(StartDownloadRequest{}, appsettings.AuthenticationSettings{
-		Enabled:        true,
-		Mode:           appsettings.AuthenticationModeBrowser,
-		Browser:        appsettings.AuthenticationBrowserWhale,
-		BrowserProfile: "Profile 1",
+		Enabled: true, CookiesFilePath: cookiesFile,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Authentication.Mode != "browser" ||
-		request.Authentication.Browser != "whale" ||
-		request.Authentication.BrowserProfile != "Profile 1" {
+	if request.Authentication.CookiesFilePath != cookiesFile {
 		t.Fatalf("unexpected authentication snapshot: %#v", request.Authentication)
 	}
 }
 
 func TestApplyAuthenticationSettingsDisabledClearsAuthentication(t *testing.T) {
 	request, err := ApplyAuthenticationSettings(StartDownloadRequest{
-		Authentication: AuthenticationOptions{Mode: "browser", Browser: "chrome"},
+		Authentication: AuthenticationOptions{CookiesFilePath: filepath.Join(t.TempDir(), "cookies.txt")},
 	}, appsettings.AuthenticationDefaults())
 	if err != nil {
 		t.Fatal(err)

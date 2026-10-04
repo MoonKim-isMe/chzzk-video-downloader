@@ -236,10 +236,7 @@ func TestSettingsPersistenceRoundTrip(t *testing.T) {
 func TestAuthenticationSettingsPersistenceRoundTrip(t *testing.T) {
 	database := openTestDatabase(t)
 	value := appsettings.AuthenticationSettings{
-		Enabled:        true,
-		Mode:           appsettings.AuthenticationModeBrowser,
-		Browser:        appsettings.AuthenticationBrowserWhale,
-		BrowserProfile: "Profile 1",
+		Enabled: true, CookiesFilePath: filepath.Join(t.TempDir(), "cookies.txt"),
 	}
 	if err := database.SaveAuthenticationSettings(value); err != nil {
 		t.Fatal(err)

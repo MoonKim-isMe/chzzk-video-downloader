@@ -143,9 +143,6 @@ var migrations = []migration{
 			`CREATE TABLE IF NOT EXISTS authentication_settings (
 				id INTEGER PRIMARY KEY CHECK (id = 1),
 				enabled INTEGER NOT NULL DEFAULT 0,
-				mode TEXT NOT NULL DEFAULT 'browser',
-				browser TEXT NOT NULL DEFAULT 'chrome',
-				browser_profile TEXT NOT NULL DEFAULT '',
 				cookies_file_path TEXT NOT NULL DEFAULT '',
 				updated_at TEXT NOT NULL
 			)`,

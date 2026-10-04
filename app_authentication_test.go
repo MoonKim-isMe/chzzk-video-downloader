@@ -18,15 +18,15 @@ func TestAuthenticationSettingsDefaultsAndUpdate(t *testing.T) {
 	if current != appsettings.AuthenticationDefaults() {
 		t.Fatalf("unexpected authentication defaults: %#v", current)
 	}
+
+	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
 	updated, err := app.UpdateAuthenticationSettings(appsettings.AuthenticationSettings{
-		Enabled: true, Mode: appsettings.AuthenticationMode(" BROWSER "),
-		Browser: appsettings.AuthenticationBrowser(" WHALE "), BrowserProfile: " Profile 1 ",
+		Enabled: true, CookiesFilePath: " " + cookiesFile + " ",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !updated.Enabled || updated.Mode != appsettings.AuthenticationModeBrowser ||
-		updated.Browser != appsettings.AuthenticationBrowserWhale || updated.BrowserProfile != "Profile 1" {
+	if !updated.Enabled || updated.CookiesFilePath != cookiesFile {
 		t.Fatalf("unexpected authentication update: %#v", updated)
 	}
 }

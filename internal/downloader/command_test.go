@@ -107,29 +107,13 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 	}
 }
 
-func TestBuildDownloadCommandAppliesBrowserAuthentication(t *testing.T) {
-	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
-		URL:       "https://chzzk.naver.com/video/12345",
-		OutputDir: t.TempDir(),
-		Authentication: AuthenticationOptions{
-			Mode: "browser", Browser: "whale", BrowserProfile: "Profile 1",
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !hasArgumentPair(spec.Args, "--cookies-from-browser", "whale:Profile 1") {
-		t.Fatalf("browser authentication argument missing: %#v", spec.Args)
-	}
-}
-
 func TestBuildDownloadCommandAppliesCookiesFileAuthentication(t *testing.T) {
 	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
 	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
 		URL:       "https://chzzk.naver.com/video/12345",
 		OutputDir: t.TempDir(),
 		Authentication: AuthenticationOptions{
-			Mode: "cookies_file", CookiesFilePath: cookiesFile,
+			CookiesFilePath: cookiesFile,
 		},
 	})
 	if err != nil {
@@ -137,17 +121,6 @@ func TestBuildDownloadCommandAppliesCookiesFileAuthentication(t *testing.T) {
 	}
 	if !hasArgumentPair(spec.Args, "--cookies", cookiesFile) {
 		t.Fatalf("cookies file authentication argument missing: %#v", spec.Args)
-	}
-}
-
-func TestBuildDownloadCommandRejectsUnsupportedAuthenticationBrowser(t *testing.T) {
-	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
-		URL:       "https://chzzk.naver.com/video/12345",
-		OutputDir: t.TempDir(),
-		Authentication: AuthenticationOptions{Mode: "browser", Browser: "unknown"},
-	})
-	if err == nil {
-		t.Fatal("expected authentication browser validation error")
 	}
 }
 

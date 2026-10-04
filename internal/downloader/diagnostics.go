@@ -19,10 +19,10 @@ const (
 var (
 	diagnosticURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
 	diagnosticSensitiveOptionPattern = regexp.MustCompile(
-		`(?i)(--(?:cookies|cookies-from-browser|username|password|proxy|netrc-location))(?:=|\s+)(?:"[^"]*"|'[^']*'|[^\s,\]]+)`,
+		`(?i)(--(?:cookies|username|password|proxy|netrc-location))(?:=|\s+)(?:"[^"]*"|'[^']*'|[^\s,\]]+)`,
 	)
 	diagnosticSensitiveListOptionPattern = regexp.MustCompile(
-		`(?i)(['"]--(?:cookies|cookies-from-browser|username|password|proxy|netrc-location)['"]\s*,\s*)(['"][^'"]*['"])`,
+		`(?i)(['"]--(?:cookies|username|password|proxy|netrc-location)['"]\s*,\s*)(['"][^'"]*['"])`,
 	)
 )
 
@@ -123,8 +123,7 @@ func writeDownloadFailureLog(
 func redactCommandArgs(args []string) []string {
 	redacted := append([]string(nil), args...)
 	sensitive := map[string]struct{}{
-		"--cookies":              {},
-		"--cookies-from-browser": {},
+		"--cookies":        {},
 		"--username":             {},
 		"--password":             {},
 		"--proxy":                {},
