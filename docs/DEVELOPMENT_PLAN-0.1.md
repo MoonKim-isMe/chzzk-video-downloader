@@ -576,6 +576,7 @@ Windows 검증 대기:
 - [ ] DM-8. 다운로드 완료 후 결과 파일 경로를 Task별 표시 — 구현 완료, 전체 프론트엔드 검증 대기
 - [ ] DM-4C-1. VOD 화면의 다운로드 시작 동작을 Queue 추가 흐름으로 변경 — 구현 완료, 전체 프론트엔드 검증 대기
 - [ ] DM-4C-2. GetDownloadTasks 초기 조회 + download:state 증분 이벤트 병합 — 구현 완료, 전체 프론트엔드 검증 대기
+- [ ] DM-4C-3. 완료 다운로드 항목 일괄 삭제 UI 구현 — 구현 완료, 전체 프론트엔드 검증 대기
 
 #### Phase 4-C 구현 기준
 
@@ -591,6 +592,7 @@ Windows 검증 대기:
 - Download Manager 상단에는 전체/대기/진행/완료/실패 개수 요약을 표시한다.
 - 각 Task 카드에는 썸네일, 채널명, 제목, 상태, Queue 순서, 진행률, 다운로드 크기/전체 크기, 속도, ETA, 저장 위치 또는 최종 파일 경로를 표시한다.
 - queued/running Task는 각 카드에서 개별 취소할 수 있다.
+- 완료 섹션에서는 `완료항목 모두 삭제` 버튼으로 completed Task를 한 번에 목록에서 제거할 수 있다. 각 항목은 기존 `DeleteDownloadTask` 경로를 재사용하며 성공한 Task만 즉시 UI에서 제거한다.
 - failed Task는 오류 메시지, cancelled Task는 취소 상태를 카드 내부에 표시한다.
 
 #### Phase 4-C 검증 현황
