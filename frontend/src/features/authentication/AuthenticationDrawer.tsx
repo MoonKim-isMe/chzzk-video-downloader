@@ -103,7 +103,7 @@ function AuthenticationDrawer({
   return (
     <>
       <Drawer
-        title="토큰 인증"
+        title="인증 설정"
         placement="right"
         width={460}
         open={open}
@@ -124,12 +124,12 @@ function AuthenticationDrawer({
           <Form form={form} layout="vertical" requiredMark={false}>
             <section className="settings-section">
               <Text className="app-eyebrow">AUTHENTICATION</Text>
-              <Title level={5} className="!mb-1 !mt-1">cookies.txt 사용</Title>
+              <Title level={5} className="!mb-1 !mt-1">인증파일 사용</Title>
               <Paragraph className="app-muted !mb-5 !text-xs">
-                로그인이 필요한 영상에 사용할 cookies.txt를 선택합니다.
+                로그인이 필요한 영상에 사용할 인증파일(cookies.txt)을 선택합니다.
               </Paragraph>
 
-              <Form.Item name="enabled" label="토큰 인증 사용" valuePropName="checked">
+              <Form.Item name="enabled" label="인증기능 사용" valuePropName="checked">
                 <Switch checkedChildren="사용" unCheckedChildren="사용 안 함" />
               </Form.Item>
 
