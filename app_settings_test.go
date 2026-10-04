@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -180,6 +181,9 @@ func TestSelectDownloadDirectoryUsesCurrentDirectory(t *testing.T) {
 	}
 
 	current := filepath.Join(t.TempDir(), "current")
+	if err := os.MkdirAll(current, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	selected, err := app.SelectDownloadDirectory(current)
 	if err != nil {
 		t.Fatal(err)
@@ -192,9 +196,13 @@ func TestSelectDownloadDirectoryUsesCurrentDirectory(t *testing.T) {
 	}
 }
 
-func TestSelectDownloadDirectoryFallsBackToSettingsAndAllowsCancel(t *testing.T) {
+func TestSelectDownloadDirectoryFallsBackToExistingParentForMissingSettingsDirectoryAndAllowsCancel(t *testing.T) {
 	app := NewApp()
-	defaultDir := filepath.Join(t.TempDir(), "downloads")
+	downloadsDir := filepath.Join(t.TempDir(), "Downloads")
+	if err := os.MkdirAll(downloadsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defaultDir := filepath.Join(downloadsDir, "CHZZK Video Downloader")
 	store, err := appsettings.NewStore(appsettings.Defaults(defaultDir))
 	if err != nil {
 		t.Fatal(err)
@@ -202,8 +210,8 @@ func TestSelectDownloadDirectoryFallsBackToSettingsAndAllowsCancel(t *testing.T)
 	app.settingsStore = store
 
 	app.directoryPicker = func(ctx context.Context, options runtime.OpenDialogOptions) (string, error) {
-		if options.DefaultDirectory != defaultDir {
-			t.Fatalf("unexpected settings fallback: got %s want %s", options.DefaultDirectory, defaultDir)
+		if options.DefaultDirectory != downloadsDir {
+			t.Fatalf("unexpected settings fallback: got %s want %s", options.DefaultDirectory, downloadsDir)
 		}
 		return "", nil
 	}

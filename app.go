@@ -211,6 +211,7 @@ func (a *App) SelectDownloadDirectory(currentDirectory string) (string, error) {
 			defaultDirectory = current.DownloadDir
 		}
 	}
+	defaultDirectory = existingDirectoryForDialog(defaultDirectory)
 
 	picker := a.directoryPicker
 	if picker == nil {
@@ -224,6 +225,31 @@ func (a *App) SelectDownloadDirectory(currentDirectory string) (string, error) {
 		return "", fmt.Errorf("다운로드 폴더를 선택할 수 없습니다: %w", err)
 	}
 	return strings.TrimSpace(selected), nil
+}
+
+func existingDirectoryForDialog(directory string) string {
+	candidate := strings.TrimSpace(directory)
+	if candidate == "" {
+		return ""
+	}
+
+	candidate = filepath.Clean(candidate)
+	if candidate == "." {
+		return ""
+	}
+
+	for {
+		info, err := os.Stat(candidate)
+		if err == nil && info.IsDir() {
+			return candidate
+		}
+
+		parent := filepath.Dir(candidate)
+		if parent == candidate {
+			return ""
+		}
+		candidate = parent
+	}
 }
 
 func (a *App) GetSettings() (appsettings.AppSettings, error) {
