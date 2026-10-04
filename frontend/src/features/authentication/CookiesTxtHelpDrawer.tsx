@@ -1,6 +1,6 @@
 import { Alert, Drawer, Typography } from 'antd';
 
-import cookiesTxtGuideImage from '../../assets/cookies-txt-guide.webp';
+import cookiesTxtGuideImage from '../../assets/cookies-txt-guide.png';
 
 const { Paragraph, Text, Title } = Typography;
 
