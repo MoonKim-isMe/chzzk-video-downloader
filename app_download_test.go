@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
@@ -49,6 +50,84 @@ func testStartRequest(t *testing.T) downloader.StartDownloadRequest {
 		ChannelName: "테스트 채널",
 		URL:         "https://chzzk.naver.com/video/12345",
 		OutputDir:   t.TempDir(),
+	}
+}
+
+func TestStartDownloadStopsBeforeYTDLPWhenCHZZKRequiresAuthentication(t *testing.T) {
+	downloadCalled := false
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			downloadCalled = true
+			return downloader.DownloadResult{}, nil
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.eventEmitter = func(downloader.DownloadTask) {}
+	app.videoAccessChecker = func(context.Context, int64, string) error {
+		return &chzzk.APIError{
+			HTTPStatusCode: 401,
+			Code:           401,
+			Message:        "치지직 API가 HTTP 401을 반환했습니다",
+		}
+	}
+
+	_, err := app.StartDownload(testStartRequest(t))
+	if err == nil {
+		t.Fatal("expected authentication error")
+	}
+	var failure *downloader.DownloadFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("expected DownloadFailure, got %T: %v", err, err)
+	}
+	if failure.Kind != downloader.DownloadFailureAuthenticationRequired {
+		t.Fatalf("unexpected failure kind: %s", failure.Kind)
+	}
+	if downloadCalled {
+		t.Fatal("yt-dlp download must not start after CHZZK 401 preflight")
+	}
+	if tasks := app.GetDownloadTasks(); len(tasks) != 0 {
+		t.Fatalf("authentication failure must not enqueue a task: %#v", tasks)
+	}
+}
+
+func TestStartDownloadIgnoresNonAuthenticationPreflightFailure(t *testing.T) {
+	started := make(chan struct{}, 1)
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(
+			context.Context,
+			downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			started <- struct{}{}
+			return downloader.DownloadResult{
+				FinalPath:    "completed.mp4",
+				LastProgress: downloader.DownloadProgress{Status: "completed", Percent: 100},
+			}, nil
+		},
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.eventEmitter = func(downloader.DownloadTask) {}
+	app.videoAccessChecker = func(context.Context, int64, string) error {
+		return errors.New("temporary CHZZK API failure")
+	}
+
+	if _, err := app.StartDownload(testStartRequest(t)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("non-authentication preflight failure blocked yt-dlp")
 	}
 }
 
