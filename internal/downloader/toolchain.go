@@ -62,10 +62,6 @@ func (s ToolchainStatus) MergeReadinessError() error {
 }
 
 func formatToolDiagnostic(status ToolStatus) string {
-	path := strings.TrimSpace(status.Path)
-	if path == "" {
-		path = "찾지 못함"
-	}
 	cause := strings.TrimSpace(status.Error)
 	if cause == "" {
 		cause = "사용 가능 여부를 확인할 수 없습니다"
@@ -75,9 +71,8 @@ func formatToolDiagnostic(status ToolStatus) string {
 		name = "도구"
 	}
 	return fmt.Sprintf(
-		"%s [경로: %s, 사용 가능: 아니오, 오류: %s]",
+		"%s [사용 가능: 아니오, 오류: %s]",
 		name,
-		path,
 		cause,
 	)
 }

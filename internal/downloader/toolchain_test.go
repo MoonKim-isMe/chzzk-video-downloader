@@ -149,7 +149,7 @@ func TestDownloadReadinessErrorIncludesToolDiagnostics(t *testing.T) {
 	if err == nil {
 		t.Fatal("unavailable yt-dlp must return a readiness error")
 	}
-	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [경로: C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe, 사용 가능: 아니오, 오류: yt-dlp.exe 버전 확인 시간 초과: context deadline exceeded]`
+	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [사용 가능: 아니오, 오류: yt-dlp.exe 버전 확인 시간 초과: context deadline exceeded]`
 	if err.Error() != expected {
 		t.Fatalf("unexpected readiness error:\nwant: %s\n got: %s", expected, err)
 	}
@@ -176,7 +176,7 @@ func TestMergeReadinessErrorIncludesOnlyUnavailableTools(t *testing.T) {
 	if err == nil {
 		t.Fatal("unavailable ffprobe must return a readiness error")
 	}
-	expected := `다운로드 후 영상 처리 환경이 준비되지 않았습니다: ffprobe [경로: 찾지 못함, 사용 가능: 아니오, 오류: ffprobe 실행 파일을 찾을 수 없습니다]`
+	expected := `다운로드 후 영상 처리 환경이 준비되지 않았습니다: ffprobe [사용 가능: 아니오, 오류: ffprobe 실행 파일을 찾을 수 없습니다]`
 	if err.Error() != expected {
 		t.Fatalf("unexpected merge readiness error:\nwant: %s\n got: %s", expected, err)
 	}

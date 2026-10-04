@@ -83,7 +83,7 @@ func TestStartDownloadReportsDetailedToolchainFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected toolchain readiness error")
 	}
-	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [경로: C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe, 사용 가능: 아니오, 오류: yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1]`
+	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [사용 가능: 아니오, 오류: yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1]`
 	if err.Error() != expected {
 		t.Fatalf("unexpected toolchain error:\nwant: %s\n got: %s", expected, err)
 	}
