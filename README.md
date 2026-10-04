@@ -145,9 +145,9 @@ Windows에서는 아래 스크립트를 권장합니다.
 powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
 
-최초 실행에서는 Windows 다운로드 도구를 내려받고 checksum을 검증하므로 시간이 걸릴 수 있습니다. 이후에는 준비된 bundle을 재사용합니다.
+최초 실행에서는 Windows 다운로드 도구를 내려받고 checksum을 검증하므로 시간이 걸릴 수 있습니다. 이후에는 준비된 bundle을 재사용합니다. 또한 `frontend/dist`가 없거나 비어 있으면 `scripts/dev.ps1`이 먼저 `frontend`에서 `yarn build`를 실행해 `main.go`의 `//go:embed all:frontend/dist`가 컴파일 가능한 상태를 만든 뒤 `wails dev`를 시작합니다.
 
-직접 `wails dev`를 실행하려면 먼저 프로젝트 루트에서 `powershell -ExecutionPolicy Bypass -File .\\scripts\\prepare-windows-tools.ps1`을 한 번 실행해야 합니다. 일반 개발에서는 `scripts/dev.ps1`을 단일 진입점으로 사용합니다.
+직접 `wails dev`를 실행하면 이 사전 검사를 거치지 않습니다. 직접 실행하려면 다운로드 도구 준비와 함께 `frontend/dist`에 빌드 결과가 있어야 하므로, 비어 있다면 먼저 `cd frontend; yarn build; cd ..`를 실행해야 합니다. 일반 개발에서는 `scripts/dev.ps1`을 단일 진입점으로 사용합니다.
 
 도구를 최신 release로 강제 갱신하려면:
 

@@ -1287,12 +1287,14 @@ Windows 실 검증 대기:
 - [x] PKG-7F-2. Portable 빌드마다 원본 자산을 `build/appicon.png`으로 갱신하고 기존 `build/windows/icon.ico`를 제거해 Wails가 새 아이콘을 재생성하도록 적용
 - [x] PKG-7F-3. 아이콘 자산의 정사각형 규격, 투명 모서리 및 빌드 스크립트의 갱신 경로 확인
 - [ ] PKG-7F-4. 실제 Windows Portable EXE의 탐색기/작업표시줄 아이콘 표시 확인
+- [x] PKG-7F-5. 개발 실행 전 `assets/appicon.png`을 `build/appicon.png`으로 갱신하고 기존 `build/windows/icon.ico`를 제거해 손상된 ICO 재사용 방지
 
 #### Phase 7-F 검증 기준
 
 - 저장소 원본은 `assets/appicon.png`으로 관리하고 `build/appicon.png`, `build/windows/icon.ico`는 기존과 같이 빌드 산출물로 유지한다.
 - 아이콘 원본은 256×256 RGBA PNG이며 네 모서리가 투명한 상태임을 확인한다.
 - `build-windows.ps1`은 Wails 실행 직전에 원본 PNG를 복사하고 기존 생성 ICO를 제거하므로 이전 로컬 아이콘이 남아 새 아이콘 생성을 막지 않는다.
+- `scripts/dev.ps1`도 Wails 실행 전에 PNG 원본을 갱신하고 기존 `icon.ico`를 제거하므로, 이전에 생성되었거나 손상된 ICO의 `unexpected EOF`를 재사용하지 않는다.
 - 실제 Windows Shell의 아이콘 캐시까지 포함한 최종 표시는 Windows Portable EXE 실 빌드 후 확인한다.
 
 ### Phase 7-G — 라이선스 및 제3자 고지 정리
@@ -1329,3 +1331,17 @@ Windows 실 검증 대기:
 
 - 현재 작업 환경에는 PowerShell이 없어 `scripts/test-portable.ps1`을 실제 실행하지 못했다. Windows/PowerShell 환경에서 계약 테스트를 실행한 뒤 PKG-7G-6을 완료 처리한다.
 
+### Phase 7-H — Wails 개발 실행 embed 사전 준비
+
+- [x] PKG-7H-1. `scripts/dev.ps1`에서 `frontend/dist`가 없거나 비어 있는지 Wails 실행 전에 확인
+- [x] PKG-7H-2. 비어 있는 경우 `frontend`의 `yarn build`를 선행하고 실패 시 `wails dev`를 실행하지 않도록 처리
+- [x] PKG-7H-3. 프론트엔드 빌드 후에도 embed 가능한 파일이 없으면 명시적 오류로 중단
+- [x] PKG-7H-4. README의 개발 실행 절차에 자동 사전 빌드와 직접 `wails dev` 실행 조건을 반영
+- [ ] PKG-7H-5. 실제 Windows의 빈 `frontend/dist` 상태에서 `scripts/dev.ps1` 실행 후 Wails 개발 앱 기동 확인
+
+#### Phase 7-H 검증 기준
+
+- `main.go`의 `//go:embed all:frontend/dist`는 유지하고 개발 wrapper가 컴파일 전에 필요한 프론트엔드 산출물을 보장한다.
+- 기존 `frontend/dist`에 파일이 있으면 불필요한 프로덕션 프론트엔드 빌드를 반복하지 않는다.
+- 프론트엔드 빌드 실패 또는 산출물 미생성 상태에서는 원래의 Go embed 오류까지 진행하지 않고 원인을 앞 단계에서 표시한다.
+- 실제 Windows/Wails 실행 검증은 Windows 환경에서 완료한 뒤 PKG-7H-5를 완료 처리한다.
