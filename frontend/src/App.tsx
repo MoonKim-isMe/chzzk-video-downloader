@@ -284,6 +284,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         {selectedChannel ? (
           <ChannelVideoList
             key={selectedChannel.channelId}
+            authenticationEnabled={authenticationEnabled}
             channel={selectedChannel}
             activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
             onQueueVideo={handleQueueVideo}

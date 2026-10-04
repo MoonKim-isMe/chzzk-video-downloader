@@ -12,6 +12,7 @@ const countFormatter = new Intl.NumberFormat('ko-KR');
 const PAGE_SIZE = 24;
 
 interface ChannelVideoListProps {
+  authenticationEnabled: boolean;
   channel: Channel;
   activeDownloadStatusByVideoNo: Map<number, DownloadTaskStatus>;
   onQueueVideo: (video: Video) => Promise<void>;
@@ -40,6 +41,7 @@ function mergeVideos(current: Video[], incoming: Video[]) {
 }
 
 function ChannelVideoList({
+  authenticationEnabled,
   channel,
   activeDownloadStatusByVideoNo,
   onQueueVideo,
@@ -82,7 +84,7 @@ function ChannelVideoList({
         }
       }
     },
-    [channel.channelId],
+    [authenticationEnabled, channel.channelId],
   );
 
   useEffect(() => {

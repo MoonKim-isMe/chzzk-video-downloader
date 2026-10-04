@@ -968,6 +968,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-23. `인증기능 사용` 스위치를 변경 즉시 저장하고 헤더 인증 상태에도 즉시 반영
 - [x] SET-5E-24. `cookies.txt` 파일 선택 즉시 경로를 저장·반영하고 인증 Drawer의 별도 저장/취소 버튼 제거
 - [x] SET-5E-25. 저장된 인증 설정이 `enabled=true`/빈 경로인 경우 시작 시 인증을 비활성화해 SQLite를 자동 복구하고 Persistence 전체 초기화 실패 방지
+- [x] SET-5E-26. 선택 채널 VOD 목록이 표시된 상태에서 인증 사용 여부가 변경되면 VOD 첫 페이지를 즉시 재조회
 
 #### Phase 5-E 인증 기준
 
@@ -987,6 +988,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - `cookies.txt` 파일 선택 직후 `cookies_file_path`를 SQLite에 저장하고 App의 인증 상태를 갱신한다. 인증 Drawer에는 별도 저장/취소 버튼을 두지 않는다.
 - 최초 인증 활성화를 위해 인증이 꺼진 상태에서도 `cookies.txt` 경로는 선택할 수 있으며, 경로가 없는 상태에서 활성화를 시도하면 활성화하지 않고 파일 선택을 안내한다.
 - CHZZK API 조회는 인증 활성 시 `SearchChannels`, `GetChannelVideos`, `GetVideo` 요청에 동일 `cookies.txt`를 적용하고, 인증 비활성 시 기존 비인증 요청을 유지한다.
+- 선택 채널의 VOD 목록이 표시 중인 경우 인증 사용 여부(`enabled`)가 바뀌면 현재 목록을 초기화하고 `GetChannelVideos` 첫 페이지를 다시 요청해 변경된 인증 상태를 즉시 반영한다.
 - API 요청용 `cookies.txt`는 Netscape 형식의 domain/path/secure/expiry 조건을 적용해 요청 URL에 일치하는 쿠키만 `Cookie` 헤더로 전달한다.
 - 썸네일 및 채널 이미지 로딩 방식은 이번 범위에서 변경하지 않는다.
 - 인증 토큰/쿠키 원문은 앱 설정이나 다운로드 이력에 별도로 저장하지 않는다.
@@ -1013,6 +1015,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 인증 파일 선택 성공 직후 `UpdateAuthenticationSettings`를 호출해 경로를 저장하고 `onAuthenticationUpdated`로 즉시 반영하는 구조 정적 확인
 - 잘못된 기존 인증 설정(`enabled=1`, 빈 경로)을 Load 시 자동 비활성화하고 SQLite에도 수정된 값을 다시 저장하는 회귀 테스트 추가
 - 동일 잘못된 DB 상태에서 `initializePersistence()`가 실패하지 않고 인증 비활성 상태로 시작하는 회귀 테스트 추가
+- `ChannelVideoList`가 `authenticationEnabled` 변경을 첫 페이지 조회 effect의 dependency로 사용해 인증 상태 변경 시 VOD 목록을 재조회하는 구조 정적 확인
 
 실 환경 검증 대기:
 
