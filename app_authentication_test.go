@@ -54,3 +54,34 @@ func TestSelectAuthenticationCookiesFileUsesCurrentFileDirectory(t *testing.T) {
 		t.Fatalf("unexpected selected path: got %s want %s", selected, expected)
 	}
 }
+
+func TestActiveAuthenticationCookiesFileDisabled(t *testing.T) {
+	app := NewApp()
+
+	got, err := app.activeAuthenticationCookiesFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("expected empty cookies path, got %q", got)
+	}
+}
+
+func TestActiveAuthenticationCookiesFileEnabled(t *testing.T) {
+	app := NewApp()
+	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
+	if _, err := app.UpdateAuthenticationSettings(appsettings.AuthenticationSettings{
+		Enabled:         true,
+		CookiesFilePath: cookiesFile,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := app.activeAuthenticationCookiesFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cookiesFile {
+		t.Fatalf("unexpected cookies path: got %q want %q", got, cookiesFile)
+	}
+}

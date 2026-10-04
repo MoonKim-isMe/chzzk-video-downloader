@@ -92,13 +92,25 @@ func VideoURL(videoNo int64) string {
 }
 
 func (c *Client) GetVideo(ctx context.Context, videoNo int64) (Video, error) {
+	return c.getVideo(ctx, videoNo, "")
+}
+
+func (c *Client) GetVideoWithCookiesFile(
+	ctx context.Context,
+	videoNo int64,
+	cookiesFilePath string,
+) (Video, error) {
+	return c.getVideo(ctx, videoNo, cookiesFilePath)
+}
+
+func (c *Client) getVideo(ctx context.Context, videoNo int64, cookiesFilePath string) (Video, error) {
 	if videoNo <= 0 {
 		return Video{}, fmt.Errorf("유효하지 않은 videoNo입니다")
 	}
 
 	var response apiEnvelope[apiVideo]
 	path := "/service/v3/videos/" + strconv.FormatInt(videoNo, 10)
-	if err := c.get(ctx, path, &response); err != nil {
+	if err := c.getWithCookiesFile(ctx, path, &response, cookiesFilePath); err != nil {
 		return Video{}, err
 	}
 	if response.Content.VideoNo <= 0 || strings.TrimSpace(response.Content.VideoTitle) == "" {
@@ -108,6 +120,24 @@ func (c *Client) GetVideo(ctx context.Context, videoNo int64) (Video, error) {
 }
 
 func (c *Client) GetChannelVideos(ctx context.Context, channelID string, page, size int) (VideoListResult, error) {
+	return c.getChannelVideos(ctx, channelID, page, size, "")
+}
+
+func (c *Client) GetChannelVideosWithCookiesFile(
+	ctx context.Context,
+	channelID string,
+	page, size int,
+	cookiesFilePath string,
+) (VideoListResult, error) {
+	return c.getChannelVideos(ctx, channelID, page, size, cookiesFilePath)
+}
+
+func (c *Client) getChannelVideos(
+	ctx context.Context,
+	channelID string,
+	page, size int,
+	cookiesFilePath string,
+) (VideoListResult, error) {
 	channelID = strings.ToLower(strings.TrimSpace(channelID))
 	if !channelIDPattern.MatchString(channelID) {
 		return VideoListResult{}, fmt.Errorf("유효하지 않은 채널 ID입니다")
@@ -132,7 +162,7 @@ func (c *Client) GetChannelVideos(ctx context.Context, channelID string, page, s
 
 	var response apiEnvelope[videoListContent]
 	path := "/service/v1/channels/" + channelID + "/videos?" + query.Encode()
-	if err := c.get(ctx, path, &response); err != nil {
+	if err := c.getWithCookiesFile(ctx, path, &response, cookiesFilePath); err != nil {
 		return VideoListResult{}, err
 	}
 

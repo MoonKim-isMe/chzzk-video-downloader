@@ -107,7 +107,17 @@ func (a *App) GetAppInfo() AppInfo {
 }
 
 func (a *App) SearchChannels(keyword string, offset, size int) (chzzk.ChannelSearchResult, error) {
-	return a.chzzkClient.SearchChannels(a.appContext(), keyword, offset, size)
+	cookiesFilePath, err := a.activeAuthenticationCookiesFile()
+	if err != nil {
+		return chzzk.ChannelSearchResult{}, err
+	}
+	return a.chzzkClient.SearchChannelsWithCookiesFile(
+		a.appContext(),
+		keyword,
+		offset,
+		size,
+		cookiesFilePath,
+	)
 }
 
 func (a *App) ResolveVideoURL(rawURL string) (chzzk.Video, error) {
@@ -115,7 +125,11 @@ func (a *App) ResolveVideoURL(rawURL string) (chzzk.Video, error) {
 	if err != nil {
 		return chzzk.Video{}, err
 	}
-	return a.chzzkClient.GetVideo(a.appContext(), videoNo)
+	cookiesFilePath, err := a.activeAuthenticationCookiesFile()
+	if err != nil {
+		return chzzk.Video{}, err
+	}
+	return a.chzzkClient.GetVideoWithCookiesFile(a.appContext(), videoNo, cookiesFilePath)
 }
 
 func (a *App) GetSavedChannels() []chzzk.Channel {
@@ -161,7 +175,17 @@ func (a *App) RemoveSavedChannel(channelID string) ([]chzzk.Channel, error) {
 }
 
 func (a *App) GetChannelVideos(channelID string, page, size int) (chzzk.VideoListResult, error) {
-	return a.chzzkClient.GetChannelVideos(a.appContext(), channelID, page, size)
+	cookiesFilePath, err := a.activeAuthenticationCookiesFile()
+	if err != nil {
+		return chzzk.VideoListResult{}, err
+	}
+	return a.chzzkClient.GetChannelVideosWithCookiesFile(
+		a.appContext(),
+		channelID,
+		page,
+		size,
+		cookiesFilePath,
+	)
 }
 
 func (a *App) GetDownloadToolchainStatus() downloader.ToolchainStatus {
@@ -581,6 +605,22 @@ func (a *App) ensureSettingsStore() (*appsettings.Store, error) {
 	}
 	a.settingsStore = store
 	return store, nil
+}
+
+func (a *App) activeAuthenticationCookiesFile() (string, error) {
+	store, err := a.ensureAuthenticationStore()
+	if err != nil {
+		return "", err
+	}
+
+	settings := store.Get()
+	if !settings.Enabled {
+		return "", nil
+	}
+	if err := appsettings.ValidateAuthentication(settings); err != nil {
+		return "", err
+	}
+	return settings.CookiesFilePath, nil
 }
 
 func (a *App) ensureAuthenticationStore() (*appsettings.AuthenticationStore, error) {

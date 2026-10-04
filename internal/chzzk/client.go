@@ -67,6 +67,24 @@ func newClient(baseURL string, httpClient *http.Client) *Client {
 }
 
 func (c *Client) SearchChannels(ctx context.Context, keyword string, offset, size int) (ChannelSearchResult, error) {
+	return c.searchChannels(ctx, keyword, offset, size, "")
+}
+
+func (c *Client) SearchChannelsWithCookiesFile(
+	ctx context.Context,
+	keyword string,
+	offset, size int,
+	cookiesFilePath string,
+) (ChannelSearchResult, error) {
+	return c.searchChannels(ctx, keyword, offset, size, cookiesFilePath)
+}
+
+func (c *Client) searchChannels(
+	ctx context.Context,
+	keyword string,
+	offset, size int,
+	cookiesFilePath string,
+) (ChannelSearchResult, error) {
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
 		return ChannelSearchResult{}, fmt.Errorf("검색어를 입력해 주세요")
@@ -88,7 +106,7 @@ func (c *Client) SearchChannels(ctx context.Context, keyword string, offset, siz
 	query.Set("withFirstChannelContent", "false")
 
 	var response apiEnvelope[searchContent]
-	if err := c.get(ctx, "/service/v1/search/channels?"+query.Encode(), &response); err != nil {
+	if err := c.getWithCookiesFile(ctx, "/service/v1/search/channels?"+query.Encode(), &response, cookiesFilePath); err != nil {
 		return ChannelSearchResult{}, err
 	}
 
@@ -128,6 +146,15 @@ func (c *Client) GetChannel(ctx context.Context, channelID string) (Channel, err
 }
 
 func (c *Client) get(ctx context.Context, path string, target any) error {
+	return c.getWithCookiesFile(ctx, path, target, "")
+}
+
+func (c *Client) getWithCookiesFile(
+	ctx context.Context,
+	path string,
+	target any,
+	cookiesFilePath string,
+) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("요청을 만들 수 없습니다: %w", err)
@@ -136,6 +163,9 @@ func (c *Client) get(ctx context.Context, path string, target any) error {
 	req.Header.Set("User-Agent", "CHZZK-Video-Downloader/0.1")
 	req.Header.Set("Origin", "https://chzzk.naver.com")
 	req.Header.Set("Referer", "https://chzzk.naver.com/")
+	if err := applyCookiesFile(req, cookiesFilePath); err != nil {
+		return err
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

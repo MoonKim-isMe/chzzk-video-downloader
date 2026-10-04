@@ -963,6 +963,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-18. 인증 Drawer 문구를 `인증 설정`/`인증파일 사용`/`인증기능 사용` 기준으로 정리하고 Alert 아이콘 정렬 재보정
 - [x] SET-5E-19. `cookies.txt 생성 방법` info 및 `주의사항` exclamation 아이콘 상단 마진을 6px로 통일
 - [ ] SET-5E-20. cookies.txt 도움말 이미지 경로를 `frontend/src/assets/cookies-txt-guide.png`로 변경 — PNG 파일 직접 추가 대기
+- [x] SET-5E-21. 인증 사용 시 `SearchChannels`, `GetChannelVideos`, `GetVideo` CHZZK API 요청에 `cookies.txt` 쿠키 전달
 
 #### Phase 5-E 인증 기준
 
@@ -976,6 +977,9 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 도움말 Drawer 하단에는 `주의사항`으로 cookies.txt 공유 금지와 현재 CHZZK 페이지의 `Export` 사용 기준을 명시한다.
 - 인증이 비활성화된 경우 헤더 버튼은 `인증 미사용`, 활성화된 경우 `토큰 인증`으로 표시한다.
 - `cookies.txt` 파일 자체를 데이터베이스에 복사하지 않고 선택한 파일 경로만 저장하며 yt-dlp `--cookies`에 전달한다.
+- CHZZK API 조회는 인증 활성 시 `SearchChannels`, `GetChannelVideos`, `GetVideo` 요청에 동일 `cookies.txt`를 적용하고, 인증 비활성 시 기존 비인증 요청을 유지한다.
+- API 요청용 `cookies.txt`는 Netscape 형식의 domain/path/secure/expiry 조건을 적용해 요청 URL에 일치하는 쿠키만 `Cookie` 헤더로 전달한다.
+- 썸네일 및 채널 이미지 로딩 방식은 이번 범위에서 변경하지 않는다.
 - 인증 토큰/쿠키 원문은 앱 설정이나 다운로드 이력에 별도로 저장하지 않는다.
 - Queue에 등록된 작업은 등록 시점의 `cookies.txt` 경로 Snapshot을 유지하고, 이후 인증 설정 변경은 새 작업부터 적용한다.
 - HLS fallback의 format probe, split format probe, 구간 다운로드, ffmpeg downloader 재시도에도 최초 작업과 동일한 인증 Snapshot을 사용한다.
@@ -993,6 +997,8 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 브라우저 선택/프로필/`--cookies-from-browser` 관련 설정 및 실행 경로 제거
 - 토큰 인증 Drawer의 기존 `cookies.txt 생성 방법` 문구 유지, 파일 첫 줄 확인 항목 제거, 생성 도움말 링크 및 단일 경고 블록 구조 확인
 - 사용자 제공 이미지 asset과 Get cookies.txt LOCALLY 3단계 도움말 Drawer 연결 확인
+- 세 CHZZK API 경로에 인증용 `WithCookiesFile` 호출이 연결되고 비활성 시 빈 경로로 기존 요청을 유지하는 구조 정적 확인
+- `SearchChannels`, `GetChannelVideos`, `GetVideo` 각각에 cookies.txt 쿠키 전달 테스트 추가
 
 실 환경 검증 대기:
 
