@@ -24,8 +24,12 @@ function Assert-Version {
     }
     $folder = Join-Path $fixture "build/portable/v$Expected"
     $metadata = Get-Content -LiteralPath (Join-Path $folder "release-metadata.json") -Encoding UTF8 -Raw | ConvertFrom-Json
-    if ($metadata.version -cne $Expected -or $metadata.artifact -cne "CHZZK-Video-Downloader-v$Expected-portable.exe") {
-        throw "Release version and EXE filename must match source versions"
+    if ($metadata.version -cne $Expected -or
+        $metadata.artifact -cne "CHZZK-Video-Downloader-v$Expected-portable.exe" -or
+        $metadata.projectLicense -cne "MIT" -or
+        $metadata.projectLicenseFile -cne "LICENSE" -or
+        $metadata.thirdPartyNotices -cne "THIRD_PARTY_NOTICES.md") {
+        throw "Release version, EXE filename and project license metadata must match source policy"
     }
 }
 
@@ -53,6 +57,7 @@ try {
     }
     $initialWails = [IO.File]::ReadAllText((Join-Path $fixture "wails.json"))
     $initialPackage = [IO.File]::ReadAllText((Join-Path $fixture "frontend/package.json"))
+    Set-Content -LiteralPath (Join-Path $fixture "LICENSE") -Value "MIT fixture license"
     Set-Content -LiteralPath (Join-Path $fixture "THIRD_PARTY_NOTICES.md") -Value "Test notices"
     Set-Content -LiteralPath (Join-Path $fixture "scripts\prepare-windows-tools.ps1") -Value 'param([switch]$Force)'
     $config = Get-Content -LiteralPath (Join-Path $fixture "wails.json") -Raw | ConvertFrom-Json
@@ -156,6 +161,10 @@ try {
     Remove-Item -LiteralPath (Join-Path $releaseDir "Setup.exe")
     Remove-Item -LiteralPath (Join-Path $releaseDir "THIRD_PARTY_NOTICES.md")
     Assert-Throws { & $verify -ReleaseDir $releaseDir } "notices"
+    Copy-Item -LiteralPath (Join-Path $fixture "THIRD_PARTY_NOTICES.md") -Destination $releaseDir
+    Remove-Item -LiteralPath (Join-Path $releaseDir "LICENSE")
+    Assert-Throws { & $verify -ReleaseDir $releaseDir } "license"
+    Copy-Item -LiteralPath (Join-Path $fixture "LICENSE") -Destination $releaseDir
     Remove-Item -LiteralPath (Join-Path $bundleDir "ffprobe.exe")
     Assert-Throws { & $build } "Missing bundled tool"
     [IO.File]::WriteAllBytes((Join-Path $bundleDir "ffprobe.exe"), [byte[]](0x4d, 0x5a, 1, 2))

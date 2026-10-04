@@ -152,10 +152,14 @@ try {
         distribution = "portable"
         artifact = $artifactName
         sha256 = $hash
+        projectLicense = "MIT"
+        projectLicenseFile = "LICENSE"
+        thirdPartyNotices = "THIRD_PARTY_NOTICES.md"
         webview2 = "embedded-bootstrapper"
         bundle = $bundle
     }
     [IO.File]::WriteAllText((Join-Path $releaseDir "release-metadata.json"), ($metadata | ConvertTo-Json -Depth 8), $utf8)
+    Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination $releaseDir -Force
     Copy-Item -LiteralPath (Join-Path $repoRoot "THIRD_PARTY_NOTICES.md") -Destination $releaseDir -Force
     & (Join-Path $PSScriptRoot "verify-portable.ps1") -ReleaseDir $releaseDir
     Write-Host "Portable release ready: $releaseExe"

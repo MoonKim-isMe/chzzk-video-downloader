@@ -327,6 +327,18 @@ https://chzzk.naver.com/video/{videoNo}
 URL 입력 영역은 상단에 고정되고, 조회된 단일 VOD는 **좌측 16:9 썸네일 / 우측 영상 정보**의 상세 레이아웃으로 표시합니다. 우측에는 제목, 채널, 게시일, 재생시간, 조회수, 태그와 다운로드 추가 CTA를 표시합니다. 결과 영역은 독립 스크롤되며 900px 이하에서는 썸네일 위 / 영상 정보 아래의 1열로 전환됩니다.
 
 
+## 라이선스
+
+이 Repository에서 작성한 프로젝트 소스 코드는 **MIT License**로 배포합니다.
+
+- 프로젝트 라이선스: [LICENSE](./LICENSE)
+- 제3자 구성요소 및 배포 도구 고지: [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
+- 저작권 표기: `Copyright (c) 2026 MoonKim`
+
+프로젝트의 MIT License는 yt-dlp, FFmpeg/ffprobe, Microsoft Edge WebView2 및 Go/Frontend 의존성의 개별 라이선스를 변경하지 않습니다. 특히 Windows Portable 빌드에 포함되는 공식 `yt-dlp.exe`는 upstream 안내 기준 GPLv3+ 구성요소를 포함한 PyInstaller 배포본이며, FFmpeg/ffprobe는 현재 빌드 스크립트에서 `win64-lgpl` 배포물을 사용합니다. 정확한 구성과 출처는 `THIRD_PARTY_NOTICES.md` 및 각 릴리스의 `release-metadata.json`을 기준으로 확인합니다.
+
+Portable 릴리스 생성 시 `LICENSE`와 `THIRD_PARTY_NOTICES.md`를 함께 복사하며, 검증 스크립트는 두 파일과 project license metadata가 누락되면 릴리스를 실패 처리합니다.
+
 ## Windows Portable EXE 배포
 
 Windows에서는 다운로드 도구의 상태 확인·영상 다운로드/처리·취소용 백그라운드 프로세스를 콘솔 창 없이 실행합니다. 진행률과 오류 로그는 앱에서 계속 확인할 수 있습니다. 다른 PC에서 실행할 때도 이 설정이 적용되려면 수정된 코드로 Portable EXE를 다시 빌드해 교체합니다.
@@ -368,10 +380,11 @@ build/portable/v0.1.1/
   CHZZK-Video-Downloader-v0.1.1-portable.exe
   CHZZK-Video-Downloader-v0.1.1-portable.exe.sha256
   release-metadata.json
+  LICENSE
   THIRD_PARTY_NOTICES.md
 ```
 
-사용자는 **Portable EXE 하나를 내려받아 실행**합니다. 나머지 파일은 배포 무결성·도구 출처·라이선스 안내용으로 함께 게시하며, 실행에 필요한 외부 파일은 아닙니다. 앱 설치/제거, Setup EXE, NSIS, ZIP, UPX 압축은 사용하지 않습니다. 코드 서명도 현재 적용하지 않습니다.
+사용자는 **Portable EXE 하나를 내려받아 실행**할 수 있습니다. 릴리스에는 EXE와 함께 SHA-256, release metadata, 프로젝트 MIT `LICENSE`, 제3자 고지 `THIRD_PARTY_NOTICES.md`를 게시합니다. 이 문서 파일들은 실행 의존 파일은 아니지만 재배포 시 함께 제공하는 것을 기준으로 합니다. 앱 설치/제거, Setup EXE, NSIS, ZIP, UPX 압축은 사용하지 않습니다. 코드 서명도 현재 적용하지 않습니다.
 
 빌드 스크립트는 준비된 도구 3종의 SHA-256을 다시 확인한 뒤 빌드합니다. 빌드 결과의 제품명·버전·개인 배포자 `MoonKim`·저작권을 확인하고, EXE의 SHA-256 및 도구 bundle manifest를 기록합니다. 도구가 누락되거나 손상되면 빌드를 중단합니다.
 
