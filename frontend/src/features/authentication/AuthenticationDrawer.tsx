@@ -35,7 +35,6 @@ function AuthenticationDrawer({
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<AuthenticationSettings>();
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [updatingEnabled, setUpdatingEnabled] = useState(false);
   const [selectingFile, setSelectingFile] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -65,15 +64,23 @@ function AuthenticationDrawer({
   };
 
   const handleSelectCookiesFile = async () => {
+    const currentFile = form.getFieldValue('cookiesFilePath') ?? '';
+    const currentEnabled = form.getFieldValue('enabled') ?? false;
+
     setSelectingFile(true);
     try {
-      const currentFile = form.getFieldValue('cookiesFilePath') ?? '';
       const selected = await selectAuthenticationCookiesFile(currentFile);
-      if (selected) {
-        form.setFieldValue('cookiesFilePath', selected);
-        await form.validateFields(['cookiesFilePath']);
-      }
+      if (!selected) return;
+
+      const updated = await updateAuthenticationSettings({
+        enabled: currentEnabled,
+        cookiesFilePath: selected.trim(),
+      });
+      form.setFieldsValue(updated);
+      onAuthenticationUpdated(updated);
+      message.success('cookies.txt 경로를 저장했습니다.');
     } catch (cause) {
+      form.setFieldValue('cookiesFilePath', currentFile);
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSelectingFile(false);
@@ -106,26 +113,6 @@ function AuthenticationDrawer({
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const values = await form.validateFields();
-      const updated = await updateAuthenticationSettings({
-        ...values,
-        cookiesFilePath: values.cookiesFilePath?.trim() ?? '',
-      });
-      form.setFieldsValue(updated);
-      onAuthenticationUpdated(updated);
-      message.success(updated.enabled ? '토큰 인증을 사용하도록 저장했습니다.' : '인증 사용을 해제했습니다.');
-      handleClose();
-    } catch (cause) {
-      if (cause && typeof cause === 'object' && 'errorFields' in cause) return;
-      message.error(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <>
       <Drawer
@@ -135,14 +122,6 @@ function AuthenticationDrawer({
         open={open}
         onClose={handleClose}
         destroyOnHidden
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={handleClose} disabled={saving || updatingEnabled}>취소</Button>
-            <Button type="primary" loading={saving} disabled={loading || updatingEnabled} onClick={() => void handleSave()}>
-              저장
-            </Button>
-          </div>
-        }
       >
         {loading ? (
           <Skeleton active paragraph={{ rows: 6 }} />
@@ -160,7 +139,7 @@ function AuthenticationDrawer({
                   checkedChildren="사용"
                   unCheckedChildren="사용 안 함"
                   loading={updatingEnabled}
-                  disabled={loading || saving}
+                  disabled={loading || selectingFile}
                   onChange={(checked) => void handleEnabledChange(checked)}
                 />
               </Form.Item>
@@ -186,7 +165,7 @@ function AuthenticationDrawer({
                     <Button
                       type="text"
                       size="small"
-                      disabled={loading || saving || updatingEnabled}
+                      disabled={loading || updatingEnabled}
                       loading={selectingFile}
                       onClick={() => void handleSelectCookiesFile()}
                     >
