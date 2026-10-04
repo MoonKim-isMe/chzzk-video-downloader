@@ -954,13 +954,14 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-9. 헤더 상태를 비활성 시 `인증 미사용`, 활성 시 `토큰 인증`으로 표시
 - [x] SET-5E-10. 토큰 인증 Drawer의 기존 `cookies.txt` 생성 방법을 유지하되 파일 첫 줄 확인 항목만 제거하고 세션 만료/보안 안내를 하나의 주의사항 블록으로 구성
 - [x] SET-5E-11. 사용자 제공 화면을 포함한 Get cookies.txt LOCALLY 생성 도움말 Drawer 및 3단계 안내 구현
+- [x] SET-5E-12. 생성 도움말 진입 링크를 칩형 버튼으로 변경해 가시성 개선
 
 #### Phase 5-E 인증 기준
 
 - 인증 기능은 일반 설정 Drawer에 포함하지 않고 앱 헤더 우측의 별도 인증 버튼에서 관리한다.
 - 인증 방식은 `cookies.txt`를 사용하는 토큰 인증만 제공하며 브라우저 로그인 세션 직접 추출 기능은 제공하지 않는다.
-- 토큰 인증 Drawer의 `cookies.txt 생성 방법` 안내는 기존 문구를 유지하고 `파일 첫 줄이 # Netscape HTTP Cookie File 또는 # HTTP Cookie File인지 확인` 단계만 제외한다. 생성 도움말 진입 링크는 해당 안내 블록 하단에 배치한다.
-- 생성 도움말은 사용자 제공 Get cookies.txt LOCALLY 화면을 표시하고 CHZZK 페이지 열기/확장 프로그램 실행 → `Netscape` 선택 → `Export` 및 앱 파일 선택의 3단계로 안내한다.
+- 토큰 인증 Drawer의 `cookies.txt 생성 방법` 안내는 기존 문구를 유지하고 `파일 첫 줄이 # Netscape HTTP Cookie File 또는 # HTTP Cookie File인지 확인` 단계만 제외한다. 생성 도움말 진입 링크는 해당 안내 블록 하단에 칩형 버튼으로 배치한다.
+- 생성 도움말은 사용자 제공 Get cookies.txt LOCALLY 화면을 표시하고 CHZZK 로그인 후 임의의 라이브 혹은 영상 페이지 열기/확장 프로그램 실행 → `Netscape` 선택 → `Export` 및 앱 파일 선택의 3단계로 안내한다.
 - 별도의 파일 첫 줄 검사 단계는 사용자 안내에서 제외한다.
 - 토큰 인증 Drawer의 경고 블록에는 세션 만료 시 `cookies.txt` 재발급 안내와 로그인 세션 정보 공유 금지를 함께 표시한다.
 - 도움말 Drawer 하단에는 `주의사항`으로 cookies.txt 공유 금지와 현재 CHZZK 페이지의 `Export` 사용 기준을 명시한다.
