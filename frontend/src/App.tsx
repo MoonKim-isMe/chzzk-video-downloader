@@ -168,7 +168,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     ? '인증'
     : authenticationSettings?.mode === 'browser'
       ? `${authenticationBrowserLabels[authenticationSettings.browser]} 인증`
-      : 'cookies.txt 인증';
+      : '인증 토큰 인증';
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
