@@ -47,9 +47,14 @@ type App struct {
 	settingsApplyMu sync.Mutex
 	settingsStore   *appsettings.Store
 
+	authenticationMu      sync.Mutex
+	authenticationApplyMu sync.Mutex
+	authenticationStore   *appsettings.AuthenticationStore
+
 	shuttingDown atomic.Bool
 	eventEmitter    func(downloader.DownloadTask)
 	directoryPicker func(context.Context, runtime.OpenDialogOptions) (string, error)
+	filePicker      func(context.Context, runtime.OpenDialogOptions) (string, error)
 	folderOpener    func(string) error
 	fileOpener      func(string) error
 }
@@ -245,6 +250,63 @@ func (a *App) UpdateSettings(next appsettings.AppSettings) (appsettings.AppSetti
 	return updated, nil
 }
 
+func (a *App) GetAuthenticationSettings() (appsettings.AuthenticationSettings, error) {
+	store, err := a.ensureAuthenticationStore()
+	if err != nil {
+		return appsettings.AuthenticationSettings{}, err
+	}
+	return store.Get(), nil
+}
+
+func (a *App) UpdateAuthenticationSettings(next appsettings.AuthenticationSettings) (appsettings.AuthenticationSettings, error) {
+	a.authenticationApplyMu.Lock()
+	defer a.authenticationApplyMu.Unlock()
+
+	store, err := a.ensureAuthenticationStore()
+	if err != nil {
+		return appsettings.AuthenticationSettings{}, err
+	}
+
+	previous := store.Get()
+	updated, err := store.Update(next)
+	if err != nil {
+		return appsettings.AuthenticationSettings{}, err
+	}
+
+	if database := a.persistenceDatabase(); database != nil {
+		if err := database.SaveAuthenticationSettings(updated); err != nil {
+			_, _ = store.Update(previous)
+			return previous, err
+		}
+	}
+
+	return updated, nil
+}
+
+func (a *App) SelectAuthenticationCookiesFile(currentFile string) (string, error) {
+	currentFile = strings.TrimSpace(currentFile)
+	defaultDirectory := ""
+	if currentFile != "" {
+		defaultDirectory = filepath.Dir(filepath.Clean(currentFile))
+		if defaultDirectory == "." {
+			defaultDirectory = ""
+		}
+	}
+
+	picker := a.filePicker
+	if picker == nil {
+		picker = runtime.OpenFileDialog
+	}
+	selected, err := picker(a.appContext(), runtime.OpenDialogOptions{
+		Title:            "쿠키 파일 선택",
+		DefaultDirectory: defaultDirectory,
+	})
+	if err != nil {
+		return "", fmt.Errorf("쿠키 파일을 선택할 수 없습니다: %w", err)
+	}
+	return strings.TrimSpace(selected), nil
+}
+
 func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader.DownloadTask, error) {
 	store, err := a.ensureSettingsStore()
 	if err != nil {
@@ -255,6 +317,16 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 	if err != nil {
 		return downloader.DownloadTask{}, err
 	}
+
+	authenticationStore, err := a.ensureAuthenticationStore()
+	if err != nil {
+		return downloader.DownloadTask{}, err
+	}
+	request, err = downloader.ApplyAuthenticationSettings(request, authenticationStore.Get())
+	if err != nil {
+		return downloader.DownloadTask{}, err
+	}
+
 	if err := request.Validate(); err != nil {
 		return downloader.DownloadTask{}, err
 	}
@@ -511,6 +583,22 @@ func (a *App) ensureSettingsStore() (*appsettings.Store, error) {
 	return store, nil
 }
 
+func (a *App) ensureAuthenticationStore() (*appsettings.AuthenticationStore, error) {
+	a.authenticationMu.Lock()
+	defer a.authenticationMu.Unlock()
+
+	if a.authenticationStore != nil {
+		return a.authenticationStore, nil
+	}
+
+	store, err := appsettings.NewAuthenticationStore(appsettings.AuthenticationDefaults())
+	if err != nil {
+		return nil, err
+	}
+	a.authenticationStore = store
+	return store, nil
+}
+
 func (a *App) initializePersistence() error {
 	pathResolver := a.databasePath
 	if pathResolver == nil {
@@ -571,9 +659,28 @@ func (a *App) initializePersistence() error {
 		return fail(err)
 	}
 
+	authenticationValue, found, err := database.LoadAuthenticationSettings()
+	if err != nil {
+		return fail(err)
+	}
+	if !found {
+		authenticationValue = appsettings.AuthenticationDefaults()
+		if err := database.SaveAuthenticationSettings(authenticationValue); err != nil {
+			return fail(err)
+		}
+	}
+	authenticationStore, err := appsettings.NewAuthenticationStore(authenticationValue)
+	if err != nil {
+		return fail(err)
+	}
+
 	a.settingsMu.Lock()
 	a.settingsStore = store
 	a.settingsMu.Unlock()
+
+	a.authenticationMu.Lock()
+	a.authenticationStore = authenticationStore
+	a.authenticationMu.Unlock()
 
 	a.persistenceMu.Lock()
 	a.database = database

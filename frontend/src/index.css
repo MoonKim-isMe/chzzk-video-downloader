@@ -19,6 +19,12 @@
   --app-text-muted: #717b89;
   --app-primary: #00c471;
   --app-primary-soft: rgba(0, 196, 113, 0.12);
+  --auth-help-chip-bg: rgba(22, 119, 255, 0.12);
+  --auth-help-chip-border: rgba(105, 177, 255, 0.48);
+  --auth-help-chip-text: #91caff;
+  --auth-help-chip-hover-bg: rgba(22, 119, 255, 0.18);
+  --auth-help-chip-hover-border: rgba(105, 177, 255, 0.68);
+  --auth-help-chip-hover-text: #bae0ff;
   --app-shadow: 0 18px 46px rgba(0, 0, 0, 0.2);
 }
 
@@ -37,6 +43,12 @@
   --app-text-muted: #7a8794;
   --app-primary: #00a95f;
   --app-primary-soft: rgba(0, 169, 95, 0.1);
+  --auth-help-chip-bg: #f0f7ff;
+  --auth-help-chip-border: #91caff;
+  --auth-help-chip-text: #1677ff;
+  --auth-help-chip-hover-bg: #e6f4ff;
+  --auth-help-chip-hover-border: #69b1ff;
+  --auth-help-chip-hover-text: #0958d9;
   --app-shadow: 0 18px 44px rgba(24, 39, 55, 0.08);
 }
 
@@ -184,7 +196,53 @@ select {
 }
 
 .app-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   justify-self: end;
+}
+
+.authentication-header-button {
+  display: inline-flex !important;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: var(--app-text-secondary) !important;
+  box-shadow: none !important;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.authentication-header-button:hover,
+.authentication-header-button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 55%, var(--app-border)) !important;
+  background: var(--app-border-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.authentication-header-button.is-active {
+  border-color: color-mix(in srgb, var(--app-primary) 50%, var(--app-border)) !important;
+  background: var(--app-primary-soft) !important;
+  color: var(--app-primary) !important;
+}
+
+.authentication-header-button .ant-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.authentication-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .settings-icon-button {
@@ -1286,4 +1344,26 @@ select {
 :root[data-theme="light"] .url-video-thumbnail,
 :root[data-theme="light"] .download-task-thumbnail {
   background: #edf1f4;
+}
+
+.authentication-help-chip {
+  border-color: var(--auth-help-chip-border) !important;
+  background: var(--auth-help-chip-bg) !important;
+  color: var(--auth-help-chip-text) !important;
+}
+
+.authentication-help-chip:hover,
+.authentication-help-chip:focus-visible {
+  border-color: var(--auth-help-chip-hover-border) !important;
+  background: var(--auth-help-chip-hover-bg) !important;
+  color: var(--auth-help-chip-hover-text) !important;
+}
+
+.authentication-info-alert .ant-alert-icon,
+.authentication-warning-alert .ant-alert-icon {
+  align-self: flex-start;
+  margin-top: 6px !important;
+  margin-inline-end: 8px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
 }

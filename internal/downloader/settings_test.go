@@ -111,6 +111,31 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	}
 }
 
+func TestApplyAuthenticationSettingsSnapshotsCookiesFile(t *testing.T) {
+	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
+	request, err := ApplyAuthenticationSettings(StartDownloadRequest{}, appsettings.AuthenticationSettings{
+		Enabled: true, CookiesFilePath: cookiesFile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Authentication.CookiesFilePath != cookiesFile {
+		t.Fatalf("unexpected authentication snapshot: %#v", request.Authentication)
+	}
+}
+
+func TestApplyAuthenticationSettingsDisabledClearsAuthentication(t *testing.T) {
+	request, err := ApplyAuthenticationSettings(StartDownloadRequest{
+		Authentication: AuthenticationOptions{CookiesFilePath: filepath.Join(t.TempDir(), "cookies.txt")},
+	}, appsettings.AuthenticationDefaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Authentication != (AuthenticationOptions{}) {
+		t.Fatalf("disabled authentication should clear snapshot: %#v", request.Authentication)
+	}
+}
+
 func TestApplySettingsRejectsInvalidSettings(t *testing.T) {
 	_, err := ApplySettings(StartDownloadRequest{}, appsettings.AppSettings{
 		DownloadDir:            t.TempDir(),

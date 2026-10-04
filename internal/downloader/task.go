@@ -20,17 +20,18 @@ const (
 )
 
 type StartDownloadRequest struct {
-	VideoNo           int64  `json:"videoNo"`
-	VideoTitle        string `json:"videoTitle"`
-	ChannelName       string `json:"channelName"`
-	ThumbnailImageURL string `json:"thumbnailImageUrl"`
-	URL               string `json:"url"`
-	OutputDir         string `json:"outputDir"`
-	FormatSelector    string `json:"formatSelector,omitempty"`
-	OutputTemplate      string `json:"outputTemplate,omitempty"`
-	OutputFormat            string `json:"outputFormat,omitempty"`
-	ConcurrentFragments     int    `json:"concurrentFragments,omitempty"`
-	RateLimitBytesPerSecond int64  `json:"rateLimitBytesPerSecond,omitempty"`
+	VideoNo                 int64                 `json:"videoNo"`
+	VideoTitle              string                `json:"videoTitle"`
+	ChannelName             string                `json:"channelName"`
+	ThumbnailImageURL       string                `json:"thumbnailImageUrl"`
+	URL                     string                `json:"url"`
+	OutputDir               string                `json:"outputDir"`
+	FormatSelector          string                `json:"formatSelector,omitempty"`
+	OutputTemplate          string                `json:"outputTemplate,omitempty"`
+	OutputFormat            string                `json:"outputFormat,omitempty"`
+	ConcurrentFragments     int                   `json:"concurrentFragments,omitempty"`
+	RateLimitBytesPerSecond int64                 `json:"rateLimitBytesPerSecond,omitempty"`
+	Authentication          AuthenticationOptions `json:"authentication,omitempty"`
 }
 
 type DownloadTask struct {
@@ -77,6 +78,7 @@ func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 		OutputFormat:            r.OutputFormat,
 		ConcurrentFragments:     r.ConcurrentFragments,
 		RateLimitBytesPerSecond: r.RateLimitBytesPerSecond,
+		Authentication:          r.Authentication,
 	}
 }
 

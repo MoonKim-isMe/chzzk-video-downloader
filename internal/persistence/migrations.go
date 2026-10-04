@@ -137,6 +137,17 @@ var migrations = []migration{
 				WHERE id = 1`,
 		},
 	},
+	{
+		version: 8,
+		statements: []string{
+			`CREATE TABLE IF NOT EXISTS authentication_settings (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				enabled INTEGER NOT NULL DEFAULT 0,
+				cookies_file_path TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL
+			)`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

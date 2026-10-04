@@ -21,13 +21,14 @@ const (
 var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
 
 type DownloadRequest struct {
-	URL                 string `json:"url"`
-	OutputDir           string `json:"outputDir"`
-	FormatSelector      string `json:"formatSelector,omitempty"`
-	OutputTemplate      string `json:"outputTemplate,omitempty"`
-	OutputFormat            string `json:"outputFormat,omitempty"`
-	ConcurrentFragments     int    `json:"concurrentFragments,omitempty"`
-	RateLimitBytesPerSecond int64  `json:"rateLimitBytesPerSecond,omitempty"`
+	URL                     string                `json:"url"`
+	OutputDir               string                `json:"outputDir"`
+	FormatSelector          string                `json:"formatSelector,omitempty"`
+	OutputTemplate          string                `json:"outputTemplate,omitempty"`
+	OutputFormat            string                `json:"outputFormat,omitempty"`
+	ConcurrentFragments     int                   `json:"concurrentFragments,omitempty"`
+	RateLimitBytesPerSecond int64                 `json:"rateLimitBytesPerSecond,omitempty"`
+	Authentication          AuthenticationOptions `json:"authentication,omitempty"`
 }
 
 type CommandSpec struct {
@@ -129,6 +130,10 @@ func buildDownloadCommandWithTempDir(
 	}
 	if rateLimitBytesPerSecond > 0 {
 		args = append(args, "--limit-rate", strconv.FormatInt(rateLimitBytesPerSecond, 10))
+	}
+	args, err = appendAuthenticationArgs(args, request.Authentication)
+	if err != nil {
+		return CommandSpec{}, err
 	}
 	if useFFmpegHLS {
 		args = append(

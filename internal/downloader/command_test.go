@@ -107,6 +107,23 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 	}
 }
 
+func TestBuildDownloadCommandAppliesCookiesFileAuthentication(t *testing.T) {
+	cookiesFile := filepath.Join(t.TempDir(), "cookies.txt")
+	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:       "https://chzzk.naver.com/video/12345",
+		OutputDir: t.TempDir(),
+		Authentication: AuthenticationOptions{
+			CookiesFilePath: cookiesFile,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasArgumentPair(spec.Args, "--cookies", cookiesFile) {
+		t.Fatalf("cookies file authentication argument missing: %#v", spec.Args)
+	}
+}
+
 func TestBuildDownloadCommandRejectsUnsupportedConcurrentFragments(t *testing.T) {
 	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
 		URL:                 "https://chzzk.naver.com/video/12345",

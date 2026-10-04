@@ -941,6 +941,66 @@ Validation:
 
 Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Windows/Wails/외부 도구 검증은 배포 환경 통합 검증으로 유지한다.
 
+## Phase 5-E — 인증 세션 다운로드
+
+- [x] SET-5E-1. `cookies.txt` 토큰 인증 모델을 일반 다운로드 설정과 분리하고 기본값/Validation 구현
+- [x] SET-5E-2. 상단 헤더에 별도 인증 버튼과 전용 Drawer 구현
+- [x] SET-5E-3. `cookies.txt` 파일 선택 기반 토큰 인증 UI 구현
+- [x] SET-5E-4. 인증 설정 SQLite 영속화 및 migration 8 추가
+- [x] SET-5E-5. Queue 등록 시 `cookies.txt` 경로를 DownloadRequest Snapshot으로 고정
+- [x] SET-5E-6. 일반 다운로드와 HLS probe/구간 분할/ffmpeg fallback의 모든 yt-dlp 호출에 동일 `--cookies` 인자 적용
+- [x] SET-5E-7. 실패 로그의 `--cookies` 경로 마스킹
+- [ ] SET-5E-8. 실제 Windows에서 `cookies.txt` 토큰 인증 다운로드 검증
+- [x] SET-5E-9. 헤더 상태를 비활성 시 `인증 미사용`, 활성 시 `토큰 인증`으로 표시
+- [x] SET-5E-10. 토큰 인증 Drawer의 기존 `cookies.txt` 생성 방법을 유지하되 파일 첫 줄 확인 항목만 제거하고 세션 만료/보안 안내를 하나의 주의사항 블록으로 구성
+- [x] SET-5E-11. 사용자 제공 화면을 포함한 Get cookies.txt LOCALLY 생성 도움말 Drawer 및 3단계 안내 구현
+- [x] SET-5E-12. 생성 도움말 진입 링크를 칩형 버튼으로 변경해 가시성 개선
+- [x] SET-5E-13. 주의사항 두 문장을 bullet 목록으로 표시해 항목 구분 강화
+- [x] SET-5E-14. 파일 선택 영역 라벨을 `cookies.txt 경로 설정`으로 명확화
+- [x] SET-5E-15. 생성 도움말 칩 버튼을 하늘색 배경/파란색 윤곽선으로 강조
+- [x] SET-5E-16. 인증 안내 info/exclamation 아이콘 크기를 축소
+- [x] SET-5E-17. 인증 안내 아이콘의 제목 정렬을 보정하고 도움말 칩 색상을 다크/라이트 테마 변수로 분리
+- [x] SET-5E-18. 인증 Drawer 문구를 `인증 설정`/`인증파일 사용`/`인증기능 사용` 기준으로 정리하고 Alert 아이콘 정렬 재보정
+- [x] SET-5E-19. `cookies.txt 생성 방법` info 및 `주의사항` exclamation 아이콘 상단 마진을 6px로 통일
+- [ ] SET-5E-20. cookies.txt 도움말 이미지 경로를 `frontend/src/assets/cookies-txt-guide.png`로 변경 — PNG 파일 직접 추가 대기
+
+#### Phase 5-E 인증 기준
+
+- 인증 기능은 일반 설정 Drawer에 포함하지 않고 앱 헤더 우측의 별도 인증 버튼에서 관리한다.
+- 인증 Drawer 제목은 `인증 설정`, 섹션 제목은 `인증파일 사용`, 스위치 라벨은 `인증기능 사용`으로 표시한다.
+- 인증 방식은 `cookies.txt`를 사용하는 토큰 인증만 제공하며 브라우저 로그인 세션 직접 추출 기능은 제공하지 않는다.
+- 토큰 인증 Drawer의 `cookies.txt 생성 방법` 안내는 기존 문구를 유지하고 `파일 첫 줄이 # Netscape HTTP Cookie File 또는 # HTTP Cookie File인지 확인` 단계만 제외한다. 생성 도움말 진입 링크는 해당 안내 블록 하단에 칩형 버튼으로 배치한다.
+- 생성 도움말은 사용자 제공 Get cookies.txt LOCALLY 화면을 표시하고 CHZZK 로그인 후 임의의 라이브 혹은 영상 페이지 열기/확장 프로그램 실행 → `Netscape` 선택 → `Export` 및 앱 파일 선택의 3단계로 안내한다.
+- 별도의 파일 첫 줄 검사 단계는 사용자 안내에서 제외한다.
+- 토큰 인증 Drawer의 경고 블록에는 세션 만료 시 `cookies.txt` 재발급 안내와 로그인 세션 정보 공유 금지를 각각 bullet 항목으로 표시한다.
+- 도움말 Drawer 하단에는 `주의사항`으로 cookies.txt 공유 금지와 현재 CHZZK 페이지의 `Export` 사용 기준을 명시한다.
+- 인증이 비활성화된 경우 헤더 버튼은 `인증 미사용`, 활성화된 경우 `토큰 인증`으로 표시한다.
+- `cookies.txt` 파일 자체를 데이터베이스에 복사하지 않고 선택한 파일 경로만 저장하며 yt-dlp `--cookies`에 전달한다.
+- 인증 토큰/쿠키 원문은 앱 설정이나 다운로드 이력에 별도로 저장하지 않는다.
+- Queue에 등록된 작업은 등록 시점의 `cookies.txt` 경로 Snapshot을 유지하고, 이후 인증 설정 변경은 새 작업부터 적용한다.
+- HLS fallback의 format probe, split format probe, 구간 다운로드, ffmpeg downloader 재시도에도 최초 작업과 동일한 인증 Snapshot을 사용한다.
+- 다운로드 오류 로그에서 `--cookies`의 파일 경로와 URL의 민감 query/fragment를 마스킹한다.
+
+#### Phase 5-E 검증 현황
+
+구현/정적 확인 완료:
+
+- 인증 데이터가 AppSettings와 분리된 별도 모델/Store/API/SQLite 테이블을 사용하는 구조 확인
+- 일반 Settings 저장이 인증 값을 덮어쓰지 않는 독립 저장 경계 확인
+- 활성화된 토큰 인증은 yt-dlp `--cookies path`로 변환되고 비활성화 시 인증 인자를 전달하지 않는 구조 확인
+- 일반 다운로드와 세 가지 HLS 대체 실행 경로에 공통 인증 옵션 전달 확인
+- 진단 로그의 command line과 verbose process output에서 `--cookies` 파일 경로 마스킹 경로 확인
+- 브라우저 선택/프로필/`--cookies-from-browser` 관련 설정 및 실행 경로 제거
+- 토큰 인증 Drawer의 기존 `cookies.txt 생성 방법` 문구 유지, 파일 첫 줄 확인 항목 제거, 생성 도움말 링크 및 단일 경고 블록 구조 확인
+- 사용자 제공 이미지 asset과 Get cookies.txt LOCALLY 3단계 도움말 Drawer 연결 확인
+
+실 환경 검증 대기:
+
+- 실제 Windows Wails binding 생성 및 앱 실행
+- 실제 Netscape 형식 `cookies.txt` 선택 및 인증 필요 VOD 다운로드
+- Node.js 24 + Yarn 기반 frontend typecheck/build
+- Repository 전체 Go test/race/vet 및 Wails build
+
 ## Phase 6 — Persistence 및 UX Refinement
 
 ### Phase 6-P — Persistence

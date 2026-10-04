@@ -16,7 +16,15 @@ const (
 	maxDiagnosticLines       = 400
 )
 
-var diagnosticURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
+var (
+	diagnosticURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
+	diagnosticSensitiveOptionPattern = regexp.MustCompile(
+		`(?i)(--(?:cookies|username|password|proxy|netrc-location))(?:=|\s+)(?:"[^"]*"|'[^']*'|[^\s,\]]+)`,
+	)
+	diagnosticSensitiveListOptionPattern = regexp.MustCompile(
+		`(?i)(['"]--(?:cookies|username|password|proxy|netrc-location)['"]\s*,\s*)(['"][^'"]*['"])`,
+	)
+)
 
 func appendDiagnosticLine(lines []OutputLine, line OutputLine) []OutputLine {
 	line.Text = redactDiagnosticText(line.Text)
@@ -115,8 +123,7 @@ func writeDownloadFailureLog(
 func redactCommandArgs(args []string) []string {
 	redacted := append([]string(nil), args...)
 	sensitive := map[string]struct{}{
-		"--cookies":              {},
-		"--cookies-from-browser": {},
+		"--cookies":        {},
 		"--username":             {},
 		"--password":             {},
 		"--proxy":                {},
@@ -146,6 +153,9 @@ func redactCommandArgs(args []string) []string {
 
 
 func redactDiagnosticText(text string) string {
+	text = diagnosticSensitiveListOptionPattern.ReplaceAllString(text, "$1'<redacted>'")
+	text = diagnosticSensitiveOptionPattern.ReplaceAllString(text, "$1 <redacted>")
+
 	return diagnosticURLPattern.ReplaceAllStringFunc(text, func(raw string) string {
 		core, suffix := splitDiagnosticURLSuffix(raw)
 		parsed, err := url.Parse(core)

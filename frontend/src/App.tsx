@@ -11,12 +11,14 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import SavedChannels from './components/SavedChannels';
+import AuthenticationDrawer from './features/authentication/AuthenticationDrawer';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
 import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
 import VideoUrlTab from './features/videos/VideoUrlTab';
 import {
+  getAuthenticationSettings,
   getDownloadTasks,
   getSavedChannels,
   getSettings,
@@ -26,6 +28,7 @@ import {
 } from './lib/backend';
 import { mergeDownloadTaskSnapshot, upsertDownloadTask } from './lib/downloadTasks';
 import { onDownloadState } from './lib/runtime';
+import type { AuthenticationSettings } from './types/authentication';
 import type { Channel } from './types/channel';
 import type { DownloadTask, DownloadTaskStatus } from './types/download';
 import type { AppSettings, ThemeMode } from './types/settings';
@@ -43,6 +46,16 @@ const navigationItems: Array<{ key: AppTab; label: string }> = [
 ];
 
 const messageTopOffset = 84;
+
+function AuthenticationIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      <path d="M12 14v2" />
+    </svg>
+  );
+}
 
 function SettingsIcon() {
   return (
@@ -78,6 +91,8 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const hiddenDownloadTaskIds = useRef(new Set<string>());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [authenticationOpen, setAuthenticationOpen] = useState(false);
+  const [authenticationSettings, setAuthenticationSettings] = useState<AuthenticationSettings>();
 
   useEffect(() => {
     getSavedChannels()
@@ -85,6 +100,20 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       .catch((cause) => {
         message.error(cause instanceof Error ? cause.message : String(cause));
       });
+  }, [message]);
+
+  useEffect(() => {
+    let active = true;
+    getAuthenticationSettings()
+      .then((settings) => {
+        if (active) setAuthenticationSettings(settings);
+      })
+      .catch((cause) => {
+        if (active) message.error(cause instanceof Error ? cause.message : String(cause));
+      });
+    return () => {
+      active = false;
+    };
   }, [message]);
 
   useEffect(() => {
@@ -124,6 +153,9 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       unsubscribe();
     };
   }, [message]);
+
+  const authenticationEnabled = authenticationSettings?.enabled ?? false;
+  const authenticationButtonLabel = authenticationEnabled ? '토큰 인증' : '인증 미사용';
 
   const savedChannelIds = useMemo(
     () => new Set(savedChannels.map((channel) => channel.channelId)),
@@ -305,6 +337,21 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         </nav>
 
         <div className="app-header-actions">
+          <Tooltip
+            title={authenticationEnabled ? `${authenticationButtonLabel} 사용 중` : '인증'}
+            placement="bottom"
+          >
+            <Button
+              aria-label="인증 열기"
+              type="default"
+              className={`authentication-header-button ${authenticationEnabled ? 'is-active' : ''}`}
+              icon={<AuthenticationIcon />}
+              onClick={() => setAuthenticationOpen(true)}
+            >
+              <span className="authentication-button-label">{authenticationButtonLabel}</span>
+              {authenticationEnabled && <span className="authentication-status-dot" aria-hidden="true" />}
+            </Button>
+          </Tooltip>
           <Tooltip title="설정" placement="bottom">
             <Button
               aria-label="설정 열기"
@@ -320,6 +367,12 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       <Content className="app-content">
         <main className="app-content-inner">{content}</main>
       </Content>
+
+      <AuthenticationDrawer
+        open={authenticationOpen}
+        onClose={() => setAuthenticationOpen(false)}
+        onAuthenticationUpdated={setAuthenticationSettings}
+      />
 
       <SettingsDrawer
         open={settingsOpen}

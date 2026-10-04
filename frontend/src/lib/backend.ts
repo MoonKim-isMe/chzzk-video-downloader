@@ -1,3 +1,4 @@
+import type { AuthenticationSettings } from '../types/authentication';
 import type { Channel, ChannelSearchResult } from '../types/channel';
 import type {
   DownloadTask,
@@ -17,6 +18,9 @@ interface BackendApp {
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
   SelectDownloadDirectory(currentDirectory: string): Promise<string>;
+  GetAuthenticationSettings(): Promise<AuthenticationSettings>;
+  UpdateAuthenticationSettings(settings: AuthenticationSettings): Promise<AuthenticationSettings>;
+  SelectAuthenticationCookiesFile(currentFile: string): Promise<string>;
   GetSettings(): Promise<AppSettings>;
   UpdateSettings(settings: AppSettings): Promise<AppSettings>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
@@ -64,6 +68,14 @@ export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
 
 export const selectDownloadDirectory = (currentDirectory: string) =>
   app().SelectDownloadDirectory(currentDirectory);
+
+export const getAuthenticationSettings = () => app().GetAuthenticationSettings();
+
+export const updateAuthenticationSettings = (settings: AuthenticationSettings) =>
+  app().UpdateAuthenticationSettings(settings);
+
+export const selectAuthenticationCookiesFile = (currentFile: string) =>
+  app().SelectAuthenticationCookiesFile(currentFile);
 
 export const getSettings = () => app().GetSettings();
 
