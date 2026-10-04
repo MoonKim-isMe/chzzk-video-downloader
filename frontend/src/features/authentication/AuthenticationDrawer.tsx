@@ -171,22 +171,23 @@ function AuthenticationDrawer({
                 className="!mb-3"
                 message="cookies.txt 생성 방법"
                 description={
-                  <ol className="!mb-0 !mt-2 list-decimal space-y-1 pl-4">
-                    <li>브라우저에서 CHZZK에 로그인한 뒤 다운로드할 영상 페이지를 한 번 열어 주세요.</li>
-                    <li>쿠키 내보내기 기능 또는 신뢰할 수 있는 확장 프로그램으로 CHZZK 쿠키를 내보내세요.</li>
-                    <li>파일은 Mozilla/Netscape 형식의 <code>cookies.txt</code>로 저장되어야 합니다.</li>
-                    <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
-                  </ol>
+                  <div>
+                    <ol className="!mb-0 !mt-2 list-decimal space-y-1 pl-4">
+                      <li>브라우저에서 CHZZK에 로그인한 뒤 다운로드할 영상 페이지를 한 번 열어 주세요.</li>
+                      <li>쿠키 내보내기 기능 또는 신뢰할 수 있는 확장 프로그램으로 CHZZK 쿠키를 내보내세요.</li>
+                      <li>파일은 Mozilla/Netscape 형식의 <code>cookies.txt</code>로 저장되어야 합니다.</li>
+                      <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
+                    </ol>
+                    <Button
+                      type="link"
+                      className="!mt-2 !h-auto !p-0 !text-xs"
+                      onClick={() => setHelpOpen(true)}
+                    >
+                      Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요
+                    </Button>
+                  </div>
                 }
               />
-
-              <Button
-                type="link"
-                className="!h-auto !p-0 !text-xs"
-                onClick={() => setHelpOpen(true)}
-              >
-                Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요
-              </Button>
 
               <Alert
                 type="warning"
