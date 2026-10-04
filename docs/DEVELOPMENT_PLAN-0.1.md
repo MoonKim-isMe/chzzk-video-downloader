@@ -592,7 +592,7 @@ Windows 검증 대기:
 - Download Manager 상단에는 전체/대기/진행/완료/실패 개수 요약을 표시한다.
 - 각 Task 카드에는 썸네일, 채널명, 제목, 상태, Queue 순서, 진행률, 다운로드 크기/전체 크기, 속도, ETA, 저장 위치 또는 최종 파일 경로를 표시한다.
 - queued/running Task는 각 카드에서 개별 취소할 수 있다.
-- 완료 섹션에서는 채워진 danger 스타일의 `완료 목록 비우기 (N)` 버튼으로 completed Task 일괄 삭제를 개별 항목 삭제와 시각적으로 구분한다. 버튼 클릭 시 별도 확인 단계 없이 즉시 실행하며, 각 항목은 기존 `DeleteDownloadTask` 경로를 재사용하고 성공한 Task만 즉시 UI에서 제거한다.
+- 완료 섹션에서는 중립 스타일의 `완료 목록 삭제` 버튼으로 completed Task 일괄 삭제를 제공한다. 버튼 클릭 시 별도 확인 단계 없이 즉시 실행하며, 각 항목은 기존 `DeleteDownloadTask` 경로를 재사용하고 성공한 Task만 즉시 UI에서 제거한다.
 - failed Task는 오류 메시지, cancelled Task는 취소 상태를 카드 내부에 표시한다.
 
 #### Phase 4-C 검증 현황

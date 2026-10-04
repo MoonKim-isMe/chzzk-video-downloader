@@ -543,13 +543,11 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
               onTaskRecovered={onTaskRecovered}
               action={(
                 <Button
-                  danger
-                  type="primary"
                   size="small"
                   loading={deletingCompleted}
                   onClick={() => void handleDeleteCompleted()}
                 >
-                  완료 목록 비우기 ({completedTasks.length})
+                  완료 목록 삭제
                 </Button>
               )}
             />
