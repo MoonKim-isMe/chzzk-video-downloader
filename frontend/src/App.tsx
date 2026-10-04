@@ -165,7 +165,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
 
   const authenticationEnabled = authenticationSettings?.enabled ?? false;
   const authenticationButtonLabel = !authenticationEnabled
-    ? '인증'
+    ? '인증 미사용'
     : authenticationSettings?.mode === 'browser'
       ? `${authenticationBrowserLabels[authenticationSettings.browser]} 인증`
       : '인증 토큰 인증';
