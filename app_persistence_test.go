@@ -34,6 +34,7 @@ func TestInitializePersistenceRestoresChannelsSettingsAndHistory(t *testing.T) {
 		Resolution:             appsettings.Resolution1440p,
 		OutputFormat:           appsettings.OutputFormatMKV,
 		DownloadAcceleration:   appsettings.DownloadAccelerationUltra,
+		DownloadRateLimitMBps:   12.5,
 		MaxConcurrentDownloads: 3,
 		Theme:                  appsettings.ThemeLight,
 	}
@@ -153,6 +154,7 @@ func TestUpdateSettingsPersistsStorageRecord(t *testing.T) {
 		Resolution:             appsettings.Resolution720p,
 		OutputFormat:           appsettings.OutputFormatWebM,
 		DownloadAcceleration:   appsettings.DownloadAccelerationStable,
+		DownloadRateLimitMBps:   8.75,
 		MaxConcurrentDownloads: 2,
 		Theme:                  appsettings.ThemeLight,
 	}

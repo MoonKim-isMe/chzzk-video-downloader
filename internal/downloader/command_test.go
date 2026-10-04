@@ -39,6 +39,9 @@ func TestBuildDownloadCommand(t *testing.T) {
 	if !slices.Contains(spec.Env, "PYTHONIOENCODING="+ytDLPOutputEncoding) {
 		t.Fatalf("yt-dlp UTF-8 environment missing: %#v", spec.Env)
 	}
+	if slices.Contains(spec.Args, "--limit-rate") {
+		t.Fatalf("unlimited download must omit --limit-rate: %#v", spec.Args)
+	}
 	expectedTempDir, err := nativeTemporaryDownloadDir(filepath.Join(dir, "downloads"), 12345)
 	if err != nil {
 		t.Fatal(err)
@@ -75,8 +78,9 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 		URL:                 "https://chzzk.naver.com/video/12345",
 		OutputDir:           t.TempDir(),
 		FormatSelector:      "bv*[height<=1080]+ba/b[height<=1080]",
-		OutputFormat:        "MKV",
-		ConcurrentFragments: 8,
+		OutputFormat:            "MKV",
+		ConcurrentFragments:     8,
+		RateLimitBytesPerSecond: 12_500_000,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -87,6 +91,7 @@ func TestBuildDownloadCommandAppliesFormatSelectorAndOutputContainer(t *testing.
 		{"--merge-output-format", "mkv"},
 		{"--remux-video", "mkv"},
 		{"--concurrent-fragments", "8"},
+		{"--limit-rate", "12500000"},
 	}
 	for _, pair := range expectedPairs {
 		found := false
@@ -110,6 +115,17 @@ func TestBuildDownloadCommandRejectsUnsupportedConcurrentFragments(t *testing.T)
 	})
 	if err == nil {
 		t.Fatal("expected concurrent fragments validation error")
+	}
+}
+
+func TestBuildDownloadCommandRejectsNegativeRateLimit(t *testing.T) {
+	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		URL:                     "https://chzzk.naver.com/video/12345",
+		OutputDir:               t.TempDir(),
+		RateLimitBytesPerSecond: -1,
+	})
+	if err == nil {
+		t.Fatal("expected rate limit validation error")
 	}
 }
 

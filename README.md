@@ -222,7 +222,7 @@ Phase 4-A 기준으로 Phase 3의 단일 다운로드 엔진을 FIFO Download Qu
 
 ## Phase 4 Scheduler 기준
 
-Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있습니다. 현재 앱 기본값은 1이며 UI 설정은 아직 제공하지 않습니다.
+Phase 4-D부터 Queue는 `maxConcurrent`를 런타임에 변경할 수 있으며, 현재 앱 기본값은 3입니다. Phase 5 Settings UI에서 1~8 범위로 변경할 수 있습니다.
 
 - 값을 늘리면 사용 가능한 슬롯만큼 대기 작업을 즉시 실행합니다.
 - 값을 줄여도 이미 실행 중인 작업은 중단하지 않습니다.
@@ -238,13 +238,15 @@ Settings는 SQLite에 저장되며 앱 재시작 후 자동으로 복원됩니�
 - 다운로드 경로: `Downloads/CHZZK Video Downloader`
 - 해상도: `best`
 - 출력 포맷: `mp4`
-- 동시 다운로드 수: `1`
+- 다운로드 가속: `standard` (fragment 2개)
+- 다운로드 속도 제한: `0 MB/s` (제한 없음)
+- 동시 다운로드 수: `3`
 
 지원 해상도는 `best / 2160p / 1440p / 1080p / 720p`, 출력 포맷은 `mp4 / mkv / webm`이며 동시 다운로드 수는 `1~8` 범위입니다.
 
 ## Phase 5-B 다운로드 설정 적용
 
-Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포맷을 Snapshot으로 고정합니다. 이후 Settings를 변경해도 이미 queued/running인 작업은 기존 옵션을 유지하며 새로 등록한 작업부터 새 값을 사용합니다.
+Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포맷, 다운로드 가속, 다운로드 속도 제한을 Snapshot으로 고정합니다. 이후 Settings를 변경해도 이미 queued/running인 작업은 기존 옵션을 유지하며 새로 등록한 작업부터 새 값을 사용합니다.
 
 해상도 선택은 yt-dlp `--format`의 최대 height 조건으로 적용합니다.
 
@@ -254,7 +256,7 @@ Queue에 VOD를 추가하는 순간 다운로드 경로, 해상도, 출력 포�
 - 1080p: `bv*[height<=1080]+ba/b[height<=1080]`
 - 720p: `bv*[height<=720]+ba/b[height<=720]`
 
-출력 포맷은 `mp4 / mkv / webm`을 지원하며 yt-dlp의 `--merge-output-format`과 `--remux-video`를 함께 사용합니다. 동시 다운로드 수는 Snapshot이 아니라 Queue Scheduler 전역 설정으로 즉시 반영됩니다.
+출력 포맷은 `mp4 / mkv / webm`을 지원하며 yt-dlp의 `--merge-output-format`과 `--remux-video`를 함께 사용합니다. 다운로드 속도 제한은 각 작업별 MB/s 값을 1,000,000 bytes/s로 변환해 yt-dlp `--limit-rate`에 적용하며, `0`이면 옵션을 생략합니다. 동시 다운로드 수는 Snapshot이 아니라 Queue Scheduler 전역 설정으로 즉시 반영됩니다.
 
 ## Phase 5-C Settings UI
 
@@ -265,6 +267,8 @@ Drawer에서는 다음 값을 편집합니다.
 - 다운로드 폴더: Wails native directory dialog로 선택
 - 해상도: 최고 화질 / 2160p / 1440p / 1080p / 720p 이하
 - 출력 포맷: MP4 / MKV / WebM
+- 다운로드 가속: 안정 (1) / 기본 (2) / 고속 (4) / 초고속 (8)
+- 다운로드 속도 제한: 0 이상, MB/s 단위 (0은 제한 없음)
 - 동시 다운로드 수: 1~8
 
 Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다. 저장 시 프론트 Form Validation 후 `UpdateSettings`를 호출하며, 현재는 SQLite에 저장되어 앱 재시작 후에도 유지됩니다.
@@ -273,14 +277,14 @@ Drawer가 열릴 때마다 백엔드의 현재 설정을 다시 조회합니다.
 
 Phase 5-D에서 Settings와 Queue의 적용 시점을 최종 확정했습니다.
 
-- 다운로드 경로/해상도/출력 포맷은 Queue 등록 순간 Snapshot으로 고정합니다.
+- 다운로드 경로/해상도/출력 포맷/다운로드 가속/다운로드 속도 제한은 Queue 등록 순간 Snapshot으로 고정합니다.
 - 실행 중이거나 대기 중인 작업은 이후 Settings 변경의 영향을 받지 않습니다.
 - 변경 후 새로 등록한 작업부터 새 다운로드 옵션을 사용합니다.
 - 동시 다운로드 수는 Scheduler 전역 설정으로 즉시 반영됩니다.
 - 동시 다운로드 수를 낮춰도 현재 실행 중인 작업은 종료하지 않습니다.
 - 지원하는 5개 해상도와 3개 컨테이너의 15개 조합을 동일한 Command Builder 경로로 처리합니다.
 
-설정 영속화는 `internal/settings.StorageRecord` v2를 기준으로 합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `maxConcurrentDownloads`, `theme`이며 v1 설정은 Dark 테마로 호환 복원합니다.
+설정 영속화는 `internal/settings.StorageRecord` v4를 기준으로 합니다. 저장 필드는 `schemaVersion`, `downloadDir`, `resolution`, `outputFormat`, `downloadAcceleration`, `downloadRateLimitMBps`, `maxConcurrentDownloads`, `theme`이며 이전 버전 설정은 누락 필드를 기본값으로 호환 복원합니다.
 
 ## Phase 6-P SQLite Persistence
 
