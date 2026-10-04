@@ -969,6 +969,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-24. `cookies.txt` 파일 선택 즉시 경로를 저장·반영하고 인증 Drawer의 별도 저장/취소 버튼 제거
 - [x] SET-5E-25. 저장된 인증 설정이 `enabled=true`/빈 경로인 경우 시작 시 인증을 비활성화해 SQLite를 자동 복구하고 Persistence 전체 초기화 실패 방지
 - [x] SET-5E-26. 선택 채널 VOD 목록이 표시된 상태에서 인증 사용 여부가 변경되면 VOD 첫 페이지를 즉시 재조회
+- [x] SET-5E-27. `cookies.txt 생성 방법` 도움말을 Chrome 웹 스토어의 `Get cookies.txt LOCALLY` 설치 안내부터 시작하도록 보강
 
 #### Phase 5-E 인증 기준
 
@@ -976,7 +977,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 인증 Drawer 제목은 `인증 설정`, 섹션 제목은 `인증파일 사용`, 스위치 라벨은 `인증기능 사용`으로 표시한다.
 - 인증 방식은 `cookies.txt`를 사용하는 토큰 인증만 제공하며 브라우저 로그인 세션 직접 추출 기능은 제공하지 않는다.
 - 토큰 인증 Drawer의 `cookies.txt 생성 방법` 안내는 기존 문구를 유지하고 `파일 첫 줄이 # Netscape HTTP Cookie File 또는 # HTTP Cookie File인지 확인` 단계만 제외한다. 생성 도움말 진입 링크는 해당 안내 블록 하단에 칩형 버튼으로 배치한다.
-- 생성 도움말은 사용자 제공 Get cookies.txt LOCALLY 화면을 표시하고 CHZZK 로그인 후 임의의 라이브 혹은 영상 페이지 열기/확장 프로그램 실행 → `Netscape` 선택 → `Export` 및 앱 파일 선택의 3단계로 안내한다.
+- 생성 도움말은 사용자 제공 Get cookies.txt LOCALLY 화면을 표시하고 Chrome 웹 스토어에서 확장 프로그램 설치 → CHZZK 로그인 후 임의의 라이브 혹은 영상 페이지 열기/확장 프로그램 실행 → `Netscape` 선택 → `Export` 및 앱 파일 선택의 4단계로 안내한다.
 - 별도의 파일 첫 줄 검사 단계는 사용자 안내에서 제외한다.
 - 토큰 인증 Drawer의 경고 블록에는 세션 만료 시 `cookies.txt` 재발급 안내와 로그인 세션 정보 공유 금지를 각각 bullet 항목으로 표시한다.
 - 도움말 Drawer 하단에는 `주의사항`으로 cookies.txt 공유 금지와 현재 CHZZK 페이지의 `Export` 사용 기준을 명시한다.
@@ -1007,7 +1008,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 진단 로그의 command line과 verbose process output에서 `--cookies` 파일 경로 마스킹 경로 확인
 - 브라우저 선택/프로필/`--cookies-from-browser` 관련 설정 및 실행 경로 제거
 - 토큰 인증 Drawer의 기존 `cookies.txt 생성 방법` 문구 유지, 파일 첫 줄 확인 항목 제거, 생성 도움말 링크 및 단일 경고 블록 구조 확인
-- 사용자 제공 이미지 asset과 Get cookies.txt LOCALLY 3단계 도움말 Drawer 연결 확인
+- 사용자 제공 이미지 asset과 Chrome 웹 스토어 설치 단계를 포함한 Get cookies.txt LOCALLY 4단계 도움말 Drawer 연결 확인
 - 세 CHZZK API 경로에 인증용 `WithCookiesFile` 호출이 연결되고 비활성 시 빈 경로로 기존 요청을 유지하는 구조 정적 확인
 - `SearchChannels`, `GetChannelVideos`, `GetVideo` 각각에 cookies.txt 쿠키 전달 테스트 추가
 - 인증 설정 저장 후 앱 저장 → DB 종료 → 새 App 인스턴스에서 재오픈하여 사용 여부와 cookies.txt 경로가 복원되는 테스트 추가
@@ -1016,6 +1017,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 잘못된 기존 인증 설정(`enabled=1`, 빈 경로)을 Load 시 자동 비활성화하고 SQLite에도 수정된 값을 다시 저장하는 회귀 테스트 추가
 - 동일 잘못된 DB 상태에서 `initializePersistence()`가 실패하지 않고 인증 비활성 상태로 시작하는 회귀 테스트 추가
 - `ChannelVideoList`가 `authenticationEnabled` 변경을 첫 페이지 조회 effect의 dependency로 사용해 인증 상태 변경 시 VOD 목록을 재조회하는 구조 정적 확인
+- `cookies.txt 생성 방법` 도움말이 Chrome 웹 스토어 설치 안내부터 시작하고 기존 CHZZK 쿠키 내보내기 흐름이 2~4단계로 유지되는지 정적 확인
 
 실 환경 검증 대기:
 
