@@ -941,6 +941,47 @@ Validation:
 
 Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Windows/Wails/외부 도구 검증은 배포 환경 통합 검증으로 유지한다.
 
+## Phase 5-E — 인증 세션 다운로드
+
+- [x] SET-5E-1. 다운로드 인증 모델을 일반 다운로드 설정과 분리하고 기본값/Validation 구현
+- [x] SET-5E-2. 상단 헤더에 별도 `인증` 버튼과 전용 Drawer 구현
+- [x] SET-5E-3. 브라우저 로그인 세션과 `cookies.txt` 파일 인증 입력 UI 구현
+- [x] SET-5E-4. 인증 설정 SQLite 영속화 및 migration 8 추가
+- [x] SET-5E-5. Queue 등록 시 인증 값을 DownloadRequest Snapshot으로 고정
+- [x] SET-5E-6. 일반 다운로드와 HLS probe/구간 분할/ffmpeg fallback의 모든 yt-dlp 호출에 동일 인증 인자 적용
+- [x] SET-5E-7. 실패 로그의 쿠키/브라우저 인증 인자 마스킹 경로 보강
+- [ ] SET-5E-8. 실제 Windows에서 Whale/Chrome/Edge/Firefox/Brave/Vivaldi 로그인 세션 및 cookies.txt 인증 다운로드 검증
+
+#### Phase 5-E 인증 기준
+
+- 인증 기능은 일반 설정 Drawer에 포함하지 않고 앱 헤더 우측의 별도 `인증` 버튼에서 관리한다.
+- 인증 사용 여부는 헤더 버튼 상태로 표시하고, 전용 Drawer에서 활성화/비활성화한다.
+- 인증 방식은 `브라우저 로그인 정보`와 `cookies.txt` 두 가지를 제공한다.
+- 브라우저 방식은 Chrome / Edge / Whale / Firefox / Brave / Vivaldi를 지원하고 선택한 브라우저 및 선택적 프로필 이름을 yt-dlp `--cookies-from-browser`에 전달한다.
+- cookies.txt 방식은 파일 자체를 데이터베이스에 복사하지 않고 선택한 파일 경로만 저장하며 yt-dlp `--cookies`에 전달한다.
+- 인증 토큰/쿠키 원문은 앱 설정이나 다운로드 이력에 별도로 저장하지 않는다.
+- Queue에 등록된 작업은 등록 시점의 인증 Snapshot을 유지하고, 이후 인증 설정 변경은 새 작업부터 적용한다.
+- HLS fallback의 format probe, split format probe, 구간 다운로드, ffmpeg downloader 재시도에도 최초 작업과 동일한 인증 Snapshot을 사용한다.
+- 다운로드 오류 로그에서 `--cookies` 및 `--cookies-from-browser`의 값과 verbose 출력의 동일 인자를 마스킹한다.
+
+#### Phase 5-E 검증 현황
+
+구현/정적 확인 완료:
+
+- 인증 데이터가 AppSettings와 분리된 별도 모델/Store/API/SQLite 테이블을 사용하는 구조 확인
+- 일반 Settings 저장이 인증 값을 덮어쓰지 않는 독립 저장 경계 확인
+- 브라우저 방식은 yt-dlp `--cookies-from-browser browser[:profile]`, 파일 방식은 `--cookies path`로 변환
+- 일반 다운로드와 세 가지 HLS 대체 실행 경로에 공통 인증 옵션 전달 확인
+- 진단 로그의 command line과 verbose process output에서 쿠키 관련 민감 인자 마스킹 경로 확인
+
+실 환경 검증 대기:
+
+- 실제 Windows Wails binding 생성 및 앱 실행
+- 실제 브라우저 프로필 쿠키 읽기 및 인증 필요 VOD 다운로드
+- 실제 Netscape 형식 cookies.txt 선택 및 인증 필요 VOD 다운로드
+- Node.js 24 + Yarn 기반 frontend typecheck/build
+- Repository 전체 Go test/race/vet 및 Wails build
+
 ## Phase 6 — Persistence 및 UX Refinement
 
 ### Phase 6-P — Persistence

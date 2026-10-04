@@ -270,13 +270,14 @@ func buildHLSFormatProbeCommand(toolchain ToolchainStatus, request DownloadReque
 		"--format", formatSelector,
 		"--print", hlsFormatProbeRequestedPrefix + "%(requested_formats.:.{format_id,vcodec,acodec,ext})j",
 		"--print", hlsFormatProbeSinglePrefix + "%(.{format_id,vcodec,acodec,ext})j",
-		videoURL,
 	}
-	return CommandSpec{
-		Path: toolchain.YTDLP.Path,
-		Args: args,
-		Env:  ytDLPUTF8Env(),
-	}, nil
+	args, err = appendAuthenticationArgs(args, request.Authentication)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	args = append(args, videoURL)
+
+	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: ytDLPUTF8Env()}, nil
 }
 
 func probeHLSSelectedFormats(
@@ -341,22 +342,23 @@ func buildHLSSplitFormatProbeCommand(
 		return CommandSpec{}, err
 	}
 
-	return CommandSpec{
-		Path: toolchain.YTDLP.Path,
-		Args: []string{
-			"--ignore-config",
-			"--encoding", ytDLPOutputEncoding,
-			"--simulate",
-			"--no-playlist",
-			"--color", "never",
-			"--output-na-placeholder", "",
-			"--hls-split-discontinuity",
-			"--print",
-			hlsSplitFormatProbePrefix + "%(formats.:.{format_id,vcodec,acodec,ext})j",
-			videoURL,
-		},
-		Env: ytDLPUTF8Env(),
-	}, nil
+	args := []string{
+		"--ignore-config",
+		"--encoding", ytDLPOutputEncoding,
+		"--simulate",
+		"--no-playlist",
+		"--color", "never",
+		"--output-na-placeholder", "",
+		"--hls-split-discontinuity",
+		"--print", hlsSplitFormatProbePrefix + "%(formats.:.{format_id,vcodec,acodec,ext})j",
+	}
+	args, err = appendAuthenticationArgs(args, request.Authentication)
+	if err != nil {
+		return CommandSpec{}, err
+	}
+	args = append(args, videoURL)
+
+	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: ytDLPUTF8Env()}, nil
 }
 
 func probeHLSSplitCandidates(
@@ -494,6 +496,10 @@ func buildHLSDiscontinuitySegmentDownloadCommand(
 		"--output", "%(title)s [%(id)s].%(format_id)s.%(ext)s",
 		"--print", "after_move:" + finalPathPrefix + "%(filepath)s",
 	}
+	args, err = appendAuthenticationArgs(args, request.Authentication)
+	if err != nil {
+		return CommandSpec{}, err
+	}
 	location, err := ffmpegLocation(toolchain)
 	if err != nil {
 		return CommandSpec{}, err
@@ -502,11 +508,7 @@ func buildHLSDiscontinuitySegmentDownloadCommand(
 		args = append(args, "--ffmpeg-location", location)
 	}
 	args = append(args, videoURL)
-	return CommandSpec{
-		Path: toolchain.YTDLP.Path,
-		Args: args,
-		Env:  ytDLPUTF8Env(),
-	}, nil
+	return CommandSpec{Path: toolchain.YTDLP.Path, Args: args, Env: ytDLPUTF8Env()}, nil
 }
 
 func resolveHLSSplitCompletedFile(

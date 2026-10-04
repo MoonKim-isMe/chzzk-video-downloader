@@ -184,7 +184,53 @@ select {
 }
 
 .app-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   justify-self: end;
+}
+
+.authentication-header-button {
+  display: inline-flex !important;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: var(--app-text-secondary) !important;
+  box-shadow: none !important;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.authentication-header-button:hover,
+.authentication-header-button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 55%, var(--app-border)) !important;
+  background: var(--app-border-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.authentication-header-button.is-active {
+  border-color: color-mix(in srgb, var(--app-primary) 50%, var(--app-border)) !important;
+  background: var(--app-primary-soft) !important;
+  color: var(--app-primary) !important;
+}
+
+.authentication-header-button .ant-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.authentication-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .settings-icon-button {

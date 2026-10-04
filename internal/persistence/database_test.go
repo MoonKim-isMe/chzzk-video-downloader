@@ -34,7 +34,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 {
+	if version != 8 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -50,7 +50,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 {
+	if version != 8 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -102,7 +102,7 @@ func TestOpenRepairsLegacySettingsSchemaWithoutDownloadAcceleration(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	for version := 1; version <= 7; version++ {
+	for version := 1; version <= 8; version++ {
 		if _, err := raw.Exec(
 			"INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
 			version,
@@ -230,6 +230,30 @@ func TestSettingsPersistenceRoundTrip(t *testing.T) {
 	}
 	if restored != appsettings.Normalize(value) {
 		t.Fatalf("unexpected settings: %#v", restored)
+	}
+}
+
+func TestAuthenticationSettingsPersistenceRoundTrip(t *testing.T) {
+	database := openTestDatabase(t)
+	value := appsettings.AuthenticationSettings{
+		Enabled:        true,
+		Mode:           appsettings.AuthenticationModeBrowser,
+		Browser:        appsettings.AuthenticationBrowserWhale,
+		BrowserProfile: "Profile 1",
+	}
+	if err := database.SaveAuthenticationSettings(value); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, found, err := database.LoadAuthenticationSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("expected stored authentication settings")
+	}
+	if loaded != appsettings.NormalizeAuthentication(value) {
+		t.Fatalf("unexpected authentication settings: %#v", loaded)
 	}
 }
 

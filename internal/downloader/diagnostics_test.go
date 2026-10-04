@@ -86,6 +86,22 @@ func TestWriteDownloadFailureLogCapturesDiagnosticsAndRedactsSecrets(t *testing.
 	}
 }
 
+func TestRedactDiagnosticTextRedactsAuthenticationArguments(t *testing.T) {
+	inputs := []string{
+		`[debug] Command-line config: ['--cookies-from-browser', 'whale:Profile 1']`,
+		`yt-dlp --cookies "C:\\Users\\tester\\cookies.txt" https://example.com/video`,
+	}
+	for _, input := range inputs {
+		got := redactDiagnosticText(input)
+		if strings.Contains(got, "Profile 1") || strings.Contains(got, "cookies.txt") {
+			t.Fatalf("authentication argument leaked: %q", got)
+		}
+		if !strings.Contains(got, "<redacted>") {
+			t.Fatalf("redaction marker missing: %q", got)
+		}
+	}
+}
+
 func TestRedactDiagnosticTextRedactsURLQueryAndFragment(t *testing.T) {
 	input := `[debug] ffmpeg command line: https://cdn.example.com/video.m3u8?token=abc#fragment`
 	got := redactDiagnosticText(input)

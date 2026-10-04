@@ -111,6 +111,35 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	}
 }
 
+func TestApplyAuthenticationSettingsSnapshotsBrowserSession(t *testing.T) {
+	request, err := ApplyAuthenticationSettings(StartDownloadRequest{}, appsettings.AuthenticationSettings{
+		Enabled:        true,
+		Mode:           appsettings.AuthenticationModeBrowser,
+		Browser:        appsettings.AuthenticationBrowserWhale,
+		BrowserProfile: "Profile 1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Authentication.Mode != "browser" ||
+		request.Authentication.Browser != "whale" ||
+		request.Authentication.BrowserProfile != "Profile 1" {
+		t.Fatalf("unexpected authentication snapshot: %#v", request.Authentication)
+	}
+}
+
+func TestApplyAuthenticationSettingsDisabledClearsAuthentication(t *testing.T) {
+	request, err := ApplyAuthenticationSettings(StartDownloadRequest{
+		Authentication: AuthenticationOptions{Mode: "browser", Browser: "chrome"},
+	}, appsettings.AuthenticationDefaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Authentication != (AuthenticationOptions{}) {
+		t.Fatalf("disabled authentication should clear snapshot: %#v", request.Authentication)
+	}
+}
+
 func TestApplySettingsRejectsInvalidSettings(t *testing.T) {
 	_, err := ApplySettings(StartDownloadRequest{}, appsettings.AppSettings{
 		DownloadDir:            t.TempDir(),

@@ -47,7 +47,7 @@ func classifyDownloadFailure(err error) error {
 	):
 		return &DownloadFailure{
 			Kind:    DownloadFailureAuthenticationRequired,
-			Message: "로그인이 필요한 콘텐츠입니다. 연령 제한 또는 접근 권한이 필요한 영상일 수 있습니다.",
+			Message: "로그인이 필요한 콘텐츠입니다. 상단의 인증에서 로그인 정보와 해당 계정의 접근 권한을 확인해 주세요.",
 			Cause:   err,
 		}
 

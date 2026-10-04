@@ -34,6 +34,28 @@ func ApplySettings(request StartDownloadRequest, value appsettings.AppSettings) 
 	return request, nil
 }
 
+func ApplyAuthenticationSettings(request StartDownloadRequest, value appsettings.AuthenticationSettings) (StartDownloadRequest, error) {
+	value = appsettings.NormalizeAuthentication(value)
+	if err := appsettings.ValidateAuthentication(value); err != nil {
+		return StartDownloadRequest{}, err
+	}
+
+	request.Authentication = AuthenticationOptions{}
+	if !value.Enabled {
+		return request, nil
+	}
+
+	request.Authentication.Mode = string(value.Mode)
+	switch value.Mode {
+	case appsettings.AuthenticationModeBrowser:
+		request.Authentication.Browser = string(value.Browser)
+		request.Authentication.BrowserProfile = value.BrowserProfile
+	case appsettings.AuthenticationModeCookiesFile:
+		request.Authentication.CookiesFilePath = value.CookiesFilePath
+	}
+	return request, nil
+}
+
 func ConcurrentFragmentsForAcceleration(acceleration appsettings.DownloadAcceleration) (int, error) {
 	switch acceleration {
 	case appsettings.DownloadAccelerationStable:
