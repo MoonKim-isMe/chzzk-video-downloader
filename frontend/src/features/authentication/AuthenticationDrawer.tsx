@@ -35,10 +35,9 @@ function AuthenticationDrawer({
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<AuthenticationSettings>();
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [updatingEnabled, setUpdatingEnabled] = useState(false);
   const [selectingFile, setSelectingFile] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const enabled = Form.useWatch('enabled', form) ?? false;
 
   useEffect(() => {
     if (!open) return;
@@ -65,38 +64,52 @@ function AuthenticationDrawer({
   };
 
   const handleSelectCookiesFile = async () => {
+    const currentFile = form.getFieldValue('cookiesFilePath') ?? '';
+    const currentEnabled = form.getFieldValue('enabled') ?? false;
+
     setSelectingFile(true);
     try {
-      const currentFile = form.getFieldValue('cookiesFilePath') ?? '';
       const selected = await selectAuthenticationCookiesFile(currentFile);
-      if (selected) {
-        form.setFieldValue('cookiesFilePath', selected);
-        await form.validateFields(['cookiesFilePath']);
-      }
+      if (!selected) return;
+
+      const updated = await updateAuthenticationSettings({
+        enabled: currentEnabled,
+        cookiesFilePath: selected.trim(),
+      });
+      form.setFieldsValue(updated);
+      onAuthenticationUpdated(updated);
+      message.success('cookies.txt 경로를 저장했습니다.');
     } catch (cause) {
+      form.setFieldValue('cookiesFilePath', currentFile);
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSelectingFile(false);
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleEnabledChange = async (nextEnabled: boolean) => {
+    const cookiesFilePath = (form.getFieldValue('cookiesFilePath') ?? '').trim();
+
+    if (nextEnabled && !cookiesFilePath) {
+      form.setFieldValue('enabled', false);
+      message.warning('인증 기능을 사용하려면 cookies.txt 파일을 먼저 선택해 주세요.');
+      return;
+    }
+
+    setUpdatingEnabled(true);
     try {
-      const values = await form.validateFields();
       const updated = await updateAuthenticationSettings({
-        ...values,
-        cookiesFilePath: values.cookiesFilePath?.trim() ?? '',
+        enabled: nextEnabled,
+        cookiesFilePath,
       });
       form.setFieldsValue(updated);
       onAuthenticationUpdated(updated);
-      message.success(updated.enabled ? '토큰 인증을 사용하도록 저장했습니다.' : '인증 사용을 해제했습니다.');
-      handleClose();
+      message.success(updated.enabled ? '인증 기능을 사용합니다.' : '인증 기능을 사용하지 않습니다.');
     } catch (cause) {
-      if (cause && typeof cause === 'object' && 'errorFields' in cause) return;
+      form.setFieldValue('enabled', !nextEnabled);
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setSaving(false);
+      setUpdatingEnabled(false);
     }
   };
 
@@ -109,14 +122,6 @@ function AuthenticationDrawer({
         open={open}
         onClose={handleClose}
         destroyOnHidden
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={handleClose} disabled={saving}>취소</Button>
-            <Button type="primary" loading={saving} disabled={loading} onClick={() => void handleSave()}>
-              저장
-            </Button>
-          </div>
-        }
       >
         {loading ? (
           <Skeleton active paragraph={{ rows: 6 }} />
@@ -130,7 +135,13 @@ function AuthenticationDrawer({
               </Paragraph>
 
               <Form.Item name="enabled" label="인증기능 사용" valuePropName="checked">
-                <Switch checkedChildren="사용" unCheckedChildren="사용 안 함" />
+                <Switch
+                  checkedChildren="사용"
+                  unCheckedChildren="사용 안 함"
+                  loading={updatingEnabled}
+                  disabled={loading || selectingFile}
+                  onChange={(checked) => void handleEnabledChange(checked)}
+                />
               </Form.Item>
 
               <Form.Item
@@ -149,13 +160,12 @@ function AuthenticationDrawer({
               >
                 <Input
                   readOnly
-                  disabled={!enabled}
                   placeholder="cookies.txt 파일을 선택해 주세요."
                   addonAfter={
                     <Button
                       type="text"
                       size="small"
-                      disabled={!enabled}
+                      disabled={loading || updatingEnabled}
                       loading={selectingFile}
                       onClick={() => void handleSelectCookiesFile()}
                     >

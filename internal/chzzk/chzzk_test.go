@@ -4,10 +4,36 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 const testChannelID = "6e06f5e1907f17eff543abd06cb62891"
+
+func writeTestCookiesFile(t *testing.T, domain string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "cookies.txt")
+	content := "# Netscape HTTP Cookie File\n" +
+		domain + "\tFALSE\t/\tFALSE\t0\tNID_AUT\ttest-auth-token\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func requireTestAuthCookie(t *testing.T, r *http.Request) {
+	t.Helper()
+
+	cookie, err := r.Cookie("NID_AUT")
+	if err != nil {
+		t.Fatalf("NID_AUT cookie is missing: %v", err)
+	}
+	if cookie.Value != "test-auth-token" {
+		t.Fatalf("unexpected NID_AUT cookie: %q", cookie.Value)
+	}
+}
 
 func TestParseChannelURL(t *testing.T) {
 	tests := []struct {
@@ -61,6 +87,27 @@ func TestSearchChannels(t *testing.T) {
 	}
 	if !result.HasNext || result.NextOffset != 20 {
 		t.Fatalf("unexpected pagination: %#v", result)
+	}
+}
+
+func TestSearchChannelsWithCookiesFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireTestAuthCookie(t, r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"message":null,"content":{"size":0,"page":{"next":null},"data":[]}}`))
+	}))
+	defer server.Close()
+
+	cookiesFile := writeTestCookiesFile(t, "127.0.0.1")
+	client := newClient(server.URL, server.Client())
+	if _, err := client.SearchChannelsWithCookiesFile(
+		context.Background(),
+		"테스트",
+		0,
+		20,
+		cookiesFile,
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 

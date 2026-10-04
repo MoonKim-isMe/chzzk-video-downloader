@@ -53,6 +53,27 @@ func TestGetChannelVideos(t *testing.T) {
 	}
 }
 
+func TestGetChannelVideosWithCookiesFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireTestAuthCookie(t, r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"message":null,"content":{"page":0,"size":24,"totalCount":0,"totalPages":0,"data":[]}}`))
+	}))
+	defer server.Close()
+
+	cookiesFile := writeTestCookiesFile(t, "127.0.0.1")
+	client := newClient(server.URL, server.Client())
+	if _, err := client.GetChannelVideosWithCookiesFile(
+		context.Background(),
+		testChannelID,
+		0,
+		24,
+		cookiesFile,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGetChannelVideosClampsPageAndSize(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -163,6 +184,29 @@ func TestGetVideo(t *testing.T) {
 	}
 	if video.Channel.ChannelID != testChannelID || video.Channel.ChannelName != "테스트 채널" {
 		t.Fatalf("unexpected channel: %#v", video.Channel)
+	}
+}
+
+func TestGetVideoWithCookiesFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireTestAuthCookie(t, r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"message":null,"content":{"videoNo":12888749,"videoTitle":"인증 VOD","videoType":"REPLAY","channel":{"channelId":"6e06f5e1907f17eff543abd06cb62891","channelName":"테스트 채널"}}}`))
+	}))
+	defer server.Close()
+
+	cookiesFile := writeTestCookiesFile(t, "127.0.0.1")
+	client := newClient(server.URL, server.Client())
+	video, err := client.GetVideoWithCookiesFile(
+		context.Background(),
+		12888749,
+		cookiesFile,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if video.VideoNo != 12888749 {
+		t.Fatalf("unexpected video: %#v", video)
 	}
 }
 
