@@ -956,6 +956,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [x] SET-5E-11. 사용자 제공 화면을 포함한 Get cookies.txt LOCALLY 생성 도움말 Drawer 및 3단계 안내 구현
 - [x] SET-5E-12. 생성 도움말 진입 링크를 칩형 버튼으로 변경해 가시성 개선
 - [x] SET-5E-13. 주의사항 두 문장을 bullet 목록으로 표시해 항목 구분 강화
+- [x] SET-5E-14. 파일 선택 영역 라벨을 `cookies.txt 경로 설정`으로 명확화
 
 #### Phase 5-E 인증 기준
 

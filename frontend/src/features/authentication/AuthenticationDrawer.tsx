@@ -135,7 +135,7 @@ function AuthenticationDrawer({
 
               <Form.Item
                 name="cookiesFilePath"
-                label="cookies.txt"
+                label="cookies.txt 경로 설정"
                 dependencies={['enabled']}
                 rules={[
                   ({ getFieldValue }) => ({
