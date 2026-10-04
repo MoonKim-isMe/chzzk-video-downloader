@@ -261,7 +261,10 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         </div>
 
         <div className="channel-sidebar-body">
-          {channelPanelTab === 'search' ? (
+          <div
+            className="channel-sidebar-tab-view"
+            hidden={channelPanelTab !== 'search'}
+          >
             <ChannelSearchTab
               savedChannelIds={savedChannelIds}
               selectedChannelId={selectedChannel?.channelId}
@@ -269,14 +272,18 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               onSave={handleSave}
               onRemove={handleRemove}
             />
-          ) : (
+          </div>
+          <div
+            className="channel-sidebar-tab-view"
+            hidden={channelPanelTab !== 'bookmarks'}
+          >
             <SavedChannels
               channels={savedChannels}
               selectedChannelId={selectedChannel?.channelId}
               onSelect={selectChannel}
               onRemove={handleRemove}
             />
-          )}
+          </div>
         </div>
       </Card>
 
