@@ -166,11 +166,18 @@ function AuthenticationDrawer({
               </Form.Item>
 
               <Alert
-                type="warning"
+                type="info"
                 showIcon
-                className="!mb-2"
-                message="갑자기 동작하지 않으면 세션이 만료된 것일 수 있습니다."
-                description="cookies.txt를 다시 발급해 주세요."
+                className="!mb-3"
+                message="cookies.txt 생성 방법"
+                description={
+                  <ol className="!mb-0 !mt-2 list-decimal space-y-1 pl-4">
+                    <li>브라우저에서 CHZZK에 로그인한 뒤 다운로드할 영상 페이지를 한 번 열어 주세요.</li>
+                    <li>쿠키 내보내기 기능 또는 신뢰할 수 있는 확장 프로그램으로 CHZZK 쿠키를 내보내세요.</li>
+                    <li>파일은 Mozilla/Netscape 형식의 <code>cookies.txt</code>로 저장되어야 합니다.</li>
+                    <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
+                  </ol>
+                }
               />
 
               <Button
@@ -181,12 +188,18 @@ function AuthenticationDrawer({
                 Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요
               </Button>
 
-              <div className="mt-5 border-t border-[var(--app-border-soft)] pt-4">
-                <Text strong className="!text-xs">주의사항</Text>
-                <Paragraph className="app-muted !mb-0 !mt-1 !text-xs">
-                  cookies.txt에는 로그인 세션 정보가 포함되어 있습니다. 다른 사람과 공유하지 마세요.
-                </Paragraph>
-              </div>
+              <Alert
+                type="warning"
+                showIcon
+                className="!mt-4"
+                message="주의사항"
+                description={
+                  <div className="space-y-1">
+                    <div>갑자기 동작하지 않으면 세션이 만료된 것일 수 있습니다. cookies.txt를 다시 발급해 주세요.</div>
+                    <div>cookies.txt에는 로그인 세션 정보가 포함되어 있습니다. 다른 사람과 공유하지 마세요.</div>
+                  </div>
+                }
+              />
             </section>
           </Form>
         )}
