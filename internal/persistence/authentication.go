@@ -24,6 +24,18 @@ func (d *Database) LoadAuthenticationSettings() (appsettings.AuthenticationSetti
 	}
 	value.Enabled = enabled != 0
 	value = appsettings.NormalizeAuthentication(value)
+
+	if value.Enabled && (value.CookiesFilePath == "" || value.CookiesFilePath == ".") {
+		value.Enabled = false
+		value.CookiesFilePath = ""
+		if err := d.SaveAuthenticationSettings(value); err != nil {
+			return appsettings.AuthenticationSettings{}, false, fmt.Errorf(
+				"잘못된 인증 설정을 복구할 수 없습니다: %w",
+				err,
+			)
+		}
+	}
+
 	if err := appsettings.ValidateAuthentication(value); err != nil {
 		return appsettings.AuthenticationSettings{}, false, err
 	}
