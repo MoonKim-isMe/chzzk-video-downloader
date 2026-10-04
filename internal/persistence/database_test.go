@@ -254,6 +254,37 @@ func TestAuthenticationSettingsPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAuthenticationSettingsLoadRepairsEnabledWithoutCookiesFile(t *testing.T) {
+	database := openTestDatabase(t)
+
+	if _, err := database.db.Exec(`INSERT INTO authentication_settings (
+		id, enabled, cookies_file_path, updated_at
+	) VALUES (1, 1, '', '2026-10-04T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, found, err := database.LoadAuthenticationSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("expected stored authentication settings")
+	}
+	if loaded.Enabled || loaded.CookiesFilePath != "" {
+		t.Fatalf("unexpected repaired authentication settings: %#v", loaded)
+	}
+
+	var enabled int
+	var cookiesFilePath string
+	if err := database.db.QueryRow(`SELECT enabled, cookies_file_path
+		FROM authentication_settings WHERE id = 1`).Scan(&enabled, &cookiesFilePath); err != nil {
+		t.Fatal(err)
+	}
+	if enabled != 0 || cookiesFilePath != "" {
+		t.Fatalf("authentication settings were not repaired in SQLite: enabled=%d path=%q", enabled, cookiesFilePath)
+	}
+}
+
 func TestDownloadHistoryPersistenceAndInterruptedRecovery(t *testing.T) {
 	database := openTestDatabase(t)
 

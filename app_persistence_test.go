@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -175,6 +176,56 @@ func TestUpdateSettingsPersistsStorageRecord(t *testing.T) {
 	}
 	if restored != appsettings.Normalize(next) {
 		t.Fatalf("unexpected persisted settings: %#v", restored)
+	}
+}
+
+func TestInitializePersistenceRepairsAuthenticationWithoutCookiesFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.sqlite3")
+
+	seed, err := persistence.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`INSERT INTO authentication_settings (
+		id, enabled, cookies_file_path, updated_at
+	) VALUES (1, 1, '', '2026-10-04T00:00:00Z')
+	ON CONFLICT(id) DO UPDATE SET
+		enabled = 1,
+		cookies_file_path = '',
+		updated_at = excluded.updated_at`); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.databasePath = func() (string, error) { return path, nil }
+	if err := app.initializePersistence(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if app.database != nil {
+			_ = app.database.Close()
+		}
+	})
+
+	restored, err := app.GetAuthenticationSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Enabled || restored.CookiesFilePath != "" {
+		t.Fatalf("unexpected repaired authentication settings: %#v", restored)
 	}
 }
 
