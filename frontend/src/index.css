@@ -1362,7 +1362,7 @@ select {
 .authentication-info-alert .ant-alert-icon,
 .authentication-warning-alert .ant-alert-icon {
   align-self: flex-start;
-  margin-top: 4px !important;
+  margin-top: 6px !important;
   margin-inline-end: 8px !important;
   font-size: 13px !important;
   line-height: 1 !important;
