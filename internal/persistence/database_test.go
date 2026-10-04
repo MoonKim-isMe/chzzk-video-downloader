@@ -34,7 +34,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 6 {
+	if version != 7 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -50,7 +50,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 6 {
+	if version != 7 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -102,7 +102,7 @@ func TestOpenRepairsLegacySettingsSchemaWithoutDownloadAcceleration(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	for version := 1; version <= 6; version++ {
+	for version := 1; version <= 7; version++ {
 		if _, err := raw.Exec(
 			"INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
 			version,
@@ -132,6 +132,9 @@ func TestOpenRepairsLegacySettingsSchemaWithoutDownloadAcceleration(t *testing.T
 	if record.DownloadAcceleration != appsettings.DownloadAccelerationStandard {
 		t.Fatalf("unexpected repaired download acceleration: %q", record.DownloadAcceleration)
 	}
+	if record.DownloadRateLimitMBps != 0 {
+		t.Fatalf("unexpected repaired download rate limit: %v", record.DownloadRateLimitMBps)
+	}
 	if record.SchemaVersion != appsettings.StorageSchemaVersion {
 		t.Fatalf("unexpected repaired settings schema version: %d", record.SchemaVersion)
 	}
@@ -146,6 +149,17 @@ func TestOpenRepairsLegacySettingsSchemaWithoutDownloadAcceleration(t *testing.T
 	}
 	if count != 1 {
 		t.Fatalf("download_acceleration column was not repaired: %d", count)
+	}
+
+	if err := database.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('app_settings')
+		WHERE name = 'download_rate_limit_mbps'
+	`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("download_rate_limit_mbps column was not repaired: %d", count)
 	}
 }
 
@@ -191,6 +205,7 @@ func TestSettingsPersistenceRoundTrip(t *testing.T) {
 		DownloadDir:            filepath.Join(t.TempDir(), "downloads"),
 		Resolution:             appsettings.Resolution1080p,
 		OutputFormat:           appsettings.OutputFormatMKV,
+		DownloadRateLimitMBps:   12.5,
 		MaxConcurrentDownloads: 3,
 		Theme:                  appsettings.ThemeLight,
 	}

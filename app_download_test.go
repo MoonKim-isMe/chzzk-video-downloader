@@ -296,6 +296,7 @@ func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
 		DownloadDir:            firstDir,
 		Resolution:             appsettings.Resolution1080p,
 		OutputFormat:           appsettings.OutputFormatMKV,
+		DownloadRateLimitMBps:   12.5,
 		MaxConcurrentDownloads: 1,
 	})
 	if err != nil {
@@ -315,7 +316,8 @@ func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
 	firstActual := <-requests
 	if firstActual.OutputDir != firstDir ||
 		firstActual.FormatSelector != "bv*[height<=1080]+ba/b[height<=1080]" ||
-		firstActual.OutputFormat != "mkv" {
+		firstActual.OutputFormat != "mkv" ||
+		firstActual.RateLimitBytesPerSecond != 12_500_000 {
 		t.Fatalf("first settings not applied: %#v", firstActual)
 	}
 
@@ -334,6 +336,7 @@ func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
 		DownloadDir:            secondDir,
 		Resolution:             appsettings.Resolution720p,
 		OutputFormat:           appsettings.OutputFormatWebM,
+		DownloadRateLimitMBps:   5.25,
 		MaxConcurrentDownloads: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -344,7 +347,8 @@ func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
 	case secondActual := <-requests:
 		if secondActual.OutputDir != firstDir ||
 			secondActual.FormatSelector != "bv*[height<=1080]+ba/b[height<=1080]" ||
-			secondActual.OutputFormat != "mkv" {
+			secondActual.OutputFormat != "mkv" ||
+			secondActual.RateLimitBytesPerSecond != 12_500_000 {
 			t.Fatalf("queued task settings changed after update: %#v", secondActual)
 		}
 	case <-time.After(time.Second):
@@ -371,7 +375,8 @@ func TestStartDownloadSnapshotsSettingsAtEnqueueTime(t *testing.T) {
 	case thirdActual := <-requests:
 		if thirdActual.OutputDir != secondDir ||
 			thirdActual.FormatSelector != "bv*[height<=720]+ba/b[height<=720]" ||
-			thirdActual.OutputFormat != "webm" {
+			thirdActual.OutputFormat != "webm" ||
+			thirdActual.RateLimitBytesPerSecond != 5_250_000 {
 			t.Fatalf("new settings not applied to new task: %#v", thirdActual)
 		}
 	case <-time.After(time.Second):
@@ -490,6 +495,7 @@ func TestRunningDownloadKeepsSettingsSnapshotAfterUpdate(t *testing.T) {
 		DownloadDir:            firstDir,
 		Resolution:             appsettings.Resolution1440p,
 		OutputFormat:           appsettings.OutputFormatMKV,
+		DownloadRateLimitMBps:   10.5,
 		MaxConcurrentDownloads: 1,
 	})
 	if err != nil {
@@ -510,6 +516,7 @@ func TestRunningDownloadKeepsSettingsSnapshotAfterUpdate(t *testing.T) {
 		DownloadDir:            secondDir,
 		Resolution:             appsettings.Resolution720p,
 		OutputFormat:           appsettings.OutputFormatWebM,
+		DownloadRateLimitMBps:   2.25,
 		MaxConcurrentDownloads: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -520,7 +527,8 @@ func TestRunningDownloadKeepsSettingsSnapshotAfterUpdate(t *testing.T) {
 	case request := <-observed:
 		if request.OutputDir != firstDir ||
 			request.FormatSelector != "bv*[height<=1440]+ba/b[height<=1440]" ||
-			request.OutputFormat != "mkv" {
+			request.OutputFormat != "mkv" ||
+			request.RateLimitBytesPerSecond != 10_500_000 {
 			t.Fatalf("running task snapshot changed: %#v", request)
 		}
 	case <-time.After(time.Second):

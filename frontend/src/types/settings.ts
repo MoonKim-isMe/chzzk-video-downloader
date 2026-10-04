@@ -11,6 +11,7 @@ export interface AppSettings {
   resolution: DownloadResolution;
   outputFormat: OutputFormat;
   downloadAcceleration: DownloadAcceleration;
+  downloadRateLimitMBps: number;
   maxConcurrentDownloads: number;
   theme: ThemeMode;
 }

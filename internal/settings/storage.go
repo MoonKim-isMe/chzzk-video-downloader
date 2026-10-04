@@ -2,7 +2,7 @@ package settings
 
 import "fmt"
 
-const StorageSchemaVersion = 3
+const StorageSchemaVersion = 4
 
 type StorageRecord struct {
 	SchemaVersion          int                  `json:"schemaVersion"`
@@ -10,6 +10,7 @@ type StorageRecord struct {
 	Resolution             Resolution           `json:"resolution"`
 	OutputFormat           OutputFormat         `json:"outputFormat"`
 	DownloadAcceleration   DownloadAcceleration `json:"downloadAcceleration"`
+	DownloadRateLimitMBps   float64              `json:"downloadRateLimitMBps"`
 	MaxConcurrentDownloads int                  `json:"maxConcurrentDownloads"`
 	Theme                  ThemeMode            `json:"theme"`
 }
@@ -26,6 +27,7 @@ func NewStorageRecord(value AppSettings) (StorageRecord, error) {
 		Resolution:             value.Resolution,
 		OutputFormat:           value.OutputFormat,
 		DownloadAcceleration:   value.DownloadAcceleration,
+		DownloadRateLimitMBps:   value.DownloadRateLimitMBps,
 		MaxConcurrentDownloads: value.MaxConcurrentDownloads,
 		Theme:                  value.Theme,
 	}, nil
@@ -47,12 +49,17 @@ func (record StorageRecord) AppSettings() (AppSettings, error) {
 	if record.SchemaVersion <= 2 {
 		downloadAcceleration = DefaultDownloadAcceleration
 	}
+	downloadRateLimitMBps := record.DownloadRateLimitMBps
+	if record.SchemaVersion <= 3 {
+		downloadRateLimitMBps = DefaultDownloadRateLimitMBps
+	}
 
 	value := Normalize(AppSettings{
 		DownloadDir:            record.DownloadDir,
 		Resolution:             record.Resolution,
 		OutputFormat:           record.OutputFormat,
 		DownloadAcceleration:   downloadAcceleration,
+		DownloadRateLimitMBps:   downloadRateLimitMBps,
 		MaxConcurrentDownloads: record.MaxConcurrentDownloads,
 		Theme:                  theme,
 	})

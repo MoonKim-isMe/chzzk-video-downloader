@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"fmt"
+	"math"
 
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
@@ -20,11 +21,16 @@ func ApplySettings(request StartDownloadRequest, value appsettings.AppSettings) 
 	if err != nil {
 		return StartDownloadRequest{}, err
 	}
+	rateLimitBytesPerSecond, err := RateLimitBytesPerSecond(value.DownloadRateLimitMBps)
+	if err != nil {
+		return StartDownloadRequest{}, err
+	}
 
 	request.OutputDir = value.DownloadDir
 	request.FormatSelector = formatSelector
 	request.OutputFormat = string(value.OutputFormat)
 	request.ConcurrentFragments = concurrentFragments
+	request.RateLimitBytesPerSecond = rateLimitBytesPerSecond
 	return request, nil
 }
 
@@ -41,6 +47,28 @@ func ConcurrentFragmentsForAcceleration(acceleration appsettings.DownloadAcceler
 	default:
 		return 0, fmt.Errorf("지원하지 않는 다운로드 가속 설정입니다: %s", acceleration)
 	}
+}
+
+const bytesPerMegabyte = 1_000_000
+
+func RateLimitBytesPerSecond(rateLimitMBps float64) (int64, error) {
+	if math.IsNaN(rateLimitMBps) || math.IsInf(rateLimitMBps, 0) || rateLimitMBps < 0 {
+		return 0, fmt.Errorf("다운로드 속도 제한은 0 이상의 유효한 MB/s 값이어야 합니다")
+	}
+	if rateLimitMBps == 0 {
+		return 0, nil
+	}
+
+	const maxInt64 = int64(1<<63 - 1)
+	if rateLimitMBps > float64(maxInt64)/float64(bytesPerMegabyte) {
+		return 0, fmt.Errorf("다운로드 속도 제한 값이 너무 큽니다")
+	}
+
+	bytesPerSecond := int64(math.Round(rateLimitMBps * float64(bytesPerMegabyte)))
+	if bytesPerSecond < 1 {
+		bytesPerSecond = 1
+	}
+	return bytesPerSecond, nil
 }
 
 func FormatSelectorForResolution(resolution appsettings.Resolution) (string, error) {

@@ -25,8 +25,9 @@ type DownloadRequest struct {
 	OutputDir           string `json:"outputDir"`
 	FormatSelector      string `json:"formatSelector,omitempty"`
 	OutputTemplate      string `json:"outputTemplate,omitempty"`
-	OutputFormat        string `json:"outputFormat,omitempty"`
-	ConcurrentFragments int    `json:"concurrentFragments,omitempty"`
+	OutputFormat            string `json:"outputFormat,omitempty"`
+	ConcurrentFragments     int    `json:"concurrentFragments,omitempty"`
+	RateLimitBytesPerSecond int64  `json:"rateLimitBytesPerSecond,omitempty"`
 }
 
 type CommandSpec struct {
@@ -94,6 +95,10 @@ func buildDownloadCommandWithTempDir(
 	if err != nil {
 		return CommandSpec{}, err
 	}
+	rateLimitBytesPerSecond, err := normalizeRateLimitBytesPerSecond(request.RateLimitBytesPerSecond)
+	if err != nil {
+		return CommandSpec{}, err
+	}
 
 	outputHomeDir := outputDir
 	if useFFmpegHLS {
@@ -121,6 +126,9 @@ func buildDownloadCommandWithTempDir(
 		"--paths", outputHomeDir,
 		"--paths", "temp:" + tempDir,
 		"--output", outputTemplate,
+	}
+	if rateLimitBytesPerSecond > 0 {
+		args = append(args, "--limit-rate", strconv.FormatInt(rateLimitBytesPerSecond, 10))
 	}
 	if useFFmpegHLS {
 		args = append(
@@ -207,6 +215,13 @@ func normalizeConcurrentFragments(value int) (int, error) {
 	default:
 		return 0, fmt.Errorf("지원하지 않는 다운로드 가속 값입니다: %d", value)
 	}
+}
+
+func normalizeRateLimitBytesPerSecond(value int64) (int64, error) {
+	if value < 0 {
+		return 0, fmt.Errorf("다운로드 속도 제한은 0 이상이어야 합니다")
+	}
+	return value, nil
 }
 
 func normalizeOutputDir(raw string) (string, error) {

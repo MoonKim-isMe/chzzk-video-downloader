@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -46,6 +47,7 @@ const (
 const (
 	DefaultMaxConcurrentDownloads = 3
 	MaxConcurrentDownloads        = 8
+	DefaultDownloadRateLimitMBps  = 0.0
 )
 
 type AppSettings struct {
@@ -53,6 +55,7 @@ type AppSettings struct {
 	Resolution             Resolution           `json:"resolution"`
 	OutputFormat           OutputFormat         `json:"outputFormat"`
 	DownloadAcceleration   DownloadAcceleration `json:"downloadAcceleration"`
+	DownloadRateLimitMBps   float64              `json:"downloadRateLimitMBps"`
 	MaxConcurrentDownloads int                  `json:"maxConcurrentDownloads"`
 	Theme                  ThemeMode            `json:"theme"`
 }
@@ -63,6 +66,7 @@ func Defaults(downloadDir string) AppSettings {
 		Resolution:             ResolutionBest,
 		OutputFormat:           OutputFormatMP4,
 		DownloadAcceleration:   DefaultDownloadAcceleration,
+		DownloadRateLimitMBps:   DefaultDownloadRateLimitMBps,
 		MaxConcurrentDownloads: DefaultMaxConcurrentDownloads,
 		Theme:                  ThemeDark,
 	}
@@ -108,6 +112,10 @@ func Validate(value AppSettings) error {
 	case DownloadAccelerationStable, DownloadAccelerationStandard, DownloadAccelerationFast, DownloadAccelerationUltra:
 	default:
 		return fmt.Errorf("지원하지 않는 다운로드 가속 설정입니다: %s", value.DownloadAcceleration)
+	}
+
+	if math.IsNaN(value.DownloadRateLimitMBps) || math.IsInf(value.DownloadRateLimitMBps, 0) || value.DownloadRateLimitMBps < 0 {
+		return fmt.Errorf("다운로드 속도 제한은 0 이상의 유효한 MB/s 값이어야 합니다")
 	}
 
 	if value.MaxConcurrentDownloads < 1 || value.MaxConcurrentDownloads > MaxConcurrentDownloads {

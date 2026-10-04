@@ -17,6 +17,7 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		resolution,
 		output_format,
 		download_acceleration,
+		download_rate_limit_mbps,
 		max_concurrent_downloads,
 		theme
 	FROM app_settings
@@ -26,6 +27,7 @@ func (d *Database) LoadSettings() (appsettings.StorageRecord, bool, error) {
 		&record.Resolution,
 		&record.OutputFormat,
 		&record.DownloadAcceleration,
+		&record.DownloadRateLimitMBps,
 		&record.MaxConcurrentDownloads,
 		&record.Theme,
 	)
@@ -50,16 +52,18 @@ func (d *Database) SaveSettings(record appsettings.StorageRecord) error {
 		resolution,
 		output_format,
 		download_acceleration,
+		download_rate_limit_mbps,
 		max_concurrent_downloads,
 		theme,
 		updated_at
-	) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		schema_version = excluded.schema_version,
 		download_dir = excluded.download_dir,
 		resolution = excluded.resolution,
 		output_format = excluded.output_format,
 		download_acceleration = excluded.download_acceleration,
+		download_rate_limit_mbps = excluded.download_rate_limit_mbps,
 		max_concurrent_downloads = excluded.max_concurrent_downloads,
 		theme = excluded.theme,
 		updated_at = excluded.updated_at`,
@@ -68,6 +72,7 @@ func (d *Database) SaveSettings(record appsettings.StorageRecord) error {
 		string(record.Resolution),
 		string(record.OutputFormat),
 		string(record.DownloadAcceleration),
+		record.DownloadRateLimitMBps,
 		record.MaxConcurrentDownloads,
 		string(record.Theme),
 		time.Now().UTC().Format(time.RFC3339Nano),

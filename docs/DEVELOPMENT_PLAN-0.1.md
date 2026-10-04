@@ -675,6 +675,7 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 - [x] SET-5A-4. GetSettings / UpdateSettings Wails API 구현
 - [x] SET-5A-5. 프론트엔드 AppSettings 타입 및 backend wrapper 추가
 - [x] SET-5A-6. 다운로드 가속 설정 모델 / 기본값 / Validation 및 저장 호환성 구현
+- [ ] SET-5A-7. 다운로드 속도 제한(MB/s) 모델 / Validation / 저장 호환성 구현 — 구현 완료, 실제 검증 대기
 
 #### Phase 5-A 설정 기준
 
@@ -684,6 +685,7 @@ Phase 4 내부 구현 및 격리 안정화 검증은 완료했으며, 위 항목
 - 해상도: `best`
 - 출력 포맷: `mp4`
 - 다운로드 가속: `standard` (fragment 동시 다운로드 수 `2`)
+- 다운로드 속도 제한: `0 MB/s` (제한 없음)
 - 동시 다운로드 수: `3`
 
 지원 해상도:
@@ -712,6 +714,7 @@ Validation:
 - 다운로드 경로는 비어 있을 수 없고 NUL 문자를 허용하지 않는다.
 - 해상도와 출력 포맷은 위 허용 목록만 저장한다.
 - 다운로드 가속은 `stable / standard / fast / ultra`만 저장하고 빈 값은 하위 호환을 위해 `standard`로 정규화한다.
+- 다운로드 속도 제한은 유한한 `0` 이상의 MB/s 값만 저장하며 `0`은 제한 없음으로 처리한다.
 - 동시 다운로드 수는 `1~8` 범위로 제한한다.
 - UpdateSettings는 전체 설정을 검증한 후 한 번에 교체한다.
 - 잘못된 업데이트는 기존 설정을 변경하지 않는다.
@@ -758,12 +761,13 @@ Validation:
 - [x] SET-5B-1. Queue 등록 시 설정 Snapshot을 DownloadRequest에 고정
 - [x] SET-5B-2. 설정 변경 후 새 작업부터 변경값 적용
 - [x] SET-5B-3. 다운로드 가속 설정을 yt-dlp fragment 동시 다운로드 옵션에 적용
+- [ ] SET-5B-4. 다운로드 속도 제한을 Queue Snapshot 및 yt-dlp `--limit-rate`에 적용 — 구현 완료, 실제 검증 대기
 
 #### Phase 5-B 적용 기준
 
 - `StartDownload`은 Queue 등록 직전에 현재 `AppSettings` 전체를 한 번 읽어 다운로드 요청에 Snapshot으로 적용한다.
 - 호출자가 넘긴 `OutputDir`, `FormatSelector`, `OutputFormat`보다 AppSettings를 우선한다.
-- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷/다운로드 가속 Snapshot을 유지한다.
+- queued 작업은 등록 시점의 다운로드 경로/해상도/출력 포맷/다운로드 가속/다운로드 속도 제한 Snapshot을 유지한다.
 - 설정 변경 후 이미 queued/running인 작업의 다운로드 옵션은 변경하지 않는다.
 - 설정 변경 후 새로 Queue에 등록하는 작업부터 새 설정을 사용한다.
 - 동시 다운로드 수는 개별 작업 Snapshot이 아니라 Scheduler 전역 정책으로 취급하며 `UpdateSettings` 즉시 `Queue.SetMaxConcurrent`에 반영한다.
@@ -785,6 +789,12 @@ Validation:
 - `fast` → `--concurrent-fragments 4`
 - `ultra` → `--concurrent-fragments 8`
 - 신규 설치 및 기존 설정 마이그레이션의 기본값은 `standard`(`2`)로 한다.
+
+다운로드 속도 제한:
+
+- `0 MB/s` → `--limit-rate`를 생략해 제한 없이 다운로드한다.
+- `0`보다 큰 값 → MB/s × 1,000,000을 bytes/s 정수로 변환해 `--limit-rate`에 전달한다.
+- 속도 제한은 개별 다운로드 작업 Snapshot이며, 여러 작업을 동시에 실행하면 앱 전체 합산 대역폭은 설정값보다 커질 수 있다.
 
 출력 포맷:
 
@@ -829,6 +839,7 @@ Validation:
 - [ ] SET-5C-3. 해상도 / 출력 포맷 / 동시 다운로드 수 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-4. 저장 / Validation / 성공·실패 피드백 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] SET-5C-5. 다운로드 가속 `안정 / 기본 / 고속 / 초고속` 선택 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
+- [ ] SET-5C-6. 다운로드 속도 제한 MB/s 입력 UI 구현 — 구현 완료, 실제 프론트엔드/Wails 검증 대기
 
 #### Phase 5-C UI 기준
 
@@ -841,6 +852,7 @@ Validation:
 - 해상도는 `최고 화질 / 2160p 이하 / 1440p 이하 / 1080p 이하 / 720p 이하`를 제공한다.
 - 출력 포맷은 `MP4 / MKV / WebM`을 제공한다.
 - 다운로드 가속은 `안정 (1) / 기본 (2) / 고속 (4) / 초고속 (8)`을 제공한다.
+- 다운로드 속도 제한은 MB/s 단위 숫자로 입력하며 소수점 둘째 자리까지 허용하고 `0`은 제한 없음으로 안내한다.
 - 동시 다운로드 수는 정수 `1~8`만 허용하며 기본값은 `3`이다.
 - 저장 전 프론트 Form Validation을 수행하고, 최종 Validation은 기존 `UpdateSettings` 백엔드가 다시 수행한다.
 - 저장 성공 시 성공 메시지를 표시하고 Drawer를 닫는다.
@@ -884,18 +896,20 @@ Validation:
 - [x] SET-5D-3. maxConcurrent 증가/감소 Wails 통합 검증
 - [x] SET-5D-4. 다운로드 경로 및 포맷/해상도 조합 검증
 - [x] SET-5D-5. Phase 6 SQLite 설정 영속화용 Settings 구조 확정
+- [ ] SET-5D-6. 다운로드 속도 제한 저장/복원 및 Queue Snapshot 회귀 검증 — 구현 완료, 실제 검증 대기
 
 #### Phase 5-D 안정화 기준
 
-- 실행 중 작업과 queued 작업의 다운로드 경로/해상도/출력 포맷은 Queue 등록 시점 Snapshot을 끝까지 유지한다.
+- 실행 중 작업과 queued 작업의 다운로드 경로/해상도/출력 포맷/다운로드 가속/다운로드 속도 제한은 Queue 등록 시점 Snapshot을 끝까지 유지한다.
 - Settings 변경 후 신규 Queue 작업부터 새 다운로드 옵션을 적용한다.
 - `maxConcurrentDownloads` 증가 시 빈 Scheduler 슬롯만큼 queued 작업을 즉시 실행한다.
 - `maxConcurrentDownloads` 감소 시 현재 실행 중인 작업을 강제 종료하지 않으며 active 수가 새 제한 미만이 될 때까지 신규 실행을 보류한다.
 - 지원하는 해상도 5종 × 출력 포맷 3종, 총 15개 조합이 동일한 다운로드 경로와 올바른 yt-dlp 인자로 변환되어야 한다.
 - Phase 6 설정 영속화 경계는 API용 `AppSettings`와 분리된 `StorageRecord`를 사용한다.
-- `StorageRecord` v2는 `schemaVersion / downloadDir / resolution / outputFormat / maxConcurrentDownloads / theme`을 저장한다. 기존 v1 레코드는 Dark 테마로 호환 복원한다.
+- `StorageRecord` v4는 `schemaVersion / downloadDir / resolution / outputFormat / downloadAcceleration / downloadRateLimitMBps / maxConcurrentDownloads / theme`을 저장한다.
+- 기존 v1/v2/v3 레코드는 누락된 테마·다운로드 가속·다운로드 속도 제한을 각 버전의 기본값으로 호환 복원한다.
 - 저장 레코드를 복원할 때도 Normalize/Validate를 다시 수행하고 지원하지 않는 schemaVersion은 거부한다.
-- Phase 6 SQLite 구현에서는 단일 settings 레코드를 StorageRecord v2 구조로 매핑하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
+- SQLite settings는 migration 7에서 `download_rate_limit_mbps` 컬럼을 추가하고 이후 구조 변경은 schemaVersion 기반 마이그레이션으로 처리한다.
 
 #### Phase 5-D 검증 현황
 

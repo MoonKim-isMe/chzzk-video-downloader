@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -22,6 +23,33 @@ func TestConcurrentFragmentsForAcceleration(t *testing.T) {
 		}
 		if actual != expected {
 			t.Fatalf("%s: got %d want %d", acceleration, actual, expected)
+		}
+	}
+}
+
+func TestRateLimitBytesPerSecond(t *testing.T) {
+	cases := map[float64]int64{
+		0:    0,
+		0.01: 10_000,
+		1.25: 1_250_000,
+		12.5: 12_500_000,
+	}
+
+	for rateLimitMBps, expected := range cases {
+		actual, err := RateLimitBytesPerSecond(rateLimitMBps)
+		if err != nil {
+			t.Fatalf("%v MB/s: %v", rateLimitMBps, err)
+		}
+		if actual != expected {
+			t.Fatalf("%v MB/s: got %d want %d", rateLimitMBps, actual, expected)
+		}
+	}
+}
+
+func TestRateLimitBytesPerSecondRejectsInvalidValue(t *testing.T) {
+	for _, value := range []float64{-1, math.NaN(), math.Inf(1)} {
+		if _, err := RateLimitBytesPerSecond(value); err == nil {
+			t.Fatalf("expected invalid rate limit error for %v", value)
 		}
 	}
 }
@@ -59,6 +87,7 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 		Resolution:             appsettings.Resolution1080p,
 		OutputFormat:           appsettings.OutputFormatMKV,
 		DownloadAcceleration:   appsettings.DownloadAccelerationFast,
+		DownloadRateLimitMBps:   12.5,
 		MaxConcurrentDownloads: 3,
 	})
 	if err != nil {
@@ -76,6 +105,9 @@ func TestApplySettingsSnapshotsDownloadOptions(t *testing.T) {
 	}
 	if request.ConcurrentFragments != 4 {
 		t.Fatalf("unexpected concurrent fragments: %d", request.ConcurrentFragments)
+	}
+	if request.RateLimitBytesPerSecond != 12_500_000 {
+		t.Fatalf("unexpected rate limit: %d", request.RateLimitBytesPerSecond)
 	}
 }
 
