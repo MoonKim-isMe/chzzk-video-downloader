@@ -1100,6 +1100,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-B3. VOD 카드의 정보 우선순위와 다운로드 추가 CTA 정리 — 태그 chip, 하단 정렬, 폰트/CTA 간격/문구, 썸네일 실패 상태 구현 완료, 실제 프론트엔드/Wails 검증 대기
 - [ ] UX-B4. 채널 전환과 VOD 더보기 흐름의 상태 피드백 개선
 - [x] UX-B5. 검색/북마크 내부 탭 전환 시 ChannelSearchTab을 unmount하지 않고 검색어·검색 결과·더보기 누적 상태 유지
+- [x] UX-B6. 상단 `채널 검색 / URL 직접 입력 / 다운로드` 전환 시 채널 검색 Workspace를 unmount하지 않고 검색 상태 유지
 
 #### Phase 6-UX-C — Download Manager
 
@@ -1131,6 +1132,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 채널 검색 화면은 좌측 채널 탐색 패널 + 우측 VOD 패널의 2열 Workspace로 구성한다.
 - 좌측 채널 탐색 패널은 `검색 / 북마크` 내부 탭으로 전환한다.
 - 검색/북마크 내부 탭은 두 View를 모두 mount한 상태로 유지하고 비활성 View만 숨겨, 탭 전환 시 검색어·검색 결과·더보기 누적 결과가 초기화되지 않도록 한다.
+- 상단 주요 탭 전환에서도 채널 검색 Workspace는 mount 상태를 유지하고 비활성 시 숨겨, URL 직접 입력이나 다운로드 탭을 다녀와도 검색 상태가 유지되도록 한다.
 - 우측 패널은 선택한 채널의 VOD 목록을 항상 표시하는 전용 영역으로 사용한다.
 - VOD 패널 헤더의 `VOD / 채널명` 왼쪽에 선택 채널 프로필 이미지를 표시한다.
 - 검색 결과 채널 카드는 별도 선택 버튼 없이 카드 전체 클릭/Enter/Space로 선택한다.
@@ -1205,6 +1207,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - `AntdApp message={{ top: 84 }}` 설정과 기존 `AntdApp.useApp()` Message 호출 경로 연결 정적 확인
 - 채널 검색 좌측 검색/북마크 탭 + 우측 VOD 레이아웃 구조 확인
 - 검색/북마크 탭 전환 시 검색 View가 unmount되지 않는 구조와 비활성 View의 `hidden` 처리, 100% 높이 유지 스타일 정적 확인
+- 상단 탭 전환 시 검색 Workspace가 항상 렌더 트리에 남고 `hidden`으로만 전환되는 구조 및 100% 높이 유지 스타일 정적 확인
 - 북마크 목록의 텍스트 삭제 버튼 제거, 채워진 별 아이콘 및 `onRemove` 해제 경로 연결 정적 확인
 - 북마크 별 위치 selector 우선순위 확인: 공용 `top: 9px`보다 북마크 전용 `top: 50% + translateY(-50%)`가 우선 적용되도록 확인
 - Scroll chain 정적 확인: `app-shell overflow:hidden → app-content min-height:0/overflow:hidden → workspace height:100%/min-height:0 → sidebar/VOD scroll min-height:0/overflow-y:auto`
