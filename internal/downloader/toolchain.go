@@ -30,6 +30,53 @@ type ToolchainStatus struct {
 	MergeReady    bool       `json:"mergeReady"`
 }
 
+func (s ToolchainStatus) DownloadReadinessError() error {
+	if s.DownloadReady {
+		return nil
+	}
+	return fmt.Errorf(
+		"영상 다운로드 실행 환경이 준비되지 않았습니다: %s",
+		formatToolDiagnostic(s.YTDLP),
+	)
+}
+
+func (s ToolchainStatus) MergeReadinessError() error {
+	if s.MergeReady {
+		return nil
+	}
+
+	failures := make([]string, 0, 2)
+	if !s.FFmpeg.Available {
+		failures = append(failures, formatToolDiagnostic(s.FFmpeg))
+	}
+	if !s.FFprobe.Available {
+		failures = append(failures, formatToolDiagnostic(s.FFprobe))
+	}
+	if len(failures) == 0 {
+		return fmt.Errorf("다운로드 후 영상 처리 환경이 준비되지 않았습니다")
+	}
+	return fmt.Errorf(
+		"다운로드 후 영상 처리 환경이 준비되지 않았습니다: %s",
+		strings.Join(failures, "; "),
+	)
+}
+
+func formatToolDiagnostic(status ToolStatus) string {
+	cause := strings.TrimSpace(status.Error)
+	if cause == "" {
+		cause = "사용 가능 여부를 확인할 수 없습니다"
+	}
+	name := strings.TrimSpace(status.Name)
+	if name == "" {
+		name = "도구"
+	}
+	return fmt.Sprintf(
+		"%s [사용 가능: 아니오, 오류: %s]",
+		name,
+		cause,
+	)
+}
+
 type searchDir struct {
 	path   string
 	source string

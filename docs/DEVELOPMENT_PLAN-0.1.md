@@ -1448,3 +1448,24 @@ Windows 실 검증 대기:
 - 기존 `frontend/dist`에 파일이 있으면 불필요한 프로덕션 프론트엔드 빌드를 반복하지 않는다.
 - 프론트엔드 빌드 실패 또는 산출물 미생성 상태에서는 원래의 Go embed 오류까지 진행하지 않고 원인을 앞 단계에서 표시한다.
 - 실제 Windows/Wails 실행 검증은 Windows 환경에서 완료한 뒤 PKG-7H-5를 완료 처리한다.
+
+
+### Phase 7-I — 다운로드 도구 실행환경 진단 메시지 보강
+
+- [x] PKG-7I-1. `yt-dlp`, `ffmpeg`, `ffprobe` 준비 실패 시 도구명·사용 가능 여부·내부 오류를 포함하되 사용자 로컬 경로는 노출하지 않는 공통 진단 메시지 구성
+- [x] PKG-7I-2. Queue 등록 전 `StartDownload`와 실제 실행 전 `Manager.Prepare`가 동일한 상세 진단 메시지를 사용하도록 통합
+- [x] PKG-7I-3. yt-dlp 버전 확인 실패와 ffprobe 미탐색 케이스의 메시지 회귀 테스트 추가
+- [ ] PKG-7I-4. 문제가 발생한 Windows 10 Portable 환경에서 실제 실패 메시지로 오류 원인 확인
+
+#### Phase 7-I 진단 기준
+
+- 실행 파일이 발견됐지만 버전 probe가 실패한 경우 probe 오류를 사용자 오류 메시지에 포함하되 실제 파일 경로는 표시하지 않는다.
+- 실행 파일을 찾지 못한 경우 사용자 로컬 경로 없이 Resolver의 미탐색 오류만 표시한다.
+- 영상 다운로드 환경은 `yt-dlp`, 후처리 환경은 사용 불가 상태인 `ffmpeg`/`ffprobe`만 진단 대상으로 표시한다.
+- Frontend는 기존 다운로드 시작 오류 표시 경로를 그대로 사용하며 별도의 진단 UI나 설정 화면은 추가하지 않는다.
+
+#### Phase 7-I 검증 현황
+
+- 공통 진단 formatter와 StartDownload/Manager.Prepare 연결 코드를 소스 수준에서 대조했다.
+- yt-dlp 실행 파일이 존재하지만 probe가 실패하는 예시와 ffprobe 파일을 찾지 못하는 예시의 사용자 로컬 경로가 노출되지 않는 메시지를 테스트로 고정했다.
+- 현재 작업 환경에서는 Repository 전체 checkout 및 Windows 실행 환경을 사용할 수 없어 `go test ./...`와 실제 Windows 10 Portable 검증은 수행하지 못했다.
