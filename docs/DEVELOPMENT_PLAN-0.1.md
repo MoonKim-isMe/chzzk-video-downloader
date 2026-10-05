@@ -1455,7 +1455,8 @@ Windows 실 검증 대기:
 - [x] PKG-7I-1. `yt-dlp`, `ffmpeg`, `ffprobe` 준비 실패 시 도구명·사용 가능 여부·내부 오류를 포함하되 사용자 로컬 경로는 노출하지 않는 공통 진단 메시지 구성
 - [x] PKG-7I-2. Queue 등록 전 `StartDownload`와 실제 실행 전 `Manager.Prepare`가 동일한 상세 진단 메시지를 사용하도록 통합
 - [x] PKG-7I-3. yt-dlp 버전 확인 실패와 ffprobe 미탐색 케이스의 메시지 회귀 테스트 추가
-- [ ] PKG-7I-4. 문제가 발생한 Windows 10 Portable 환경에서 실제 실패 메시지로 오류 원인 확인
+- [x] PKG-7I-4. 도구 버전 probe timeout을 3초에서 10초로 완화해 첫 실행 및 보안 검사 지연 허용
+- [ ] PKG-7I-5. 문제가 발생한 Windows 10 Portable 환경에서 실제 실패 메시지로 오류 원인 확인
 
 #### Phase 7-I 진단 기준
 
@@ -1463,9 +1464,11 @@ Windows 실 검증 대기:
 - 실행 파일을 찾지 못한 경우 사용자 로컬 경로 없이 Resolver의 미탐색 오류만 표시한다.
 - 영상 다운로드 환경은 `yt-dlp`, 후처리 환경은 사용 불가 상태인 `ffmpeg`/`ffprobe`만 진단 대상으로 표시한다.
 - Frontend는 기존 다운로드 시작 오류 표시 경로를 그대로 사용하며 별도의 진단 UI나 설정 화면은 추가하지 않는다.
+- `yt-dlp`, `ffmpeg`, `ffprobe` 버전 probe는 각각 최대 10초까지 대기한다.
 
 #### Phase 7-I 검증 현황
 
 - 공통 진단 formatter와 StartDownload/Manager.Prepare 연결 코드를 소스 수준에서 대조했다.
+- 도구 버전 probe timeout이 공통 상수 기준 10초로 적용되는 것을 소스 수준에서 확인했다.
 - yt-dlp 실행 파일이 존재하지만 probe가 실패하는 예시와 ffprobe 파일을 찾지 못하는 예시의 사용자 로컬 경로가 노출되지 않는 메시지를 테스트로 고정했다.
 - 현재 작업 환경에서는 Repository 전체 checkout 및 Windows 실행 환경을 사용할 수 없어 `go test ./...`와 실제 Windows 10 Portable 검증은 수행하지 못했다.

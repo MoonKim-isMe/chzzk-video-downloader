@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const toolsDirEnv = "CHZZK_DOWNLOADER_TOOLS_DIR"
+const (
+	toolsDirEnv             = "CHZZK_DOWNLOADER_TOOLS_DIR"
+	toolVersionProbeTimeout = 10 * time.Second
+)
 
 type ToolStatus struct {
 	Name      string `json:"name"`
@@ -201,7 +204,7 @@ func (r *Resolver) findBinary(filenames []string) (string, string, bool) {
 }
 
 func probeToolVersion(ctx context.Context, path, arg string) (string, error) {
-	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, toolVersionProbeTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(probeCtx, path, arg)
