@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"testing/fstest"
 )
@@ -61,6 +62,65 @@ func TestMaterializeBundledTools(t *testing.T) {
 
 	if err := materializeBundledTools(bundle, root, target); err != nil {
 		t.Fatalf("same bundle should be reusable: %v", err)
+	}
+}
+
+
+func TestMaterializeBundledToolsSerializesConcurrentWrites(t *testing.T) {
+	root := "bundle"
+	data := []byte("yt-dlp-binary")
+	manifest := bundledToolManifest{
+		BundleID: "concurrent-bundle",
+		Platform: "windows/amd64",
+		Tools: []bundledToolFile{{
+			Name:   "yt-dlp.exe",
+			SHA256: hashBytes(data),
+		}},
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := fstest.MapFS{
+		root + "/" + bundleManifestName: {Data: manifestBytes},
+		root + "/yt-dlp.exe":            {Data: data},
+	}
+	target := t.TempDir()
+
+	const workers = 16
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for index := 0; index < workers; index++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- materializeBundledTools(bundle, root, target)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent materialization failed: %v", err)
+		}
+	}
+	actual, err := os.ReadFile(filepath.Join(target, "yt-dlp.exe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(actual) != string(data) {
+		t.Fatalf("unexpected materialized tool: %q", actual)
+	}
+	marker, err := os.ReadFile(filepath.Join(target, bundleMarkerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(marker) != manifest.BundleID+"\n" {
+		t.Fatalf("unexpected bundle marker: %q", marker)
 	}
 }
 

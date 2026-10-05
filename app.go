@@ -395,14 +395,6 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 		return downloader.DownloadTask{}, err
 	}
 
-	toolchain := a.downloadManager.ToolchainStatus(a.appContext())
-	if err := toolchain.DownloadReadinessError(); err != nil {
-		return downloader.DownloadTask{}, err
-	}
-	if err := toolchain.MergeReadinessError(); err != nil {
-		return downloader.DownloadTask{}, err
-	}
-
 	return a.ensureDownloadQueue().Enqueue(request)
 }
 

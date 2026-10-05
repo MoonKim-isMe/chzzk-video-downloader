@@ -1455,7 +1455,7 @@ Windows 실 검증 대기:
 ### Phase 7-I — 다운로드 도구 실행환경 진단 메시지 보강
 
 - [x] PKG-7I-1. `yt-dlp`, `ffmpeg`, `ffprobe` 준비 실패 시 도구명·사용 가능 여부·내부 오류를 포함하되 사용자 로컬 경로는 노출하지 않는 공통 진단 메시지 구성
-- [x] PKG-7I-2. Queue 등록 전 `StartDownload`와 실제 실행 전 `Manager.Prepare`가 동일한 상세 진단 메시지를 사용하도록 통합
+- [x] PKG-7I-2. 실제 실행 전 `Manager.Prepare`에서 상세 진단 메시지를 사용하고, `StartDownload`의 Queue 등록 전 중복 Toolchain probe는 제거
 - [x] PKG-7I-3. yt-dlp 버전 확인 실패와 ffprobe 미탐색 케이스의 메시지 회귀 테스트 추가
 - [x] PKG-7I-4. 도구 버전 probe timeout을 3초에서 10초로 완화해 첫 실행 및 보안 검사 지연 허용
 - [ ] PKG-7I-5. 문제가 발생한 Windows 10 Portable 환경에서 실제 실패 메시지로 오류 원인 확인
@@ -1465,12 +1465,36 @@ Windows 실 검증 대기:
 - 실행 파일이 발견됐지만 버전 probe가 실패한 경우 probe 오류를 사용자 오류 메시지에 포함하되 실제 파일 경로는 표시하지 않는다.
 - 실행 파일을 찾지 못한 경우 사용자 로컬 경로 없이 Resolver의 미탐색 오류만 표시한다.
 - 영상 다운로드 환경은 `yt-dlp`, 후처리 환경은 사용 불가 상태인 `ffmpeg`/`ffprobe`만 진단 대상으로 표시한다.
-- Frontend는 기존 다운로드 시작 오류 표시 경로를 그대로 사용하며 별도의 진단 UI나 설정 화면은 추가하지 않는다.
+- Frontend는 Queue 등록 자체의 오류는 기존 메시지 경로로, 실제 실행 단계의 도구 오류는 다운로드 실패 항목으로 표시하며 별도의 진단 UI는 추가하지 않는다.
 - `yt-dlp`, `ffmpeg`, `ffprobe` 버전 probe는 각각 최대 10초까지 대기한다.
 
 #### Phase 7-I 검증 현황
 
-- 공통 진단 formatter와 StartDownload/Manager.Prepare 연결 코드를 소스 수준에서 대조했다.
+- 공통 진단 formatter와 `Manager.Prepare` 연결, `StartDownload`의 Queue 선행 등록 흐름을 소스 수준에서 대조했다.
 - 도구 버전 probe timeout이 공통 상수 기준 10초로 적용되는 것을 소스 수준에서 확인했다.
 - yt-dlp 실행 파일이 존재하지만 probe가 실패하는 예시와 ffprobe 파일을 찾지 못하는 예시의 사용자 로컬 경로가 노출되지 않는 메시지를 테스트로 고정했다.
 - 현재 작업 환경에서는 Repository 전체 checkout 및 Windows 실행 환경을 사용할 수 없어 `go test ./...`와 실제 Windows 10 Portable 검증은 수행하지 못했다.
+
+
+### Phase 7-J — 빠른 연속 다운로드 요청 안정화
+
+- [x] PKG-7J-1. `StartDownload`의 Queue 등록 전에 실행하던 `ToolchainStatus` probe를 제거하고 실제 실행 슬롯을 획득한 작업에서만 `Manager.Prepare`가 도구 상태를 확인하도록 변경
+- [x] PKG-7J-2. bundled tool materialize 구간을 프로세스 전역 mutex로 직렬화해 동일한 `.tmp` 파일과 대상 실행 파일을 동시에 쓰거나 교체하지 않도록 보호
+- [x] PKG-7J-3. 빠르게 여러 다운로드를 등록해도 설정된 동시 다운로드 수만 executor에 진입하고 Queue 대기 작업이 사전 Toolchain probe를 실행하지 않는 회귀 테스트 추가
+- [x] PKG-7J-4. 동일 target에 대한 bundled tool 동시 materialize 회귀 테스트 추가
+- [ ] PKG-7J-5. Windows 10/11 Portable에서 다운로드 버튼을 빠르게 연속 클릭해 yt-dlp 사전 실행 오류가 재발하지 않는지 실검증
+
+#### Phase 7-J 동작 기준
+
+- 동시 다운로드 수는 실제 다운로드 실행 슬롯의 상한이며, 대기 작업은 yt-dlp/ffmpeg/ffprobe 버전 probe를 실행하지 않는다.
+- Queue에 등록된 작업이 실행 슬롯을 획득한 뒤 `Manager.Download -> Prepare` 단계에서 다운로드 도구의 가용성을 확인한다.
+- 실행 단계에서 도구 준비 오류가 발생하면 해당 Queue 작업을 실패 상태로 전환하고 기존 실패 메시지와 로그 흐름을 유지한다.
+- bundled tool 배치는 앱 프로세스 내에서 한 번에 하나만 실행해 `yt-dlp.exe.tmp` 등 동일 임시 파일에 대한 경합을 방지한다.
+- 다운로드 가속의 `--concurrent-fragments` 값과 Queue의 동시 다운로드 수는 서로 독립적인 설정으로 유지한다.
+
+#### Phase 7-J 검증 현황
+
+- App 회귀 테스트에 Queue 동시 다운로드 수 1에서 10개 요청을 빠르게 등록하는 시나리오를 추가했다.
+- 대기 작업이 `ToolchainStatus`를 Queue 등록 전에 호출하지 않는지 호출 횟수로 검증하도록 테스트를 추가했다.
+- bundle 테스트에 동일 target으로 16개 goroutine이 동시에 materialize를 요청하는 시나리오를 추가했다.
+- 실제 Windows Portable에서의 연속 클릭 실검증은 PKG-7J-5로 남긴다.
