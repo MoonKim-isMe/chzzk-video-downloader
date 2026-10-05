@@ -59,6 +59,8 @@ interface SettingsDrawerProps {
   onClose: () => void;
   onThemePreview: (theme: ThemeMode) => void;
   onSettingsUpdated: (settings: AppSettings) => void;
+  checkingForUpdates: boolean;
+  onCheckForUpdates: () => void;
 }
 
 function SettingsDrawer({
@@ -66,6 +68,8 @@ function SettingsDrawer({
   onClose,
   onThemePreview,
   onSettingsUpdated,
+  checkingForUpdates,
+  onCheckForUpdates,
 }: SettingsDrawerProps) {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<AppSettings>();
@@ -271,6 +275,21 @@ function SettingsDrawer({
             >
               <InputNumber min={1} max={8} precision={0} className="!w-full" />
             </Form.Item>
+          </section>
+
+          <Divider className="!my-6" />
+
+          <section className="settings-section">
+            <Text className="app-eyebrow">UPDATE</Text>
+            <Title level={5} className="!mb-1 !mt-1">
+              업데이트
+            </Title>
+            <Paragraph className="app-muted !mb-4 !text-xs">
+              GitHub Releases에서 새 버전이 있는지 확인합니다.
+            </Paragraph>
+            <Button loading={checkingForUpdates} onClick={onCheckForUpdates}>
+              업데이트 확인
+            </Button>
           </section>
 
         </Form>

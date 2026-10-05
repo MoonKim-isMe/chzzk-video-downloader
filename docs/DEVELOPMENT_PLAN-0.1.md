@@ -1522,3 +1522,31 @@ Windows 실 검증 대기:
 - `go.mod`의 `go 1.25.0`, `frontend/package.json`의 Node 24+/Yarn 4.9.2, Wails v2.15.0 기준과 bootstrap 버전 검사를 일치시켰다.
 - 현재 작업 환경에서는 Windows `winget`, PowerShell, Wails GUI 실행을 직접 수행할 수 없어 깨끗한 Windows 환경 실검증은 PKG-7K-6으로 남긴다.
 
+
+### Phase 7-L — GitHub Release 업데이트 확인
+
+- [x] PKG-7L-1. 공개 GitHub `releases/latest` API를 이용한 최신 정식 Release 조회 구현
+- [x] PKG-7L-2. 현재 앱 버전과 `release-vX.Y.Z` / `release-X.Y.Z` / `vX.Y.Z` 태그를 major.minor.patch 기준으로 비교
+- [x] PKG-7L-3. 앱 시작 시 1회 업데이트를 확인하고 새 버전일 때만 현재/최신 버전과 Release 이동 버튼을 가진 Modal 표시
+- [x] PKG-7L-4. 시작 시 GitHub 조회 실패는 앱 사용을 방해하지 않도록 조용히 무시하고, 설정의 수동 `업데이트 확인`에서 최신 상태 또는 오류를 표시
+- [x] PKG-7L-5. 업데이트 비교용 현재 버전을 빌드 시 이미 갱신되는 `wails.json info.productVersion`에서 읽어 버전 기준을 동기화
+- [x] PKG-7L-6. 업데이트 비교/HTTP 응답/지원 태그 형식에 대한 Go 단위 테스트 추가 및 통과
+- [ ] PKG-7L-7. Windows 10/11 Portable EXE에서 현재 Release와 더 높은 테스트 Release를 대상으로 실제 알림/브라우저 이동 확인
+- [x] PKG-7L-8. 업데이트 알림 테스트를 위해 사용한 임시 `0.1.3` 버전을 제거하고 `wails.json`과 `frontend/package.json`을 원래 `0.1.4`로 복원
+
+#### Phase 7-L 업데이트 기준
+
+- 별도 업데이트 서버나 GitHub Token을 사용하지 않고 공개 Repository의 최신 정식 GitHub Release만 확인한다.
+- GitHub의 `/releases/latest` 응답을 사용하므로 draft와 prerelease는 자동 업데이트 알림 대상에서 제외한다.
+- 앱 실행 시 조회 실패나 오프라인 상태는 다운로드/검색 등 기존 기능을 막지 않는다.
+- 사용자가 설정에서 직접 확인한 경우에만 최신 버전 안내 또는 조회 오류를 표시한다.
+- 새 버전 감지 시 자동 다운로드나 자동 설치는 수행하지 않고 GitHub Release 페이지를 기본 브라우저로 연다.
+- 업데이트 비교에 사용하는 현재 앱 버전은 별도 하드코딩 값이 아니라 `wails.json`의 `info.productVersion`을 기준으로 한다.
+- 업데이트 알림 실검증에는 일시적으로 `0.1.3`을 사용했으며, 최종 코드에서는 `wails.json`과 `frontend/package.json` 모두 원래 `0.1.4`를 유지한다.
+
+#### Phase 7-L 검증 현황
+
+- 표준 라이브러리만 사용하는 updater 패키지를 분리하고 `httptest` 기반으로 새 버전, 동일/낮은 버전, 잘못된 태그 형식을 검증했다.
+- 로컬 격리 환경에서 `gofmt` 및 updater 패키지 `go test -count=1` 통과를 확인했다.
+- 전체 Repository checkout과 Windows GUI 실행 환경은 현재 작업 환경에서 사용할 수 없어 전체 `go test ./...`, Frontend 실제 빌드, Portable 실 실행 검증은 수행하지 못했다.
+- 테스트용 `0.1.3` 변경은 제거했으며 최종 브랜치의 `wails.json`과 `frontend/package.json`이 모두 `0.1.4`인 것을 소스 수준에서 확인했다.

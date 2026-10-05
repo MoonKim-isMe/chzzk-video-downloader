@@ -6,6 +6,7 @@ import type {
   ToolchainStatus,
 } from '../types/download';
 import type { AppSettings } from '../types/settings';
+import type { UpdateInfo } from '../types/update';
 import type { Video, VideoListResult } from '../types/video';
 
 interface BackendApp {
@@ -23,6 +24,8 @@ interface BackendApp {
   SelectAuthenticationCookiesFile(currentFile: string): Promise<string>;
   GetSettings(): Promise<AppSettings>;
   UpdateSettings(settings: AppSettings): Promise<AppSettings>;
+  CheckForUpdates(): Promise<UpdateInfo>;
+  OpenReleasePage(rawURL: string): Promise<void>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
@@ -80,6 +83,10 @@ export const selectAuthenticationCookiesFile = (currentFile: string) =>
 export const getSettings = () => app().GetSettings();
 
 export const updateSettings = (settings: AppSettings) => app().UpdateSettings(settings);
+
+export const checkForUpdates = () => app().CheckForUpdates();
+
+export const openReleasePage = (rawURL: string) => app().OpenReleasePage(rawURL);
 
 export const startDownload = (request: StartDownloadRequest) => app().StartDownload(request);
 
