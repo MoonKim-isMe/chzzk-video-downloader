@@ -1498,3 +1498,27 @@ Windows 실 검증 대기:
 - 대기 작업이 `ToolchainStatus`를 Queue 등록 전에 호출하지 않는지 호출 횟수로 검증하도록 테스트를 추가했다.
 - bundle 테스트에 동일 target으로 16개 goroutine이 동시에 materialize를 요청하는 시나리오를 추가했다.
 - 실제 Windows Portable에서의 연속 클릭 실검증은 PKG-7J-5로 남긴다.
+
+### Phase 7-K — 개발 환경 자동 부트스트랩
+
+- [x] PKG-7K-1. `scripts/dev.ps1`에서 Node.js 24+와 Go 1.25+를 검사하고 누락 또는 구버전이면 `winget`으로 자동 설치/갱신
+- [x] PKG-7K-2. Go 설치 후 현재 프로세스 PATH를 갱신하고 Wails CLI v2.15.0을 `go install`로 자동 준비
+- [x] PKG-7K-3. 전역 Yarn 대신 Corepack으로 `frontend/package.json`의 Yarn 4.9.2를 직접 실행하고 프론트엔드 의존성을 `--immutable`로 자동 설치
+- [x] PKG-7K-4. Corepack 실행 파일이 없는 Node 환경을 위해 `npx corepack` fallback을 제공하고 Wails frontend 명령도 동일 Yarn runner를 사용하도록 통합
+- [x] PKG-7K-5. WebView2 Runtime을 검사하고 누락 시 `winget`으로 설치하며 README 개발 환경 준비 절차를 단일 `dev.ps1` 실행 기준으로 갱신
+- [ ] PKG-7K-6. Node/Go/Wails가 없는 Windows 10/11 환경에서 `scripts/dev.ps1` 단독 실행으로 앱 개발 모드 기동 실검증
+
+#### Phase 7-K 동작 기준
+
+- 개발자는 Repository checkout 이후 `powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1`만 실행하면 된다.
+- Node.js, Go, WebView2 Runtime 설치가 필요한 경우 Windows 기본 패키지 관리자인 `winget`을 사용하며 `winget` 자체가 없는 환경은 명시적으로 안내하고 중단한다.
+- 시스템 전역 Yarn 1.x가 설치되어 있어도 사용하지 않으며 `corepack enable`처럼 `Program Files`에 shim을 쓰는 작업을 수행하지 않는다.
+- Wails 설치 경로는 `GOBIN` 또는 `GOPATH\bin`을 해석해 현재 프로세스 PATH에 추가하므로 설치 직후 동일한 실행에서 `wails dev`로 이어진다.
+- 프론트엔드 의존성 설치는 lockfile 변경을 허용하지 않는 `yarn install --immutable`을 사용한다.
+
+#### Phase 7-K 검증 현황
+
+- `wails.json`의 install/build/dev watcher가 모두 `scripts/run-yarn.ps1`을 사용하도록 통일해 전역 Yarn 1.x 경로를 제거했다.
+- `go.mod`의 `go 1.25.0`, `frontend/package.json`의 Node 24+/Yarn 4.9.2, Wails v2.15.0 기준과 bootstrap 버전 검사를 일치시켰다.
+- 현재 작업 환경에서는 Windows `winget`, PowerShell, Wails GUI 실행을 직접 수행할 수 없어 깨끗한 Windows 환경 실검증은 PKG-7K-6으로 남긴다.
+
