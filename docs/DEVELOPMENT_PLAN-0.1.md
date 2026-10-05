@@ -1129,6 +1129,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - [ ] UX-D2. 저장/취소/폴더 선택 액션의 상태 피드백 통일 — 공통 Message를 헤더 아래에서 표시하도록 위치 보정 완료, 실제 Wails 시각 검증 대기
 - [ ] UX-D3. 키보드 포커스, 버튼 상태, 텍스트 대비 등 기본 접근성 점검
 - [ ] UX-D4. 전체 UI에서 버튼/Tag/Alert/Empty/Skeleton 표현 일관성 점검
+- [ ] UX-D5. 최초 기본 다운로드 폴더가 아직 생성되지 않은 경우에도 존재하는 상위 폴더를 시작 위치로 사용해 폴더 선택 가능 — 구현 및 회귀 테스트 추가 완료, 실제 Go 테스트 실행 대기
 
 #### Phase 6-UX 이번 구현 기준
 
@@ -1173,6 +1174,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - 기본 테마는 Dark이며 기존 DB의 v1 Settings는 migration v2에서 Dark로 승격한다.
 - `app_settings.theme`을 SQLite에 저장해 재실행 후에도 테마를 유지한다.
 - Settings Drawer 최하단의 `설정 적용`, `설정은 자동으로 보관됩니다.` 안내 블록은 제거하고 실제 설정 Form과 저장/취소 액션만 유지한다.
+- 다운로드 폴더 선택 창에는 실제 존재하는 디렉터리만 시작 위치로 전달한다. 현재 설정 경로가 아직 생성되지 않았다면 가장 가까운 기존 상위 디렉터리로 올라가 폴더 선택 창을 열며, 기존 폴더가 존재하면 기존 시작 위치를 그대로 유지한다.
 - 과거 빌드의 migration version 충돌로 `schema_migrations`에는 최신 버전이 기록됐지만 `app_settings.download_acceleration` 컬럼이 없는 DB를 시작 시 감지해 컬럼과 설정 schema_version을 자동 복구한다.
 - 다운로드 탭은 헤더 아래 남은 높이를 채우는 단일 Workspace로 구성하고 `진행 중 / 완료 / 실패` 섹션을 내부 스크롤 영역에서 분리한다.
 - 취소 요청이 승인되면 running Task도 즉시 cancelled 상태 이벤트를 발생시키고 UI 목록에서 제거한다. 실제 프로세스 종료 전까지 Scheduler active slot은 유지해 동시성 제한을 보존한다.
@@ -1223,6 +1225,7 @@ Phase 5 내부 구현과 격리 통합 안정화는 완료했으며, 실제 Wind
 - Settings Drawer Light/Dark Form 계약과 AppSettings theme 타입 연결 확인
 - 테마 선택 즉시 preview 적용, 저장 시 유지, 취소/X 닫기 시 저장 테마 복원 경로 추가
 - Settings Drawer 최하단의 설정 안내 Alert 2개 제거
+- 미생성 기본 다운로드 경로가 저장되어 있어도 가장 가까운 기존 상위 폴더를 폴더 선택 창 시작 위치로 사용하는 회귀 테스트 추가
 - legacy SQLite의 누락된 `download_acceleration` 컬럼 자동 복구 및 기본값 `standard` 복원 테스트 추가
 - Download Manager의 cancelled 숨김 / 완료 액션 / 기능 중심 tool 상태 문구 구조 정적 확인
 - Queue 취소/삭제 격리 fixture에서 `gofmt`, `go test`, `go test -race`, `go vet` 성공
