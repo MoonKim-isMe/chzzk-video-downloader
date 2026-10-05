@@ -143,6 +143,35 @@ select {
   font-size: 15px;
 }
 
+.app-update-tag {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  color: var(--app-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.app-update-tag:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 68%, transparent);
+  background: color-mix(in srgb, var(--app-primary) 20%, transparent);
+}
+
+.app-update-tag:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .app-navigation {
   display: inline-flex;
   align-items: center;
