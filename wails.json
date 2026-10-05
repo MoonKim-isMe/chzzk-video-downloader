@@ -2,9 +2,9 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "CHZZK Video Downloader",
   "outputfilename": "chzzk-video-downloader",
-  "frontend:install": "yarn install",
-  "frontend:build": "yarn build",
-  "frontend:dev:watcher": "yarn dev",
+  "frontend:install": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/run-yarn.ps1 install --immutable",
+  "frontend:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/run-yarn.ps1 build",
+  "frontend:dev:watcher": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/run-yarn.ps1 dev",
   "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "./frontend/src/wailsjs",
   "author": {

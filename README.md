@@ -89,7 +89,7 @@ Portable EXE를 다른 폴더로 이동하거나 새 버전으로 교체해도 �
 ## 기술 스택
 
 - Wails v2.15
-- Go 1.23+
+- Go 1.25+
 - React 19
 - TypeScript
 - Vite 5
@@ -102,47 +102,30 @@ Portable EXE를 다른 폴더로 이동하거나 새 버전으로 교체해도 �
 
 ## 개발 환경 준비
 
-Windows 10/11을 기본 개발 환경으로 합니다.
-
-필수 도구:
-
-- Go 1.23 이상
-- Node.js 24 이상
-- Corepack / Yarn
-- Wails CLI v2.15.0
-- Microsoft WebView2 Runtime
-
-Wails CLI 설치:
-
-```powershell
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
-```
-
-Yarn 활성화:
-
-```powershell
-corepack enable
-```
-
-프론트엔드 의존성 설치:
-
-```powershell
-cd frontend
-yarn install
-cd ..
-```
-
-## 개발 실행
-
-Windows에서는 프로젝트 루트에서 아래 스크립트를 실행하는 방식을 권장합니다.
+Windows 10/11에서는 프로젝트 루트의 `scripts/dev.ps1`을 개발 환경 준비와 실행의 단일 진입점으로 사용합니다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
 
-최초 실행 시 Windows용 다운로드 도구를 내려받고 SHA-256 checksum을 검증합니다. 이후에는 준비된 파일을 재사용합니다.
+스크립트가 다음 항목을 자동으로 확인하고 필요한 경우 설치 또는 준비합니다.
 
-`frontend/dist`가 없거나 비어 있으면 개발 스크립트가 먼저 프론트엔드를 빌드한 뒤 `wails dev`를 실행합니다.
+- Node.js 24 이상
+- Go 1.25 이상
+- Wails CLI v2.15.0
+- Microsoft Edge WebView2 Runtime
+- Yarn 4.9.2
+- 프론트엔드 의존성
+- yt-dlp, ffmpeg, ffprobe
+- `frontend/dist`의 Go embed용 프론트엔드 산출물
+
+Node.js, Go 또는 WebView2 Runtime 설치가 필요한 경우 Windows Package Manager(`winget`)를 사용합니다. `winget`이 없는 Windows 환경에서는 Microsoft App Installer를 먼저 설치해야 합니다.
+
+Yarn은 시스템에 설치된 전역 Yarn을 사용하지 않습니다. `frontend/package.json`의 `packageManager`에 지정된 Yarn 4.9.2를 Corepack으로 직접 실행하므로 `corepack enable`과 관리자 권한이 필요하지 않습니다. Corepack 실행 파일이 없는 Node 환경에서는 `npx corepack`을 대체 경로로 사용합니다.
+
+Go 또는 Wails가 설치된 직후에는 현재 PowerShell 프로세스의 PATH를 갱신하므로 일반적인 경우 터미널을 다시 열지 않고 같은 `dev.ps1` 실행에서 계속 진행합니다.
+
+## 개발 실행
 
 다운로드 도구를 최신 release로 다시 준비하려면:
 
@@ -150,7 +133,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -RefreshTools
 ```
 
-직접 `wails dev`를 실행하려면 다운로드 도구와 `frontend/dist`가 먼저 준비되어 있어야 합니다. 일반 개발에서는 `scripts/dev.ps1`을 개발 실행 진입점으로 사용하는 것을 권장합니다.
+`frontend/dist`가 없거나 비어 있으면 개발 스크립트가 프론트엔드를 먼저 빌드한 뒤 `wails dev`를 실행합니다.
+
+직접 `wails dev`를 실행하는 경우에도 Wails의 프론트엔드 명령은 `scripts/run-yarn.ps1`을 통해 Yarn 4를 사용합니다. 다만 Go/Wails/WebView2 및 다운로드 도구 자동 준비까지 포함하려면 `scripts/dev.ps1` 사용을 권장합니다.
 
 ## 검증
 
