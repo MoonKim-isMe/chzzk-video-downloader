@@ -5,6 +5,7 @@ import {
   ConfigProvider,
   Empty,
   Layout,
+  Modal,
   Tooltip,
   theme as antdTheme,
 } from 'antd';
@@ -18,10 +19,12 @@ import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
 import VideoUrlTab from './features/videos/VideoUrlTab';
 import {
+  checkForUpdates,
   getAuthenticationSettings,
   getDownloadTasks,
   getSavedChannels,
   getSettings,
+  openReleasePage,
   removeSavedChannel,
   saveChannel,
   startDownload,
@@ -32,6 +35,7 @@ import type { AuthenticationSettings } from './types/authentication';
 import type { Channel } from './types/channel';
 import type { DownloadTask, DownloadTaskStatus } from './types/download';
 import type { AppSettings, ThemeMode } from './types/settings';
+import type { UpdateInfo } from './types/update';
 import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
@@ -93,6 +97,39 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authenticationOpen, setAuthenticationOpen] = useState(false);
   const [authenticationSettings, setAuthenticationSettings] = useState<AuthenticationSettings>();
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo>();
+  const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+  const startupUpdateCheckStarted = useRef(false);
+
+  const handleCheckForUpdates = useCallback(
+    async (notifyWhenCurrent: boolean) => {
+      setCheckingForUpdates(true);
+      try {
+        const result = await checkForUpdates();
+        if (result.updateAvailable) {
+          setSettingsOpen(false);
+          setUpdateInfo(result);
+        } else if (notifyWhenCurrent) {
+          message.success(`현재 최신 버전(v${result.currentVersion})을 사용 중입니다.`);
+        }
+      } catch (cause) {
+        if (notifyWhenCurrent) {
+          message.warning(cause instanceof Error ? cause.message : String(cause));
+        }
+      } finally {
+        setCheckingForUpdates(false);
+      }
+    },
+    [message],
+  );
+
+  useEffect(() => {
+    if (startupUpdateCheckStarted.current) {
+      return;
+    }
+    startupUpdateCheckStarted.current = true;
+    void handleCheckForUpdates(false);
+  }, [handleCheckForUpdates]);
 
   useEffect(() => {
     getSavedChannels()
@@ -399,7 +436,44 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         onClose={() => setSettingsOpen(false)}
         onThemePreview={onThemePreview}
         onSettingsUpdated={onSettingsUpdated}
+        checkingForUpdates={checkingForUpdates}
+        onCheckForUpdates={() => void handleCheckForUpdates(true)}
       />
+
+      <Modal
+        title="새 버전이 있습니다"
+        open={Boolean(updateInfo?.updateAvailable)}
+        onCancel={() => setUpdateInfo(undefined)}
+        footer={[
+          <Button key="close" onClick={() => setUpdateInfo(undefined)}>
+            닫기
+          </Button>,
+          <Button
+            key="release"
+            type="primary"
+            onClick={() => {
+              if (!updateInfo?.releaseUrl) {
+                return;
+              }
+              void openReleasePage(updateInfo.releaseUrl)
+                .then(() => setUpdateInfo(undefined))
+                .catch((cause) => {
+                  message.error(cause instanceof Error ? cause.message : String(cause));
+                });
+            }}
+          >
+            릴리즈 페이지 열기
+          </Button>,
+        ]}
+      >
+        <p>새 버전을 사용할 수 있습니다. GitHub Releases에서 변경사항과 다운로드 파일을 확인할 수 있습니다.</p>
+        <p>
+          <strong>현재 버전</strong> v{updateInfo?.currentVersion}
+        </p>
+        <p>
+          <strong>최신 버전</strong> v{updateInfo?.latestVersion}
+        </p>
+      </Modal>
     </Layout>
   );
 }
