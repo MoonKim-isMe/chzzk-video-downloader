@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
@@ -18,7 +19,10 @@ const (
 	bundleMarkerName           = ".bundle-id"
 )
 
-var errBundledToolsUnavailable = errors.New("Windows 다운로드 도구 bundle이 준비되지 않았습니다")
+var (
+	errBundledToolsUnavailable = errors.New("Windows 다운로드 도구 bundle이 준비되지 않았습니다")
+	bundledToolsMaterializeMu   sync.Mutex
+)
 
 type bundledToolManifest struct {
 	BundleID string            `json:"bundleId"`
@@ -44,6 +48,9 @@ func managedToolsDir() (string, error) {
 }
 
 func materializeBundledTools(bundle fs.FS, root, targetDir string) error {
+	bundledToolsMaterializeMu.Lock()
+	defer bundledToolsMaterializeMu.Unlock()
+
 	manifestBytes, err := fs.ReadFile(bundle, filepath.ToSlash(filepath.Join(root, bundleManifestName)))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

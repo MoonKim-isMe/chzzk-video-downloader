@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,11 +17,13 @@ import (
 )
 
 type fakeDownloadService struct {
-	status   downloader.ToolchainStatus
-	download func(context.Context, downloader.DownloadRequest, downloader.ProgressHandler) (downloader.DownloadResult, error)
+	status         downloader.ToolchainStatus
+	toolchainCalls atomic.Int32
+	download       func(context.Context, downloader.DownloadRequest, downloader.ProgressHandler) (downloader.DownloadResult, error)
 }
 
 func (f *fakeDownloadService) ToolchainStatus(context.Context) downloader.ToolchainStatus {
+	f.toolchainCalls.Add(1)
 	return f.status
 }
 
@@ -53,12 +56,15 @@ func testStartRequest(t *testing.T) downloader.StartDownloadRequest {
 	}
 }
 
-func TestStartDownloadReportsDetailedToolchainFailure(t *testing.T) {
+
+func TestStartDownloadDefersToolchainFailureUntilQueuedExecution(t *testing.T) {
+	expected := "영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [사용 가능: 아니오, 오류: yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1]"
+	started := make(chan struct{}, 1)
 	service := &fakeDownloadService{
 		status: downloader.ToolchainStatus{
 			YTDLP: downloader.ToolStatus{
 				Name:      "yt-dlp",
-				Path:      `C:\Users\tester\AppData\Local\CHZZK Video Downloader\tools\yt-dlp.exe`,
+				Path:      `C:\\Users\\tester\\AppData\\Local\\CHZZK Video Downloader\\tools\\yt-dlp.exe`,
 				Found:     true,
 				Available: false,
 				Error:     "yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1",
@@ -70,8 +76,8 @@ func TestStartDownloadReportsDetailedToolchainFailure(t *testing.T) {
 			downloader.DownloadRequest,
 			downloader.ProgressHandler,
 		) (downloader.DownloadResult, error) {
-			t.Fatal("toolchain failure must stop before download execution")
-			return downloader.DownloadResult{}, nil
+			started <- struct{}{}
+			return downloader.DownloadResult{}, errors.New(expected)
 		},
 	}
 
@@ -79,16 +85,106 @@ func TestStartDownloadReportsDetailedToolchainFailure(t *testing.T) {
 	app.downloadManager = service
 	app.eventEmitter = func(downloader.DownloadTask) {}
 
-	_, err := app.StartDownload(testStartRequest(t))
-	if err == nil {
-		t.Fatal("expected toolchain readiness error")
+	task, err := app.StartDownload(testStartRequest(t))
+	if err != nil {
+		t.Fatalf("toolchain 검사는 Queue 등록 전에 실행되면 안 됩니다: %v", err)
 	}
-	expected := `영상 다운로드 실행 환경이 준비되지 않았습니다: yt-dlp [사용 가능: 아니오, 오류: yt-dlp.exe 버전을 확인할 수 없습니다: exit status 1]`
-	if err.Error() != expected {
-		t.Fatalf("unexpected toolchain error:\nwant: %s\n got: %s", expected, err)
+	if calls := service.toolchainCalls.Load(); calls != 0 {
+		t.Fatalf("StartDownload이 Queue 등록 전에 ToolchainStatus를 %d회 호출했습니다", calls)
 	}
-	if tasks := app.GetDownloadTasks(); len(tasks) != 0 {
-		t.Fatalf("toolchain failure must not enqueue a task: %#v", tasks)
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("queued executor did not start")
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		failed, ok := app.ensureDownloadQueue().Get(task.TaskID)
+		if ok && failed.Status == downloader.TaskStatusFailed {
+			if failed.Error != expected {
+				t.Fatalf("unexpected deferred toolchain error: %q", failed.Error)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("toolchain failure was not reported through the queued task: %#v", task)
+}
+
+func TestStartDownloadRapidRequestsRespectQueueBeforeToolchainProbe(t *testing.T) {
+	started := make(chan string, 16)
+	service := &fakeDownloadService{
+		status: downloader.ToolchainStatus{
+			YTDLP:         downloader.ToolStatus{Name: "yt-dlp", Available: false, Error: "probe failed"},
+			DownloadReady: false,
+		},
+		download: func(
+			ctx context.Context,
+			request downloader.DownloadRequest,
+			downloader.ProgressHandler,
+		) (downloader.DownloadResult, error) {
+			started <- request.URL
+			<-ctx.Done()
+			return downloader.DownloadResult{}, ctx.Err()
+		},
+	}
+
+	settings := appsettings.Defaults(t.TempDir())
+	settings.MaxConcurrentDownloads = 1
+	store, err := appsettings.NewStore(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.eventEmitter = func(downloader.DownloadTask) {}
+	defer app.ensureDownloadQueue().Stop()
+
+	const count = 10
+	for index := 0; index < count; index++ {
+		request := testStartRequest(t)
+		request.VideoNo = int64(20000 + index)
+		request.URL = fmt.Sprintf("https://chzzk.naver.com/video/%d", request.VideoNo)
+		if _, err := app.StartDownload(request); err != nil {
+			t.Fatalf("rapid enqueue %d failed before Queue admission: %v", index, err)
+		}
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first queued download did not start")
+	}
+	select {
+	case extra := <-started:
+		t.Fatalf("동시 다운로드 제한을 넘긴 실행이 시작되었습니다: %s", extra)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	if calls := service.toolchainCalls.Load(); calls != 0 {
+		t.Fatalf("rapid enqueue triggered %d pre-Queue ToolchainStatus probes", calls)
+	}
+
+	tasks := app.GetDownloadTasks()
+	if len(tasks) != count {
+		t.Fatalf("unexpected task count: got %d want %d", len(tasks), count)
+	}
+	running := 0
+	queued := 0
+	for _, task := range tasks {
+		switch task.Status {
+		case downloader.TaskStatusRunning:
+			running++
+		case downloader.TaskStatusQueued:
+			queued++
+		}
+	}
+	if running != 1 || queued != count-1 {
+		t.Fatalf("unexpected queue distribution: running=%d queued=%d", running, queued)
 	}
 }
 
