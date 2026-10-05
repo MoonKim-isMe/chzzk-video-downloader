@@ -9,7 +9,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   cancelDownload,
@@ -350,6 +350,7 @@ function DownloadSection({
   queuePositions,
   onTaskRemoved,
   onTaskRecovered,
+  action,
 }: {
   title: string;
   count: number;
@@ -357,6 +358,7 @@ function DownloadSection({
   queuePositions: Map<string, number>;
   onTaskRemoved: (taskId: string) => void;
   onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
+  action?: ReactNode;
 }) {
   if (tasks.length === 0) {
     return null;
@@ -367,6 +369,7 @@ function DownloadSection({
       <div className="download-section-heading">
         <Text strong>{title}</Text>
         <span className="download-section-count">{count}</span>
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <div className="download-section-list">
         {tasks.map((task) => (
@@ -387,6 +390,7 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
   const { message } = AntdApp.useApp();
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
   const [preparing, setPreparing] = useState(true);
+  const [deletingCompleted, setDeletingCompleted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -450,6 +454,38 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
     failed: failedTasks.length,
   };
 
+  const handleDeleteCompleted = async () => {
+    if (completedTasks.length === 0 || deletingCompleted) {
+      return;
+    }
+
+    setDeletingCompleted(true);
+    let removedCount = 0;
+    let failedCount = 0;
+
+    try {
+      for (const task of completedTasks) {
+        try {
+          await deleteDownloadTask(task.taskId);
+          onTaskRemoved(task.taskId);
+          removedCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      if (failedCount === 0) {
+        message.success(`완료 항목 ${removedCount}개를 목록에서 삭제했습니다.`);
+      } else if (removedCount > 0) {
+        message.warning(`완료 항목 ${removedCount}개를 삭제했고 ${failedCount}개는 삭제하지 못했습니다.`);
+      } else {
+        message.error('완료 항목을 삭제하지 못했습니다.');
+      }
+    } finally {
+      setDeletingCompleted(false);
+    }
+  };
+
   return (
     <Card bordered={false} className="app-panel download-workspace-panel">
       <div className="download-workspace-header">
@@ -505,6 +541,15 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
               queuePositions={queuePositions}
               onTaskRemoved={onTaskRemoved}
               onTaskRecovered={onTaskRecovered}
+              action={(
+                <Button
+                  size="small"
+                  loading={deletingCompleted}
+                  onClick={() => void handleDeleteCompleted()}
+                >
+                  완료 목록 삭제
+                </Button>
+              )}
             />
             <DownloadSection
               title="실패"
