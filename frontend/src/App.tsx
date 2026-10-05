@@ -97,7 +97,8 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authenticationOpen, setAuthenticationOpen] = useState(false);
   const [authenticationSettings, setAuthenticationSettings] = useState<AuthenticationSettings>();
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo>();
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo>();
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
   const startupUpdateCheckStarted = useRef(false);
 
@@ -108,9 +109,13 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         const result = await checkForUpdates();
         if (result.updateAvailable) {
           setSettingsOpen(false);
-          setUpdateInfo(result);
-        } else if (notifyWhenCurrent) {
-          message.success(`현재 최신 버전(v${result.currentVersion})을 사용 중입니다.`);
+          setAvailableUpdate(result);
+          setUpdateModalOpen(true);
+        } else {
+          setAvailableUpdate(undefined);
+          if (notifyWhenCurrent) {
+            message.success(`현재 최신 버전(v${result.currentVersion})을 사용 중입니다.`);
+          }
         }
       } catch (cause) {
         if (notifyWhenCurrent) {
@@ -365,6 +370,20 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         <div className="app-brand" title="CHZZK Video Downloader">
           <span className="app-brand-mark">C</span>
           <span className="app-brand-name">CHZZK Video Downloader</span>
+          {availableUpdate?.updateAvailable && (
+            <button
+              type="button"
+              className="app-update-tag"
+              title="GitHub Release 페이지 열기"
+              onClick={() => {
+                void openReleasePage(availableUpdate.releaseUrl).catch((cause) => {
+                  message.error(cause instanceof Error ? cause.message : String(cause));
+                });
+              }}
+            >
+              새 업데이트가 있습니다
+            </button>
+          )}
         </div>
 
         <nav className="app-navigation" aria-label="주요 메뉴">
@@ -442,21 +461,21 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
 
       <Modal
         title="새 버전이 있습니다"
-        open={Boolean(updateInfo?.updateAvailable)}
-        onCancel={() => setUpdateInfo(undefined)}
+        open={updateModalOpen && Boolean(availableUpdate?.updateAvailable)}
+        onCancel={() => setUpdateModalOpen(false)}
         footer={[
-          <Button key="close" onClick={() => setUpdateInfo(undefined)}>
+          <Button key="close" onClick={() => setUpdateModalOpen(false)}>
             닫기
           </Button>,
           <Button
             key="release"
             type="primary"
             onClick={() => {
-              if (!updateInfo?.releaseUrl) {
+              if (!availableUpdate?.releaseUrl) {
                 return;
               }
-              void openReleasePage(updateInfo.releaseUrl)
-                .then(() => setUpdateInfo(undefined))
+              void openReleasePage(availableUpdate.releaseUrl)
+                .then(() => setUpdateModalOpen(false))
                 .catch((cause) => {
                   message.error(cause instanceof Error ? cause.message : String(cause));
                 });
@@ -468,10 +487,10 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       >
         <p>새 버전을 사용할 수 있습니다. GitHub Releases에서 변경사항과 다운로드 파일을 확인할 수 있습니다.</p>
         <p>
-          <strong>현재 버전</strong> v{updateInfo?.currentVersion}
+          <strong>현재 버전</strong> v{availableUpdate?.currentVersion}
         </p>
         <p>
-          <strong>최신 버전</strong> v{updateInfo?.latestVersion}
+          <strong>최신 버전</strong> v{availableUpdate?.latestVersion}
         </p>
       </Modal>
     </Layout>

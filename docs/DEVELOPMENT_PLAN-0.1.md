@@ -1533,6 +1533,7 @@ Windows 실 검증 대기:
 - [x] PKG-7L-6. 업데이트 비교/HTTP 응답/지원 태그 형식에 대한 Go 단위 테스트 추가 및 통과
 - [ ] PKG-7L-7. Windows 10/11 Portable EXE에서 현재 Release와 더 높은 테스트 Release를 대상으로 실제 알림/브라우저 이동 확인
 - [x] PKG-7L-8. 업데이트 알림 테스트를 위해 사용한 임시 `0.1.3` 버전을 제거하고 `wails.json`과 `frontend/package.json`을 원래 `0.1.4`로 복원
+- [x] PKG-7L-9. 새 업데이트 감지 시 프로그램명 옆에 `새 업데이트가 있습니다` 태그를 유지 표시하고 클릭하면 Modal을 열지 않고 해당 GitHub Release 페이지를 바로 열도록 연결
 
 #### Phase 7-L 업데이트 기준
 
@@ -1541,6 +1542,7 @@ Windows 실 검증 대기:
 - 앱 실행 시 조회 실패나 오프라인 상태는 다운로드/검색 등 기존 기능을 막지 않는다.
 - 사용자가 설정에서 직접 확인한 경우에만 최신 버전 안내 또는 조회 오류를 표시한다.
 - 새 버전 감지 시 자동 다운로드나 자동 설치는 수행하지 않고 GitHub Release 페이지를 기본 브라우저로 연다.
+- 새 버전이 확인된 동안 헤더 프로그램명 옆에 업데이트 태그를 유지하며, 태그 클릭은 업데이트 Modal을 거치지 않고 확인된 Release URL을 바로 연다.
 - 업데이트 비교에 사용하는 현재 앱 버전은 별도 하드코딩 값이 아니라 `wails.json`의 `info.productVersion`을 기준으로 한다.
 - 업데이트 알림 실검증에는 일시적으로 `0.1.3`을 사용했으며, 최종 코드에서는 `wails.json`과 `frontend/package.json` 모두 원래 `0.1.4`를 유지한다.
 
@@ -1550,3 +1552,4 @@ Windows 실 검증 대기:
 - 로컬 격리 환경에서 `gofmt` 및 updater 패키지 `go test -count=1` 통과를 확인했다.
 - 전체 Repository checkout과 Windows GUI 실행 환경은 현재 작업 환경에서 사용할 수 없어 전체 `go test ./...`, Frontend 실제 빌드, Portable 실 실행 검증은 수행하지 못했다.
 - 테스트용 `0.1.3` 변경은 제거했으며 최종 브랜치의 `wails.json`과 `frontend/package.json`이 모두 `0.1.4`인 것을 소스 수준에서 확인했다.
+- 헤더 태그가 Modal 열림 상태와 분리된 업데이트 정보 상태를 사용하며, 태그 클릭이 `OpenReleasePage`를 직접 호출하는 것을 소스 수준에서 확인했다.
