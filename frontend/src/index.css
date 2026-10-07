@@ -1433,7 +1433,7 @@ select {
 
 .video-repair-mode-segmented .ant-segmented-item-selected {
   background: var(--app-primary) !important;
-  color: #06120c !important;
+  color: #ffffff !important;
   font-weight: 700;
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--app-primary) 70%, #ffffff),
@@ -1441,7 +1441,7 @@ select {
 }
 
 .video-repair-mode-segmented .ant-segmented-item-selected .ant-segmented-item-label {
-  color: #06120c !important;
+  color: #ffffff !important;
 }
 
 .video-repair-mode-segmented .ant-segmented-thumb {
