@@ -30,6 +30,7 @@ interface BackendApp {
   StartDeepVideoInspection(path: string): Promise<VideoInspectionResult>;
   CancelVideoInspection(): Promise<boolean>;
   CreateVideoRepairPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
+  CreateVideoCompatibilityPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
   StartVideoRepair(plan: VideoRepairPlan): Promise<VideoRepairResult>;
   CancelVideoRepair(): Promise<boolean>;
   RevealVideoRepairFile(path: string): Promise<void>;
@@ -99,6 +100,9 @@ export const cancelVideoInspection = () => app().CancelVideoInspection();
 
 export const createVideoRepairPlan = (result: VideoInspectionResult) =>
   app().CreateVideoRepairPlan(result);
+
+export const createVideoCompatibilityPlan = (result: VideoInspectionResult) =>
+  app().CreateVideoCompatibilityPlan(result);
 
 export const startVideoRepair = (plan: VideoRepairPlan) => app().StartVideoRepair(plan);
 

@@ -128,6 +128,48 @@ func TestBuildRepairPlanTruncateUsesLastHealthyPosition(t *testing.T) {
 	}
 }
 
+func TestBuildCompatibilityRepairPlanUsesLosslessRemuxAndSafeName(t *testing.T) {
+	result := validInspectionFixture()
+	file := repairPlanFixture(t)
+	specialPath := filepath.Join(filepath.Dir(file.Path), "🌊💙테스트영상 [15449018].mp4")
+	if err := os.Rename(file.Path, specialPath); err != nil {
+		t.Fatal(err)
+	}
+	stat, err := os.Stat(specialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result.File = file
+	result.File.Path = specialPath
+	result.File.Name = filepath.Base(specialPath)
+	result.File.SizeBytes = stat.Size()
+	result.File.ModifiedUnixMilli = stat.ModTime().UnixMilli()
+	result.File.Extension = ".mp4"
+	result.Status = InspectionStatusNormal
+	result.Repairability = RepairabilityNotNeeded
+	result.Recommendation.Strategy = RepairStrategyNone
+
+	plan, err := BuildCompatibilityRepairPlan(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Executable || plan.Strategy != RepairStrategyCompatibilityRemux {
+		t.Fatalf("unexpected compatibility plan: %#v", plan)
+	}
+	if plan.QualityLoss || plan.SegmentLoss {
+		t.Fatalf("compatibility remux must be lossless: %#v", plan)
+	}
+	if filepath.Base(plan.OutputPath) != "테스트영상 15449018.compatible.mp4" {
+		t.Fatalf("unexpected safe output name: %s", plan.OutputPath)
+	}
+}
+
+func TestCompatibilitySafeBaseNameFallback(t *testing.T) {
+	if got := compatibilitySafeBaseName("🌊💙"); got != "video" {
+		t.Fatalf("unexpected fallback: %q", got)
+	}
+}
+
 func TestNextRepairOutputPathAvoidsCollisions(t *testing.T) {
 	directory := t.TempDir()
 	source := filepath.Join(directory, "sample.mp4")
@@ -333,6 +375,7 @@ func TestBuildRepairFFmpegArgs(t *testing.T) {
 		end      float64
 		want     []string
 	}{
+		{RepairStrategyCompatibilityRemux, 0, []string{"+genpts", "-map 0:v:0", "-map 0:a?", "-c copy", "-avoid_negative_ts make_zero", "-movflags +faststart"}},
 		{RepairStrategyRemux, 0, []string{"-c", "copy"}},
 		{RepairStrategyTimestampRemux, 0, []string{"+genpts+discardcorrupt", "-avoid_negative_ts", "make_zero"}},
 		{RepairStrategyPartial, 0, []string{"ignore_err", "-c", "copy"}},

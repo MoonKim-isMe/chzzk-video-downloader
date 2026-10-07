@@ -448,6 +448,14 @@ func (a *App) CreateVideoRepairPlan(result videorepair.InspectionResult) (videor
 	return plan, nil
 }
 
+func (a *App) CreateVideoCompatibilityPlan(result videorepair.InspectionResult) (videorepair.RepairPlan, error) {
+	plan, err := videorepair.BuildCompatibilityRepairPlan(result)
+	if err != nil {
+		return videorepair.RepairPlan{}, fmt.Errorf("편집 호환성 복구 계획을 만들 수 없습니다: %w", err)
+	}
+	return plan, nil
+}
+
 func (a *App) StartVideoRepair(plan videorepair.RepairPlan) (videorepair.RepairResult, error) {
 	toolchain := a.downloadManager.ToolchainStatus(a.appContext())
 	if !toolchain.FFprobe.Available {

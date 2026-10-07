@@ -45,8 +45,9 @@ const (
 type RepairStrategy string
 
 const (
-	RepairStrategyNone            RepairStrategy = "none"
-	RepairStrategyRemux           RepairStrategy = "remux"
+	RepairStrategyNone                RepairStrategy = "none"
+	RepairStrategyCompatibilityRemux  RepairStrategy = "compatibility_remux"
+	RepairStrategyRemux               RepairStrategy = "remux"
 	RepairStrategyTimestampRemux  RepairStrategy = "timestamp_remux"
 	RepairStrategyPartial         RepairStrategy = "partial"
 	RepairStrategyTruncate        RepairStrategy = "truncate"
@@ -237,6 +238,7 @@ func validHealthStatus(value HealthStatus) bool {
 func validRepairStrategy(value RepairStrategy) bool {
 	switch value {
 	case RepairStrategyNone,
+		RepairStrategyCompatibilityRemux,
 		RepairStrategyRemux,
 		RepairStrategyTimestampRemux,
 		RepairStrategyPartial,

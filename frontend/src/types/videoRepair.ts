@@ -27,6 +27,7 @@ export type VideoInspectionHealth =
 
 export type VideoRepairStrategy =
   | 'none'
+  | 'compatibility_remux'
   | 'remux'
   | 'timestamp_remux'
   | 'partial'

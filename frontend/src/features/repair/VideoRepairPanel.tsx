@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   cancelVideoInspection,
   cancelVideoRepair,
+  createVideoCompatibilityPlan,
   createVideoRepairPlan,
   revealVideoRepairFile,
   selectVideoRepairFile,
@@ -33,6 +34,7 @@ import {
   type VideoInspectionMode,
   type VideoInspectionProgress,
   type VideoRepairFileInfo,
+  type VideoRepairPlan,
   type VideoRepairProgress,
   type VideoRepairSession,
   type VideoRepairStrategy,
@@ -45,6 +47,7 @@ const supportedFormats = 'MP4 · M4V · MOV · MKV · WebM · AVI · TS · M2TS 
 
 const repairStrategyLabels: Record<VideoRepairStrategy, string> = {
   none: '복구 불필요',
+  compatibility_remux: '편집 호환성 복구',
   remux: 'Remux',
   timestamp_remux: 'Timestamp 정규화 + Remux',
   partial: '손상 데이터 제외 후 복구',
@@ -100,6 +103,8 @@ function VideoRepairPanel() {
   const [inspectionProgress, setInspectionProgress] = useState<VideoInspectionProgress>();
   const [repairProgress, setRepairProgress] = useState<VideoRepairProgress>();
   const [repairPlanError, setRepairPlanError] = useState('');
+  const [compatibilityPlan, setCompatibilityPlan] = useState<VideoRepairPlan>();
+  const [compatibilityPlanError, setCompatibilityPlanError] = useState('');
   const [repairError, setRepairError] = useState('');
   const inspectionCancelRequested = useRef(false);
   const repairCancelRequested = useRef(false);
@@ -110,6 +115,12 @@ function VideoRepairPanel() {
   const quickResult = session.inspectionResults.quick;
   const deepResult = session.inspectionResults.deep;
   const canRepair = Boolean(session.repairPlan?.executable) && !busy;
+  const compatibilityEligible = Boolean(
+    repairBasisResult?.status === 'normal'
+      && repairBasisResult.repairability === 'not_needed'
+      && ['.mp4', '.m4v', '.mov'].includes(repairBasisResult.file.extension.toLowerCase())
+      && session.repairResult?.plan.strategy !== 'compatibility_remux',
+  );
 
   const repairDisabledReason = !repairBasisResult
     ? '검사 결과가 있어야 복구할 수 있습니다.'
@@ -177,6 +188,31 @@ function VideoRepairPanel() {
     };
   }, [repairBasisResult]);
 
+  useEffect(() => {
+    const result = repairBasisResult;
+    setCompatibilityPlanError('');
+
+    if (!result || !compatibilityEligible) {
+      setCompatibilityPlan(undefined);
+      return;
+    }
+
+    let active = true;
+    createVideoCompatibilityPlan(result)
+      .then((plan) => {
+        if (active) setCompatibilityPlan(plan);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setCompatibilityPlan(undefined);
+        setCompatibilityPlanError(cause instanceof Error ? cause.message : String(cause));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [repairBasisResult, compatibilityEligible]);
+
   const metadataSource = useMemo(() => {
     if (!fileInfo) return null;
     return fileInfo.containerSource === 'probe' ? '파일 분석' : '확장자 기준';
@@ -187,6 +223,8 @@ function VideoRepairPanel() {
     setSelectingFile(true);
     setRepairError('');
     setRepairPlanError('');
+    setCompatibilityPlanError('');
+    setCompatibilityPlan(undefined);
     try {
       const selected = await selectVideoRepairFile(fileInfo?.path ?? '');
       if (!selected.path) return;
@@ -315,8 +353,8 @@ function VideoRepairPanel() {
     }
   };
 
-  const handleStartRepair = async () => {
-    const plan = session.repairPlan;
+  const handleStartRepair = async (requestedPlan?: VideoRepairPlan) => {
+    const plan = requestedPlan ?? session.repairPlan;
     if (!plan?.executable || busy) return;
 
     repairCancelRequested.current = false;
@@ -330,6 +368,7 @@ function VideoRepairPanel() {
     });
     setSession((current) => ({
       ...current,
+      repairPlan: plan,
       status: 'repairing',
       error: undefined,
     }));
@@ -366,7 +405,9 @@ function VideoRepairPanel() {
         processedSeconds: repairResult.outputFile.durationSeconds,
         elapsedSeconds: repairResult.elapsedSeconds,
       });
-      message.success('동영상 복구가 완료되었습니다.');
+      message.success(plan.strategy === 'compatibility_remux'
+        ? '편집 호환성 복구가 완료되었습니다.'
+        : '동영상 복구가 완료되었습니다.');
     } catch (cause) {
       const errorMessage = cause instanceof Error ? cause.message : String(cause);
       const cancelled = repairCancelRequested.current || errorMessage.includes('취소');
@@ -580,7 +621,7 @@ function VideoRepairPanel() {
                 ) : (
                   <Tooltip title={repairDisabledReason}>
                     <span>
-                      <Button disabled={!canRepair} onClick={handleStartRepair}>복구</Button>
+                      <Button disabled={!canRepair} onClick={() => void handleStartRepair()}>복구</Button>
                     </span>
                   </Tooltip>
                 )}
@@ -588,6 +629,65 @@ function VideoRepairPanel() {
             </div>
           </Card>
         </div>
+
+        {compatibilityEligible && (
+          <Card bordered={false} className="video-repair-section !mt-3.5">
+            <div className="video-repair-section-heading">
+              <div>
+                <Text strong>편집 프로그램 호환성</Text>
+                <div className="video-repair-format-list">
+                  파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.
+                </div>
+              </div>
+              <Tag color="processing">선택 기능</Tag>
+            </div>
+
+            <Alert
+              showIcon
+              type="info"
+              message="영상과 오디오는 재인코딩하지 않습니다."
+              description="MP4 컨테이너, 타임스탬프와 인덱스만 다시 구성합니다. 출력 파일명에서는 이모지와 불필요한 특수문자를 제거해 편집 프로그램의 경로 호환성도 높입니다."
+            />
+
+            {compatibilityPlanError && (
+              <Alert
+                showIcon
+                type="error"
+                message="호환성 복구 계획 생성 실패"
+                description={compatibilityPlanError}
+              />
+            )}
+
+            {compatibilityPlan && (
+              <div className="video-repair-repair-plan">
+                <Descriptions size="small" column={2}>
+                  <Descriptions.Item label="처리 방식">무손실 MP4 재구성</Descriptions.Item>
+                  <Descriptions.Item label="화질·음질">
+                    <Tag color="success">재인코딩 없음</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="예상 처리">{compatibilityPlan.expectedTime}</Descriptions.Item>
+                  <Descriptions.Item label="필요 여유 공간">
+                    {formatFileSize(compatibilityPlan.requiredFreeBytes)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="출력 파일" span={2}>
+                    <Text className="video-repair-path" title={compatibilityPlan.outputPath}>
+                      {compatibilityPlan.outputPath}
+                    </Text>
+                  </Descriptions.Item>
+                </Descriptions>
+                <div className="video-repair-actions">
+                  <Button
+                    type="primary"
+                    disabled={busy || !compatibilityPlan.executable}
+                    onClick={() => void handleStartRepair(compatibilityPlan)}
+                  >
+                    편집 호환성 복구
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
 
         {(session.repairPlan || session.repairResult || session.status === 'repairing' || repairPlanError || repairError) && (
           <Card bordered={false} className="video-repair-section !mt-3.5">

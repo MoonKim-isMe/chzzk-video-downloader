@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"unicode"
 	"sync"
 	"time"
 )
@@ -129,6 +130,46 @@ func BuildRepairPlan(result InspectionResult) (RepairPlan, error) {
 	return plan, nil
 }
 
+func BuildCompatibilityRepairPlan(result InspectionResult) (RepairPlan, error) {
+	if err := result.Validate(); err != nil {
+		return RepairPlan{}, err
+	}
+	if result.Status != InspectionStatusNormal || result.Repairability != RepairabilityNotNeeded {
+		return RepairPlan{}, fmt.Errorf("정상으로 확인된 파일에서만 편집 호환성 복구를 사용할 수 있습니다")
+	}
+	if !isISOBaseMediaExtension(result.File.Extension) {
+		return RepairPlan{}, fmt.Errorf("편집 호환성 복구는 MP4/M4V/MOV 파일에서 사용할 수 있습니다")
+	}
+
+	sourcePath := filepath.Clean(strings.TrimSpace(result.File.Path))
+	if sourcePath == "" {
+		return RepairPlan{}, fmt.Errorf("원본 파일 경로가 필요합니다")
+	}
+	outputPath, err := nextCompatibilityOutputPath(sourcePath)
+	if err != nil {
+		return RepairPlan{}, err
+	}
+
+	plan := RepairPlan{
+		SourcePath:              sourcePath,
+		OutputPath:              outputPath,
+		Strategy:                RepairStrategyCompatibilityRemux,
+		InspectionMode:          result.Mode,
+		SourceSizeBytes:         result.File.SizeBytes,
+		SourceModifiedUnixMilli: result.File.ModifiedUnixMilli,
+		Summary:                 "영상과 오디오는 재인코딩하지 않고 MP4 컨테이너, 타임스탬프와 인덱스를 다시 구성해 편집 프로그램 호환성을 높입니다.",
+		ExpectedTime:            "대체로 파일 읽기/쓰기 속도에 가까움",
+		QualityLoss:             false,
+		SegmentLoss:             false,
+		Executable:              true,
+		HasVideo:                result.Video.Present,
+		HasAudio:                result.Audio.Present,
+		DurationSeconds:         result.File.DurationSeconds,
+	}
+	plan.RequiredFreeBytes = requiredRepairFreeBytes(plan, plan.SourceSizeBytes)
+	return plan, nil
+}
+
 func chooseRepairStrategy(result InspectionResult) RepairStrategy {
 	if result.Timestamps.NonMonotonicDTSCount > 0 || result.Timestamps.JumpCount > 0 {
 		return RepairStrategyReencode
@@ -229,7 +270,7 @@ func repairPlanSummary(strategy RepairStrategy, mode InspectionMode) string {
 
 func repairExpectedTime(strategy RepairStrategy) string {
 	switch strategy {
-	case RepairStrategyRemux, RepairStrategyTimestampRemux, RepairStrategyPartial, RepairStrategyTruncate:
+	case RepairStrategyCompatibilityRemux, RepairStrategyRemux, RepairStrategyTimestampRemux, RepairStrategyPartial, RepairStrategyTruncate:
 		return "대체로 파일 읽기/쓰기 속도에 가까움"
 	case RepairStrategyReencode:
 		return "영상 길이·코덱·CPU 성능에 따라 오래 걸릴 수 있음"
@@ -264,6 +305,57 @@ func nextRepairOutputPath(sourcePath string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("사용 가능한 복구 출력 파일명을 만들 수 없습니다")
+}
+
+func nextCompatibilityOutputPath(sourcePath string) (string, error) {
+	sourcePath = filepath.Clean(strings.TrimSpace(sourcePath))
+	if sourcePath == "" {
+		return "", fmt.Errorf("원본 파일 경로가 필요합니다")
+	}
+	directory := filepath.Dir(sourcePath)
+	extension := filepath.Ext(sourcePath)
+	name := strings.TrimSuffix(filepath.Base(sourcePath), extension)
+	name = compatibilitySafeBaseName(name)
+
+	for index := 1; index <= 10000; index++ {
+		suffix := ".compatible"
+		if index > 1 {
+			suffix = fmt.Sprintf(".compatible-%d", index)
+		}
+		candidate := filepath.Join(directory, name+suffix+extension)
+		_, err := os.Stat(candidate)
+		if errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("호환성 복구 출력 경로를 확인할 수 없습니다: %w", err)
+		}
+	}
+	return "", fmt.Errorf("사용 가능한 호환성 복구 출력 파일명을 만들 수 없습니다")
+}
+
+func compatibilitySafeBaseName(name string) string {
+	var builder strings.Builder
+	pendingSpace := false
+	for _, value := range strings.TrimSpace(name) {
+		switch {
+		case unicode.IsLetter(value) || unicode.IsDigit(value) || value == '-' || value == '_':
+			if pendingSpace && builder.Len() > 0 {
+				builder.WriteRune(' ')
+			}
+			pendingSpace = false
+			builder.WriteRune(value)
+		case unicode.IsSpace(value):
+			pendingSpace = builder.Len() > 0
+		default:
+			pendingSpace = builder.Len() > 0
+		}
+	}
+	cleaned := strings.Trim(builder.String(), " -_")
+	if cleaned == "" {
+		return "video"
+	}
+	return cleaned
 }
 
 func sameRepairPath(left string, right string) bool {
@@ -619,6 +711,16 @@ func buildRepairFFmpegArgs(plan RepairPlan, outputPath string) ([]string, error)
 	args := []string{"-hide_banner", "-nostdin", "-y", "-v", "warning", "-stats_period", "0.5"}
 
 	switch plan.Strategy {
+	case RepairStrategyCompatibilityRemux:
+		args = append(args,
+			"-fflags", "+genpts",
+			"-i", plan.SourcePath,
+			"-map", "0:v:0",
+			"-map", "0:a?",
+			"-map_metadata", "0",
+			"-c", "copy",
+			"-avoid_negative_ts", "make_zero",
+		)
 	case RepairStrategyRemux:
 		args = append(args, "-i", plan.SourcePath, "-map", "0", "-map_metadata", "0", "-c", "copy")
 	case RepairStrategyTimestampRemux:
