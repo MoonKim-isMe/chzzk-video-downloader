@@ -639,7 +639,7 @@ function VideoRepairPanel() {
                   파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.
                 </div>
               </div>
-              <Tag color="processing">선택 기능</Tag>
+              <Tag color="orange">선택 기능</Tag>
             </div>
 
             <Alert
