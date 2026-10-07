@@ -166,6 +166,9 @@ export interface VideoRepairPlan {
   qualityLoss: boolean;
   segmentLoss: boolean;
   executable: boolean;
+  normalizeTimestamps?: boolean;
+  hasVideo?: boolean;
+  hasAudio?: boolean;
   durationSeconds?: number;
   endSeconds?: number;
 }

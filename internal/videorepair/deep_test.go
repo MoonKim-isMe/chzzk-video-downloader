@@ -59,6 +59,7 @@ func TestClassifyDeepDiagnosticByCodecAndStream(t *testing.T) {
 		{name: "aac", line: "[aac @ 0001] decode error", audioCodec: "aac", audioErrors: 1},
 		{name: "opus", line: "[opus @ 0001] decode error", audioCodec: "opus", audioErrors: 1},
 		{name: "stream-index-audio", line: "Error while decoding stream #0:1: Invalid data found", videoCodec: "h264", audioCodec: "aac", audioErrors: 1},
+		{name: "ffmpeg-7-audio", line: "[aist#0:1/aac @ 0001] [dec:aac @ 0002] Error submitting packet to decoder: Invalid data found when processing input", videoCodec: "h264", audioCodec: "aac", audioErrors: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -94,6 +95,19 @@ func TestClassifyDeepCorruptPacketByStream(t *testing.T) {
 	)
 	if audio.audioCorruptPackets != 1 || audio.videoCorruptPackets != 0 {
 		t.Fatalf("unexpected audio corrupt packet classification: %#v", audio)
+	}
+}
+
+func TestClassifyDeepNonMonotonicallyIncreasingDTS(t *testing.T) {
+	classification := classifyDeepDiagnostic(
+		"[null @ 0001] Application provided invalid, non monotonically increasing dts to muxer in stream 1",
+		0,
+		1,
+		"h264",
+		"aac",
+	)
+	if classification.nonMonotonicDTS != 1 || classification.dtsErrors != 1 {
+		t.Fatalf("unexpected non-monotonic DTS classification: %#v", classification)
 	}
 }
 
@@ -150,10 +164,9 @@ func TestBuildDeepInspectionNormal(t *testing.T) {
 func TestBuildDeepInspectionTimestampWarning(t *testing.T) {
 	file, probe := deepFixture()
 	result := buildDeepInspectionResult(file, probe, MoovAtomPresent, "", deepDecodeSummary{
-		ProcessedSeconds:     120,
-		Completed:            true,
-		DTSErrors:            2,
-		NonMonotonicDTSCount: 1,
+		ProcessedSeconds: 120,
+		Completed:        true,
+		DTSErrors:        2,
 		DamageRanges: []DamageRange{
 			{StartSeconds: 50, EndSeconds: 51, Category: "타임스탬프", ErrorCount: 2},
 		},
@@ -163,6 +176,40 @@ func TestBuildDeepInspectionTimestampWarning(t *testing.T) {
 	}
 	if result.Recommendation.Strategy != RepairStrategyTimestampRemux {
 		t.Fatalf("unexpected recommendation: %#v", result.Recommendation)
+	}
+}
+
+func TestBuildDeepInspectionNonMonotonicTimestampRequiresReencode(t *testing.T) {
+	file, probe := deepFixture()
+	result := buildDeepInspectionResult(file, probe, MoovAtomPresent, "", deepDecodeSummary{
+		ProcessedSeconds:     120,
+		Completed:            true,
+		DTSErrors:            2,
+		NonMonotonicDTSCount: 1,
+		TimestampJumps:       1,
+	})
+	if result.Status != InspectionStatusWarning || result.Repairability != RepairabilityReencode {
+		t.Fatalf("unexpected unstable timestamp result: %#v", result)
+	}
+	if result.Recommendation.Strategy != RepairStrategyReencode {
+		t.Fatalf("unstable timestamps must require reencode: %#v", result.Recommendation)
+	}
+}
+
+func TestBuildDeepInspectionAVDurationMismatchUsesPartialRepair(t *testing.T) {
+	file, probe := deepFixture()
+	probe.Streams[0].Duration = "10"
+	probe.Streams[1].Duration = "6"
+	file.DurationSeconds = 10
+	result := buildDeepInspectionResult(file, probe, MoovAtomPresent, "", deepDecodeSummary{
+		ProcessedSeconds: 10,
+		Completed:        true,
+	})
+	if result.Status != InspectionStatusWarning || result.Repairability != RepairabilityPartial {
+		t.Fatalf("unexpected A/V duration mismatch result: %#v", result)
+	}
+	if result.Recommendation.Strategy != RepairStrategyTruncate || !result.Recommendation.SegmentLoss {
+		t.Fatalf("duration mismatch must disclose partial truncation: %#v", result.Recommendation)
 	}
 }
 

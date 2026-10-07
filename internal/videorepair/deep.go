@@ -488,7 +488,8 @@ func classifyDeepDiagnostic(
 		"[aac", "[opus", "[vorbis", "[mp3", "[flac", "audio:",
 	})
 
-	if strings.Contains(lower, "non-monoton") && strings.Contains(lower, "dts") {
+	if (strings.Contains(lower, "non-monoton") || strings.Contains(lower, "non monoton")) &&
+		strings.Contains(lower, "dts") {
 		result.relevant = true
 		result.category = "타임스탬프"
 		result.nonMonotonicDTS++
@@ -558,11 +559,24 @@ func diagnosticMatchesStream(
 	codec string,
 	markers []string,
 ) bool {
-	if streamIndex >= 0 && strings.Contains(line, fmt.Sprintf("stream #0:%d", streamIndex)) {
-		return true
+	if streamIndex >= 0 {
+		streamMarkers := []string{
+			fmt.Sprintf("stream #0:%d", streamIndex),
+			fmt.Sprintf("#0:%d/", streamIndex),
+			fmt.Sprintf("#0:%d]", streamIndex),
+			fmt.Sprintf("#0:%d ", streamIndex),
+		}
+		for _, marker := range streamMarkers {
+			if strings.Contains(line, marker) {
+				return true
+			}
+		}
 	}
 	codec = strings.ToLower(strings.TrimSpace(codec))
-	if codec != "" && strings.Contains(line, "["+codec) {
+	if codec != "" &&
+		(strings.Contains(line, "["+codec) ||
+			strings.Contains(line, "[dec:"+codec) ||
+			strings.Contains(line, "/"+codec)) {
 		return true
 	}
 	for _, marker := range markers {
@@ -765,6 +779,7 @@ func buildDeepInspectionResult(
 	decodeDamageCount := decode.VideoDecodeErrors + decode.AudioDecodeErrors + decode.CorruptFrames +
 		decode.VideoCorruptPackets + decode.AudioCorruptPackets + decode.UnknownCorruptPackets
 	timestampErrorCount := decode.PTSErrors + decode.DTSErrors + decode.NonMonotonicDTSCount + decode.TimestampJumps
+	unstableTimestamps := decode.NonMonotonicDTSCount > 0 || decode.TimestampJumps > 0
 
 	switch {
 	case decode.ProcessFailed && decode.ProcessedSeconds <= 0:
@@ -774,6 +789,15 @@ func buildDeepInspectionResult(
 		recommendation = RepairRecommendation{
 			Strategy: RepairStrategyUnavailable,
 			Summary:  "현재 검사 결과만으로 안전한 복구 방법을 결정할 수 없습니다.",
+		}
+	case unstableTimestamps:
+		status = InspectionStatusWarning
+		repairability = RepairabilityReencode
+		summary = "전체 디코딩 중 DTS 역행 또는 큰 타임스탬프 불연속이 확인되었습니다."
+		recommendation = RepairRecommendation{
+			Strategy:    RepairStrategyReencode,
+			Summary:     "단순 Remux로 남을 수 있는 타임스탬프 불연속이어서 재인코딩으로 시간축을 다시 구성하는 복구를 권장합니다.",
+			QualityLoss: true,
 		}
 	case decodeDamageCount > 0 || decode.ProcessFailed:
 		status = InspectionStatusDamaged
@@ -799,13 +823,22 @@ func buildDeepInspectionResult(
 			Strategy: RepairStrategyTimestampRemux,
 			Summary:  "재인코딩 없이 타임스탬프를 정규화한 Remux 복구를 우선 권장합니다.",
 		}
+	case avSync.Status == HealthStatusWarning && math.Abs(avSync.DurationDifferenceSeconds) > 1:
+		status = InspectionStatusWarning
+		repairability = RepairabilityPartial
+		summary = "영상과 오디오의 재생 길이 차이가 크게 확인되었습니다."
+		recommendation = RepairRecommendation{
+			Strategy:    RepairStrategyTruncate,
+			Summary:     "긴 스트림의 후반 구간을 제거해 영상과 오디오가 함께 존재하는 구간까지만 보존하는 부분 복구를 검토합니다.",
+			SegmentLoss: true,
+		}
 	case avSync.Status == HealthStatusWarning:
 		status = InspectionStatusWarning
 		repairability = RepairabilityLossless
-		summary = "영상과 오디오의 길이 또는 시작 시점 차이가 확인되었습니다."
+		summary = "영상과 오디오의 시작 시점 차이가 확인되었습니다."
 		recommendation = RepairRecommendation{
 			Strategy: RepairStrategyTimestampRemux,
-			Summary:  "A/V 타임스탬프를 정규화하는 무손실 Remux를 우선 검토합니다.",
+			Summary:  "A/V 시작 타임스탬프를 정규화하는 무손실 Remux를 우선 검토합니다.",
 		}
 	case container.Status == HealthStatusWarning:
 		status = InspectionStatusWarning

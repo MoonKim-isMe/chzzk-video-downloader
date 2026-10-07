@@ -29,9 +29,12 @@ type RepairPlan struct {
 	Summary         string         `json:"summary"`
 	ExpectedTime    string         `json:"expectedTime"`
 	QualityLoss     bool           `json:"qualityLoss"`
-	SegmentLoss     bool           `json:"segmentLoss"`
-	Executable      bool           `json:"executable"`
-	DurationSeconds float64        `json:"durationSeconds,omitempty"`
+	SegmentLoss         bool           `json:"segmentLoss"`
+	Executable          bool           `json:"executable"`
+	NormalizeTimestamps bool           `json:"normalizeTimestamps,omitempty"`
+	HasVideo            bool           `json:"hasVideo,omitempty"`
+	HasAudio            bool           `json:"hasAudio,omitempty"`
+	DurationSeconds     float64        `json:"durationSeconds,omitempty"`
 	EndSeconds      float64        `json:"endSeconds,omitempty"`
 }
 
@@ -72,6 +75,9 @@ func BuildRepairPlan(result InspectionResult) (RepairPlan, error) {
 		SourceModifiedUnixMilli: result.File.ModifiedUnixMilli,
 		Summary:                "현재 검사 결과로는 복구 방법을 결정할 수 없습니다.",
 		Executable:             false,
+		NormalizeTimestamps:    result.Timestamps.NonMonotonicDTSCount > 0 || result.Timestamps.JumpCount > 0,
+		HasVideo:               result.Video.Present,
+		HasAudio:               result.Audio.Present,
 		DurationSeconds:        result.File.DurationSeconds,
 	}
 	if strings.TrimSpace(plan.SourcePath) == "" {
@@ -93,6 +99,9 @@ func BuildRepairPlan(result InspectionResult) (RepairPlan, error) {
 	plan.SegmentLoss = plan.Strategy == RepairStrategyPartial || plan.Strategy == RepairStrategyTruncate
 	plan.EndSeconds = repairEndSeconds(result, plan.Strategy)
 	plan.Summary = repairPlanSummary(plan.Strategy, result.Mode)
+	if plan.Strategy == RepairStrategyReencode && plan.NormalizeTimestamps {
+		plan.Summary = "DTS 역행 또는 큰 타임스탬프 불연속이 확인되어 영상/오디오 시간축을 다시 구성하며 재인코딩합니다."
+	}
 	plan.ExpectedTime = repairExpectedTime(plan.Strategy)
 	plan.Executable = plan.Strategy != RepairStrategyNone && plan.Strategy != RepairStrategyUnavailable
 
@@ -121,10 +130,14 @@ func BuildRepairPlan(result InspectionResult) (RepairPlan, error) {
 }
 
 func chooseRepairStrategy(result InspectionResult) RepairStrategy {
+	if result.Timestamps.NonMonotonicDTSCount > 0 || result.Timestamps.JumpCount > 0 {
+		return RepairStrategyReencode
+	}
 	if result.Repairability == RepairabilityReencode || result.Recommendation.Strategy == RepairStrategyReencode {
 		return RepairStrategyReencode
 	}
-	if result.Recommendation.Strategy == RepairStrategyTruncate && result.LastHealthySeconds != nil {
+	if result.Recommendation.Strategy == RepairStrategyTruncate &&
+		(result.LastHealthySeconds != nil || avSyncTruncateEndSeconds(result) > 0) {
 		return RepairStrategyTruncate
 	}
 	if result.Repairability == RepairabilityLossless {
@@ -163,7 +176,14 @@ func hasTerminalDamageRange(result InspectionResult) bool {
 }
 
 func repairEndSeconds(result InspectionResult, strategy RepairStrategy) float64 {
-	if strategy != RepairStrategyTruncate || result.LastHealthySeconds == nil {
+	if strategy != RepairStrategyTruncate {
+		return 0
+	}
+	if avEnd := avSyncTruncateEndSeconds(result); avEnd > 0 {
+		safetyMargin := math.Min(0.5, avEnd*0.1)
+		return math.Max(avEnd-safetyMargin, 0.001)
+	}
+	if result.LastHealthySeconds == nil {
 		return 0
 	}
 	lastHealthy := math.Max(*result.LastHealthySeconds, 0)
@@ -172,6 +192,18 @@ func repairEndSeconds(result InspectionResult, strategy RepairStrategy) float64 
 	}
 	safetyMargin := math.Min(0.5, lastHealthy*0.1)
 	return math.Max(lastHealthy-safetyMargin, 0.001)
+}
+
+func avSyncTruncateEndSeconds(result InspectionResult) float64 {
+	if math.Abs(result.AVSync.DurationDifferenceSeconds) <= 1 {
+		return 0
+	}
+	videoDuration := result.AVSync.VideoDurationSeconds
+	audioDuration := result.AVSync.AudioDurationSeconds
+	if videoDuration <= 0 || audioDuration <= 0 {
+		return 0
+	}
+	return math.Min(videoDuration, audioDuration)
 }
 
 func repairPlanSummary(strategy RepairStrategy, mode InspectionMode) string {
@@ -631,6 +663,14 @@ func buildRepairFFmpegArgs(plan RepairPlan, outputPath string) ([]string, error)
 			"-avoid_negative_ts", "make_zero",
 		)
 		args = append(args, repairReencodeArgs(filepath.Ext(outputPath))...)
+		if plan.NormalizeTimestamps {
+			if plan.HasVideo {
+				args = append(args, "-fps_mode", "cfr")
+			}
+			if plan.HasAudio {
+				args = append(args, "-af", "aresample=async=1:first_pts=0")
+			}
+		}
 	default:
 		return nil, fmt.Errorf("지원하지 않는 복구 전략입니다: %s", plan.Strategy)
 	}

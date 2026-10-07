@@ -64,6 +64,53 @@ func TestBuildRepairPlanPrioritizesConservativeStrategies(t *testing.T) {
 	}
 }
 
+func TestBuildRepairPlanNonMonotonicTimestampUsesNormalizedReencode(t *testing.T) {
+	result := validInspectionFixture()
+	result.File = repairPlanFixture(t)
+	result.Mode = InspectionModeDeep
+	result.Status = InspectionStatusWarning
+	result.Repairability = RepairabilityReencode
+	result.Timestamps.Status = HealthStatusWarning
+	result.Timestamps.NonMonotonicDTSCount = 2
+	result.Timestamps.JumpCount = 1
+	result.Recommendation.Strategy = RepairStrategyReencode
+
+	plan, err := BuildRepairPlan(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Strategy != RepairStrategyReencode || !plan.NormalizeTimestamps {
+		t.Fatalf("unexpected timestamp repair plan: %#v", plan)
+	}
+}
+
+func TestBuildRepairPlanAVDurationMismatchUsesShorterStream(t *testing.T) {
+	result := validInspectionFixture()
+	result.File = repairPlanFixture(t)
+	result.Mode = InspectionModeDeep
+	result.Status = InspectionStatusWarning
+	result.Repairability = RepairabilityPartial
+	result.AVSync = AVSyncInspection{
+		Status:                    HealthStatusWarning,
+		VideoDurationSeconds:      10,
+		AudioDurationSeconds:      6,
+		DurationDifferenceSeconds: -4,
+	}
+	result.Recommendation = RepairRecommendation{
+		Strategy:    RepairStrategyTruncate,
+		Summary:     "함께 존재하는 구간까지만 보존합니다.",
+		SegmentLoss: true,
+	}
+
+	plan, err := BuildRepairPlan(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Strategy != RepairStrategyTruncate || plan.EndSeconds != 5.5 || !plan.SegmentLoss {
+		t.Fatalf("unexpected A/V mismatch plan: %#v", plan)
+	}
+}
+
 func TestBuildRepairPlanTruncateUsesLastHealthyPosition(t *testing.T) {
 	result := validInspectionFixture()
 	result.File = repairPlanFixture(t)
@@ -313,6 +360,29 @@ func TestBuildRepairFFmpegArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildRepairFFmpegArgsNormalizesUnstableTimestamps(t *testing.T) {
+	plan := RepairPlan{
+		SourcePath:          "sample.mp4",
+		OutputPath:          "sample.repaired.mp4",
+		Strategy:            RepairStrategyReencode,
+		Executable:          true,
+		NormalizeTimestamps: true,
+		HasVideo:            true,
+		HasAudio:            true,
+		DurationSeconds:     120,
+	}
+	args, err := buildRepairFFmpegArgs(plan, "sample.repairing.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{"-fps_mode cfr", "aresample=async=1:first_pts=0"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in %s", expected, joined)
+		}
 	}
 }
 

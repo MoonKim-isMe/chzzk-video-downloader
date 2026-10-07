@@ -348,19 +348,41 @@ v0.2 기본 범위에서는 존재하지 않는 영상 데이터를 생성하는
 
 ### Phase 8-G — 검증 및 v0.2 완료 조건
 
-- [ ] V02-8G-1. 정상 MP4/MKV/WebM 파일이 손상으로 오탐되지 않는지 검증
-- [ ] V02-8G-2. 잘린 파일 및 비정상 종료 파일 검사/복구 검증
-- [ ] V02-8G-3. MP4 index/moov 관련 문제 파일 검사/복구 검증
-- [ ] V02-8G-4. DTS/PTS 이상 파일 검사/복구 검증
-- [ ] V02-8G-5. 영상 일부 프레임 손상 파일 정밀 검사 검증
-- [ ] V02-8G-6. 오디오 일부 손상 파일 정밀 검사 검증
-- [ ] V02-8G-7. 영상/오디오 길이가 다른 파일 결과 표시 검증
+- [x] V02-8G-1. 정상 MP4/MKV/WebM 파일이 손상으로 오탐되지 않는지 검증
+- [x] V02-8G-2. 잘린 파일 및 비정상 종료 파일 검사/복구 검증
+- [x] V02-8G-3. MP4 index/moov 관련 문제 파일 검사/복구 검증
+- [x] V02-8G-4. DTS/PTS 이상 파일 검사/복구 검증
+- [x] V02-8G-5. 영상 일부 프레임 손상 파일 정밀 검사 검증
+- [x] V02-8G-6. 오디오 일부 손상 파일 정밀 검사 검증
+- [x] V02-8G-7. 영상/오디오 길이가 다른 파일 결과 표시 검증
 - [ ] V02-8G-8. 수십 GB 대용량 파일에서 메모리 사용량이 파일 크기에 비례해 증가하지 않는지 검증
 - [ ] V02-8G-9. 한글/공백/긴 경로에서 검사 및 복구 검증
 - [ ] V02-8G-10. 검사 취소, 복구 취소, 앱 종료 시 외부 프로세스가 남지 않는지 검증
-- [ ] V02-8G-11. 복구 실패/취소에서도 원본 파일 hash가 변경되지 않는지 검증
+- [x] V02-8G-11. 복구 실패/취소에서도 원본 파일 hash가 변경되지 않는지 검증
 - [ ] V02-8G-12. 복구 완료 파일의 자동 빠른 검사 및 수동 정밀 재검사 흐름 검증
 - [ ] V02-8G-13. Windows 10/11 Portable EXE에서 ffmpeg/ffprobe bundle만으로 검사 및 복구 실동작 검증
+
+#### Phase 8-G 선행 검증 메모
+
+FFmpeg/FFprobe 7.1.5 환경에서 실제 fixture 파일을 생성해 다음을 확인했다.
+
+- 정상 MP4(H.264+AAC), MKV(H.264+AAC), WebM(VP9+Opus): ffprobe 파싱 및 전체 null decode에서 오류가 없어 정상 파일 오탐 조건이 없음을 확인했다.
+- faststart MP4의 후반 28%를 절단한 파일: `partial file`, corrupt packet, H.264 decode 오류가 재현됐고 손상 packet 제외 복구 결과가 ffprobe 및 전체 decode를 통과했다.
+- non-faststart MP4의 후반을 절단해 `moov atom not found` fixture를 만들었고 검사 시작 불가/자동 복구 불가 케이스로 확인했다.
+- 독립적으로 생성한 MPEG-TS 두 개를 이어 DTS reset fixture를 만들었고 `DTS out of order`, timestamp discontinuity, non-monotonic DTS를 재현했다.
+- 위 timestamp fixture는 단순 `genpts + stream copy`만으로 non-monotonic DTS가 남는 것을 확인했다. 정밀 검사에서 DTS 역행/큰 jump가 있으면 재인코딩으로 승격하고 `-fps_mode cfr` + `aresample=async=1:first_pts=0`로 시간축을 다시 구성하도록 보강했다. 동일 fixture 결과에서 영상/오디오 packet DTS 역행 0건과 전체 decode 무경고를 확인했다.
+- 정상 MP4의 중간 H.264 packet payload를 직접 변형해 실제 `corrupted macroblock`, `error while decoding`, `corrupt decoded frame`을 재현했고 재인코딩 결과의 전체 decode가 정상임을 확인했다.
+- 정상 MP4의 중간 AAC packet payload를 직접 변형해 FFmpeg 7.1.5의 `[aist#0:1/aac] [dec:aac]` 오류 형식을 재현했다. stream index/codec 분류기를 보강해 오디오 decode 오류로 집계하도록 수정했고 재인코딩 결과의 전체 decode가 정상임을 확인했다.
+- 10초 영상 + 6초 오디오 fixture에서 단순 Timestamp Remux가 길이 차이를 해결하지 못함을 확인했다. 이 경우 무손실 복구로 표시하지 않고 구간 손실을 명시한 부분 복구로 분류하며, 짧은 스트림 기준 안전 여유를 적용한 결과에서 영상/오디오 길이가 약 5.52초로 맞춰지는 것을 확인했다.
+- 복구 실패 fixture와 강제 취소한 재인코딩 fixture에서 원본 SHA-256이 실행 전후 동일함을 확인했다.
+
+이번 환경에서 아직 완료하지 않은 항목:
+
+- V02-8G-8: 실제 수십 GB 파일의 장시간 메모리 사용량 계측
+- V02-8G-9: Linux 한글/공백/긴 경로 검증은 통과했으나 Windows 경로 규칙까지 포함한 최종 검증 필요
+- V02-8G-10: context/process 정리 코드는 테스트되어 있으나 Windows GUI에서 취소/앱 종료 후 ffmpeg/ffprobe 잔존 프로세스 확인 필요
+- V02-8G-12: App 통합 테스트 코드는 있으나 실제 Wails UI에서 자동 빠른 검사 → 수동 정밀 재검사 흐름 확인 필요
+- V02-8G-13: Windows 10/11 Portable EXE와 실제 bundle 기준 검증 필요
 
 #### 예상 처리시간 기준
 
