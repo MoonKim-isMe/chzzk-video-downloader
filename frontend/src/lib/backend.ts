@@ -7,6 +7,12 @@ import type {
 } from '../types/download';
 import type { AppSettings } from '../types/settings';
 import type { UpdateInfo } from '../types/update';
+import type {
+  VideoInspectionResult,
+  VideoRepairFileInfo,
+  VideoRepairPlan,
+  VideoRepairResult,
+} from '../types/videoRepair';
 import type { Video, VideoListResult } from '../types/video';
 
 interface BackendApp {
@@ -19,6 +25,15 @@ interface BackendApp {
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
   SelectDownloadDirectory(currentDirectory: string): Promise<string>;
+  SelectVideoRepairFile(currentFile: string): Promise<VideoRepairFileInfo>;
+  StartQuickVideoInspection(path: string): Promise<VideoInspectionResult>;
+  StartDeepVideoInspection(path: string): Promise<VideoInspectionResult>;
+  CancelVideoInspection(): Promise<boolean>;
+  CreateVideoRepairPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
+  CreateVideoCompatibilityPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
+  StartVideoRepair(plan: VideoRepairPlan): Promise<VideoRepairResult>;
+  CancelVideoRepair(): Promise<boolean>;
+  RevealVideoRepairFile(path: string): Promise<void>;
   GetAuthenticationSettings(): Promise<AuthenticationSettings>;
   UpdateAuthenticationSettings(settings: AuthenticationSettings): Promise<AuthenticationSettings>;
   SelectAuthenticationCookiesFile(currentFile: string): Promise<string>;
@@ -71,6 +86,29 @@ export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
 
 export const selectDownloadDirectory = (currentDirectory: string) =>
   app().SelectDownloadDirectory(currentDirectory);
+
+export const selectVideoRepairFile = (currentFile = '') =>
+  app().SelectVideoRepairFile(currentFile);
+
+export const startQuickVideoInspection = (path: string) =>
+  app().StartQuickVideoInspection(path);
+
+export const startDeepVideoInspection = (path: string) =>
+  app().StartDeepVideoInspection(path);
+
+export const cancelVideoInspection = () => app().CancelVideoInspection();
+
+export const createVideoRepairPlan = (result: VideoInspectionResult) =>
+  app().CreateVideoRepairPlan(result);
+
+export const createVideoCompatibilityPlan = (result: VideoInspectionResult) =>
+  app().CreateVideoCompatibilityPlan(result);
+
+export const startVideoRepair = (plan: VideoRepairPlan) => app().StartVideoRepair(plan);
+
+export const cancelVideoRepair = () => app().CancelVideoRepair();
+
+export const revealVideoRepairFile = (path: string) => app().RevealVideoRepairFile(path);
 
 export const getAuthenticationSettings = () => app().GetAuthenticationSettings();
 

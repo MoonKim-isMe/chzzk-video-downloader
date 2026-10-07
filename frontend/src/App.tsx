@@ -15,6 +15,7 @@ import SavedChannels from './components/SavedChannels';
 import AuthenticationDrawer from './features/authentication/AuthenticationDrawer';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
+import VideoRepairPanel from './features/repair/VideoRepairPanel';
 import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
 import VideoUrlTab from './features/videos/VideoUrlTab';
@@ -40,13 +41,14 @@ import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
 
-type AppTab = 'search' | 'url' | 'downloads';
+type AppTab = 'search' | 'url' | 'downloads' | 'repair';
 type ChannelPanelTab = 'search' | 'bookmarks';
 
 const navigationItems: Array<{ key: AppTab; label: string }> = [
   { key: 'search', label: '채널 검색' },
   { key: 'url', label: 'URL 직접 입력' },
   { key: 'downloads', label: '다운로드' },
+  { key: 'repair', label: '동영상 복구' },
 ];
 
 const messageTopOffset = 84;
@@ -441,6 +443,12 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               {secondaryContent}
             </div>
           )}
+          <div
+            className="app-main-tab-view"
+            hidden={activeTab !== 'repair'}
+          >
+            <VideoRepairPanel />
+          </div>
         </main>
       </Content>
 
