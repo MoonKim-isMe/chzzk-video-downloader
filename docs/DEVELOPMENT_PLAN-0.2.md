@@ -307,6 +307,7 @@ v0.2 기본 범위에서는 존재하지 않는 영상 데이터를 생성하는
 - [x] 최종 파일 확정 시 이미 존재하는 결과 파일을 덮어쓰지 않는 테스트 추가
 - [x] M4V / MOV / M2TS / MTS stream-copy 출력도 ffprobe에서 다시 읽을 수 있는지 확인
 - [x] 편집 호환성 복구 Plan/FFmpeg 인자 및 이모지·특수문자 제거 출력 파일명 단위 테스트 추가
+- [x] `compatibility_remux` 전략 추가 후 Frontend 전략 라벨 Record 누락으로 발생한 TypeScript 빌드 오류 보강
 
 
 ### Phase 8-F — 시나리오 연결 및 UX 안전장치

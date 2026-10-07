@@ -43,6 +43,7 @@ const repairabilityLabels: Record<VideoRepairability, string> = {
 
 const strategyLabels: Record<VideoRepairStrategy, string> = {
   none: '복구 불필요',
+  compatibility_remux: '편집 호환성 복구',
   remux: 'Remux',
   timestamp_remux: 'Timestamp 정규화 + Remux',
   partial: '손상 데이터 제외 후 복구',
