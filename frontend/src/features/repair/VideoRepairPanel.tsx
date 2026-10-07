@@ -145,10 +145,15 @@ function VideoRepairPanel() {
   const deepResult = session.inspectionResults.deep;
   const canRepair = Boolean(session.repairPlan?.executable) && !busy;
   const compatibilityEligible = Boolean(
-    repairBasisResult?.status === 'normal'
+    repairBasisResult
+      && ['normal', 'warning'].includes(repairBasisResult.status)
       && repairBasisResult.repairability === 'not_needed'
       && ['.mp4', '.m4v', '.mov'].includes(repairBasisResult.file.extension.toLowerCase())
       && session.repairResult?.plan.strategy !== 'compatibility_remux',
+  );
+  const compatibilityRecommended = Boolean(
+    repairBasisResult?.status === 'warning'
+      && repairBasisResult.repairability === 'not_needed',
   );
   const compatibilityRepairPlan = session.repairPlan?.strategy === 'compatibility_remux'
     ? session.repairPlan
@@ -698,7 +703,9 @@ function VideoRepairPanel() {
               <div>
                 <Text strong>편집 프로그램에서 열리지 않는다면 호환성 복구를 진행해주세요</Text>
                 <div className="video-repair-format-list">
-                  파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.
+                  {compatibilityRecommended
+                    ? '컨테이너 또는 스트림 경고가 있지만 일반 손상 복구는 필요하지 않습니다. 호환성 복구를 우선 시도할 수 있습니다.'
+                    : '파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.'}
                 </div>
               </div>
               <Tag color="orange">
@@ -706,7 +713,9 @@ function VideoRepairPanel() {
                   ? '복구 완료'
                   : compatibilityRepairProgress
                     ? '복구 중'
-                    : '선택 기능'}
+                    : compatibilityRecommended
+                      ? '복구 권장'
+                      : '선택 기능'}
               </Tag>
             </div>
 

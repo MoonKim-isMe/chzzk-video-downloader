@@ -134,8 +134,9 @@ func BuildCompatibilityRepairPlan(result InspectionResult) (RepairPlan, error) {
 	if err := result.Validate(); err != nil {
 		return RepairPlan{}, err
 	}
-	if result.Status != InspectionStatusNormal || result.Repairability != RepairabilityNotNeeded {
-		return RepairPlan{}, fmt.Errorf("정상으로 확인된 파일에서만 편집 호환성 복구를 사용할 수 있습니다")
+	if result.Repairability != RepairabilityNotNeeded ||
+		(result.Status != InspectionStatusNormal && result.Status != InspectionStatusWarning) {
+		return RepairPlan{}, fmt.Errorf("일반 손상 복구가 필요하지 않은 정상/경고 파일에서만 편집 호환성 복구를 사용할 수 있습니다")
 	}
 	if !isISOBaseMediaExtension(result.File.Extension) {
 		return RepairPlan{}, fmt.Errorf("편집 호환성 복구는 MP4/M4V/MOV 파일에서 사용할 수 있습니다")

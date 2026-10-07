@@ -164,6 +164,38 @@ func TestBuildCompatibilityRepairPlanUsesLosslessRemuxAndSafeName(t *testing.T) 
 	}
 }
 
+func TestBuildCompatibilityRepairPlanAllowsNonRepairableWarning(t *testing.T) {
+	result := validInspectionFixture()
+	result.File = repairPlanFixture(t)
+	result.Status = InspectionStatusWarning
+	result.Repairability = RepairabilityNotNeeded
+	result.Container.Status = HealthStatusWarning
+	result.Recommendation = RepairRecommendation{
+		Strategy: RepairStrategyNone,
+		Summary:  "컨테이너 또는 스트림 경고가 있지만 일반 복구는 필요하지 않습니다.",
+	}
+
+	plan, err := BuildCompatibilityRepairPlan(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Executable || plan.Strategy != RepairStrategyCompatibilityRemux {
+		t.Fatalf("unexpected compatibility warning plan: %#v", plan)
+	}
+}
+
+func TestBuildCompatibilityRepairPlanRejectsRepairNeededResult(t *testing.T) {
+	result := validInspectionFixture()
+	result.File = repairPlanFixture(t)
+	result.Status = InspectionStatusWarning
+	result.Repairability = RepairabilityLossless
+	result.Recommendation.Strategy = RepairStrategyTimestampRemux
+
+	if _, err := BuildCompatibilityRepairPlan(result); err == nil {
+		t.Fatal("expected repair-needed result to reject compatibility-only plan")
+	}
+}
+
 func TestCompatibilitySafeBaseNameFallback(t *testing.T) {
 	if got := compatibilitySafeBaseName("🌊💙"); got != "video" {
 		t.Fatalf("unexpected fallback: %q", got)
