@@ -8,6 +8,7 @@ import {
   Progress,
   Segmented,
   Space,
+  Spin,
   Tag,
   Tooltip,
   Typography,
@@ -527,7 +528,21 @@ function VideoRepairPanel() {
       </div>
 
       <div className="video-repair-scroll">
-        <div className="video-repair-layout">
+        {selectingFile ? (
+          <div className="video-repair-file-switching">
+            <Spin size="large" />
+            <div className="video-repair-file-switching-copy">
+              <Text strong className="video-repair-file-switching-title">
+                {fileInfo ? '동영상 변경 중입니다' : '동영상 불러오는 중입니다'}
+              </Text>
+              <Text className="app-muted">
+                파일 선택과 동영상 정보 확인이 끝나면 화면이 자동으로 갱신됩니다.
+              </Text>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="video-repair-layout">
           <Card bordered={false} className="video-repair-section">
             <div className="video-repair-section-heading">
               <div>
@@ -903,7 +918,7 @@ function VideoRepairPanel() {
           </Card>
         )}
 
-        <Card bordered={false} className="video-repair-section !mt-3.5">
+            <Card bordered={false} className="video-repair-section !mt-3.5">
           <div className="video-repair-section-heading">
             <div>
               <Text strong>검사 결과</Text>
@@ -942,7 +957,9 @@ function VideoRepairPanel() {
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="아직 실행한 검사가 없습니다." />
             </div>
           )}
-        </Card>
+            </Card>
+          </>
+        )}
       </div>
     </Card>
   );

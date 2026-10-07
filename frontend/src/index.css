@@ -1473,6 +1473,28 @@ select {
   place-items: center;
 }
 
+.video-repair-file-switching {
+  display: flex;
+  min-height: calc(100% - 8px);
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 48px 24px;
+  text-align: left;
+}
+
+.video-repair-file-switching-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.video-repair-file-switching-title {
+  color: var(--app-text) !important;
+  font-size: 14px;
+  line-height: 20px;
+}
+
 .video-repair-format-list {
   color: var(--app-text-muted);
   font-size: 11px;
