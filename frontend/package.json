@@ -1,7 +1,7 @@
 {
   "name": "chzzk-video-downloader-frontend",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "packageManager": "yarn@4.9.2",
   "engines": {
