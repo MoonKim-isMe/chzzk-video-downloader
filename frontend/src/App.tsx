@@ -364,9 +364,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             onTaskRecovered={handleDownloadTaskRecovered}
           />
         )
-      : activeTab === 'repair'
-        ? <VideoRepairPanel />
-        : null;
+      : null;
 
   return (
     <Layout className="app-shell" data-theme={themeMode}>
@@ -445,6 +443,12 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               {secondaryContent}
             </div>
           )}
+          <div
+            className="app-main-tab-view"
+            hidden={activeTab !== 'repair'}
+          >
+            <VideoRepairPanel />
+          </div>
         </main>
       </Content>
 
