@@ -1338,24 +1338,32 @@ select {
   margin-bottom: 14px;
 }
 
+.video-repair-compatibility-card {
+  border-color: color-mix(in srgb, #8b5cf6 38%, var(--app-border-soft)) !important;
+  background: color-mix(in srgb, #8b5cf6 6%, var(--app-surface-soft)) !important;
+}
+
 .video-repair-compatibility-card .video-repair-section-heading {
   margin-bottom: 10px;
 }
 
 .video-repair-compatibility-alert {
-  margin: 10px 0 14px;
+  margin: 8px 0 12px;
+  padding: 9px 12px !important;
+  border-color: color-mix(in srgb, #8b5cf6 42%, var(--app-border-soft)) !important;
+  background: color-mix(in srgb, #8b5cf6 10%, var(--app-surface-strong)) !important;
 }
 
-.video-repair-compatibility-alert.ant-alert-with-description {
-  padding: 14px 16px;
+.video-repair-compatibility-alert .ant-alert-icon {
+  color: #a78bfa !important;
 }
 
 .video-repair-compatibility-alert .ant-alert-message {
-  margin-bottom: 6px;
-}
-
-.video-repair-compatibility-alert .ant-alert-description {
-  line-height: 1.55;
+  margin: 0 !important;
+  color: var(--app-text-secondary) !important;
+  font-size: 11px;
+  line-height: 17px;
+  white-space: nowrap;
 }
 
 .video-repair-file-empty {

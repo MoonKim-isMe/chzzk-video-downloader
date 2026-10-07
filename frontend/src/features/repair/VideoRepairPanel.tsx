@@ -646,8 +646,7 @@ function VideoRepairPanel() {
               showIcon
               type="info"
               className="video-repair-compatibility-alert"
-              message="영상과 오디오는 재인코딩하지 않습니다."
-              description="MP4 컨테이너, 타임스탬프와 인덱스만 다시 구성합니다. 출력 파일명에서는 이모지와 불필요한 특수문자를 제거해 편집 프로그램의 경로 호환성도 높입니다."
+              message="영상과 오디오는 재인코딩하지 않고 MP4 구조·타임스탬프·인덱스와 출력 파일명만 호환성에 맞게 다시 구성합니다."
             />
 
             {compatibilityPlanError && (
