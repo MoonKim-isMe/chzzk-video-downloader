@@ -1,5 +1,7 @@
 export type VideoInspectionMode = 'quick' | 'deep';
 
+export type VideoDeepInspectionCPUProfile = 'low' | 'default' | 'high' | 'max';
+
 export type VideoRepairWorkflowStatus =
   | 'idle'
   | 'ready'

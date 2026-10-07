@@ -64,7 +64,7 @@ type App struct {
 	videoAccessChecker func(context.Context, int64, string) error
 	videoFileProbe     func(context.Context, string, string) (videorepair.FileInfo, error)
 	quickVideoInspector func(context.Context, string, string, string, videorepair.ProgressHandler) (videorepair.InspectionResult, error)
-	deepVideoInspector  func(context.Context, string, string, string, videorepair.ProgressHandler) (videorepair.InspectionResult, error)
+	deepVideoInspector  func(context.Context, string, string, string, int, videorepair.ProgressHandler) (videorepair.InspectionResult, error)
 	videoRepairer       func(context.Context, string, string, videorepair.RepairPlan, videorepair.RepairProgressHandler) (videorepair.RepairResult, error)
 
 	videoOperationMu          sync.Mutex
@@ -367,7 +367,7 @@ func (a *App) StartQuickVideoInspection(path string) (videorepair.InspectionResu
 	return result, nil
 }
 
-func (a *App) StartDeepVideoInspection(path string) (videorepair.InspectionResult, error) {
+func (a *App) StartDeepVideoInspection(path string, cpuProfile string) (videorepair.InspectionResult, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return videorepair.InspectionResult{}, fmt.Errorf("검사할 동영상 파일이 필요합니다")
@@ -379,6 +379,14 @@ func (a *App) StartDeepVideoInspection(path string) (videorepair.InspectionResul
 	}
 	if !toolchain.FFmpeg.Available {
 		return videorepair.InspectionResult{}, fmt.Errorf("정밀 검사에 필요한 영상 확인 기능이 준비되지 않았습니다")
+	}
+
+	threadCount, err := videorepair.DeepInspectionThreadCount(
+		videorepair.DeepInspectionCPUProfile(strings.TrimSpace(cpuProfile)),
+		goruntime.NumCPU(),
+	)
+	if err != nil {
+		return videorepair.InspectionResult{}, err
 	}
 
 	a.videoOperationMu.Lock()
@@ -407,6 +415,7 @@ func (a *App) StartDeepVideoInspection(path string) (videorepair.InspectionResul
 		toolchain.FFprobe.Path,
 		toolchain.FFmpeg.Path,
 		path,
+		threadCount,
 		a.emitVideoInspectionProgress,
 	)
 	if err != nil {

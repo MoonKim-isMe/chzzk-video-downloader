@@ -32,6 +32,7 @@ import {
   createInitialVideoRepairSession,
   isVideoRepairBusy,
   preferredVideoInspectionResult,
+  type VideoDeepInspectionCPUProfile,
   type VideoInspectionMode,
   type VideoInspectionProgress,
   type VideoRepairFileInfo,
@@ -60,6 +61,13 @@ const repairStrategyLabels: Record<VideoRepairStrategy, string> = {
 const inspectionModeDescriptions: Record<VideoInspectionMode, string> = {
   quick: '컨테이너와 스트림 구조, 대표 구간을 중심으로 빠르게 확인합니다.',
   deep: '영상과 오디오 전체를 디코딩해 손상 위치까지 확인하는 방식입니다.',
+};
+
+const deepCPUProfileDescriptions: Record<VideoDeepInspectionCPUProfile, string> = {
+  low: '논리 코어의 약 25%를 사용합니다. 다른 작업에 미치는 영향을 가장 적게 합니다.',
+  default: '논리 코어의 약 50%를 사용합니다. 검사 속도와 시스템 부하의 균형을 맞춥니다.',
+  high: '논리 코어의 약 75%를 사용합니다. 검사 시간을 줄이는 대신 CPU 사용량이 높아집니다.',
+  max: 'FFmpeg가 스레드 수를 자동으로 결정합니다. 가장 빠르지만 CPU를 많이 사용할 수 있습니다.',
 };
 
 function formatFileSize(bytes: number) {
@@ -129,6 +137,7 @@ function VideoRepairPanel() {
   const { message } = AntdApp.useApp();
   const [session, setSession] = useState<VideoRepairSession>(createInitialVideoRepairSession);
   const [selectingFile, setSelectingFile] = useState(false);
+  const [deepCPUProfile, setDeepCPUProfile] = useState<VideoDeepInspectionCPUProfile>('default');
   const [inspectionProgress, setInspectionProgress] = useState<VideoInspectionProgress>();
   const [repairProgress, setRepairProgress] = useState<VideoRepairProgress>();
   const [repairPlanError, setRepairPlanError] = useState('');
@@ -343,7 +352,7 @@ function VideoRepairPanel() {
     try {
       const result = mode === 'quick'
         ? await startQuickVideoInspection(targetFile.path)
-        : await startDeepVideoInspection(targetFile.path);
+        : await startDeepVideoInspection(targetFile.path, deepCPUProfile);
       setSession((current) => {
         const inspectionResults = {
           ...current.inspectionResults,
@@ -620,6 +629,36 @@ function VideoRepairPanel() {
               <div className="video-repair-mode-description">
                 {inspectionModeDescriptions[session.inspectionMode]}
               </div>
+
+              {session.inspectionMode === 'deep' && (
+                <div className="video-repair-deep-cpu-control">
+                  <div className="video-repair-deep-cpu-heading">
+                    <div>
+                      <Text strong>정밀 검사 CPU 사용량</Text>
+                      <div className="video-repair-format-list">
+                        GPU 디코딩은 사용하지 않고 FFmpeg 소프트웨어 디코딩 스레드 수만 제한합니다.
+                      </div>
+                    </div>
+                    <Tag>{deepCPUProfile === 'default' ? '기본값' : '사용자 선택'}</Tag>
+                  </div>
+                  <Segmented
+                    block
+                    className="video-repair-mode-segmented video-repair-cpu-segmented"
+                    value={deepCPUProfile}
+                    disabled={busy}
+                    options={[
+                      { label: '낮음 25%', value: 'low' },
+                      { label: '기본 50%', value: 'default' },
+                      { label: '높음 75%', value: 'high' },
+                      { label: '최대', value: 'max' },
+                    ]}
+                    onChange={(value) => setDeepCPUProfile(value as VideoDeepInspectionCPUProfile)}
+                  />
+                  <Text className="app-muted video-repair-deep-cpu-description">
+                    {deepCPUProfileDescriptions[deepCPUProfile]}
+                  </Text>
+                </div>
+              )}
 
               {session.status === 'inspecting' && inspectionProgress && (
                 <div className="video-repair-inspection-progress">
