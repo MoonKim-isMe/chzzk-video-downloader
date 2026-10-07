@@ -1338,6 +1338,26 @@ select {
   margin-bottom: 14px;
 }
 
+.video-repair-compatibility-card .video-repair-section-heading {
+  margin-bottom: 10px;
+}
+
+.video-repair-compatibility-alert {
+  margin: 10px 0 14px;
+}
+
+.video-repair-compatibility-alert.ant-alert-with-description {
+  padding: 14px 16px;
+}
+
+.video-repair-compatibility-alert .ant-alert-message {
+  margin-bottom: 6px;
+}
+
+.video-repair-compatibility-alert .ant-alert-description {
+  line-height: 1.55;
+}
+
 .video-repair-file-empty {
   display: grid;
   min-height: 210px;

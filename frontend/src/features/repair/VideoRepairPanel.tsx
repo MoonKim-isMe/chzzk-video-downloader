@@ -631,10 +631,10 @@ function VideoRepairPanel() {
         </div>
 
         {compatibilityEligible && (
-          <Card bordered={false} className="video-repair-section !mt-3.5">
+          <Card bordered={false} className="video-repair-section video-repair-compatibility-card !mt-3.5">
             <div className="video-repair-section-heading">
               <div>
-                <Text strong>편집 프로그램 호환성</Text>
+                <Text strong>편집 프로그램에서 열리지 않는다면 호환성 복구를 진행해주세요</Text>
                 <div className="video-repair-format-list">
                   파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.
                 </div>
@@ -645,6 +645,7 @@ function VideoRepairPanel() {
             <Alert
               showIcon
               type="info"
+              className="video-repair-compatibility-alert"
               message="영상과 오디오는 재인코딩하지 않습니다."
               description="MP4 컨테이너, 타임스탬프와 인덱스만 다시 구성합니다. 출력 파일명에서는 이모지와 불필요한 특수문자를 제거해 편집 프로그램의 경로 호환성도 높입니다."
             />
