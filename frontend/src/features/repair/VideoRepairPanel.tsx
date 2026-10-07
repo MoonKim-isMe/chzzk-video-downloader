@@ -96,6 +96,34 @@ function fileChanged(current: VideoRepairFileInfo | undefined, next: VideoRepair
   );
 }
 
+function RepairProgressView({
+  progress,
+  plan,
+}: {
+  progress: VideoRepairProgress;
+  plan?: VideoRepairPlan;
+}) {
+  const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+  const targetDuration = plan?.endSeconds || plan?.durationSeconds;
+
+  return (
+    <div className="video-repair-inspection-progress video-repair-repair-progress">
+      <div className="video-repair-progress-summary">
+        <div className="video-repair-progress-primary">
+          <Text strong className="video-repair-progress-percent">{percent}%</Text>
+          <Text className="app-muted video-repair-progress-time">
+            ({formatElapsed(progress.processedSeconds)} / {targetDuration && targetDuration > 0
+              ? formatDuration(targetDuration)
+              : '확인 불가'})
+          </Text>
+        </div>
+        <Text className="app-muted video-repair-progress-stage">{progress.stage}</Text>
+      </div>
+      <Progress percent={percent} size="small" status="active" showInfo={false} />
+    </div>
+  );
+}
+
 function VideoRepairPanel() {
   const { message } = AntdApp.useApp();
   const [session, setSession] = useState<VideoRepairSession>(createInitialVideoRepairSession);
@@ -120,6 +148,25 @@ function VideoRepairPanel() {
       && repairBasisResult.repairability === 'not_needed'
       && ['.mp4', '.m4v', '.mov'].includes(repairBasisResult.file.extension.toLowerCase())
       && session.repairResult?.plan.strategy !== 'compatibility_remux',
+  );
+  const compatibilityRepairPlan = session.repairPlan?.strategy === 'compatibility_remux'
+    ? session.repairPlan
+    : undefined;
+  const compatibilityRepairResult = session.repairResult?.plan.strategy === 'compatibility_remux'
+    ? session.repairResult
+    : undefined;
+  const compatibilityRepairProgress = repairProgress?.strategy === 'compatibility_remux'
+    ? repairProgress
+    : undefined;
+  const compatibilityWorkflowActive = compatibilityEligible
+    || Boolean(compatibilityRepairPlan || compatibilityRepairResult || compatibilityRepairProgress);
+  const compatibilityDisplayPlan = compatibilityRepairPlan ?? compatibilityPlan ?? compatibilityRepairResult?.plan;
+  const generalRepairVisible = Boolean(
+    (session.repairPlan && session.repairPlan.strategy !== 'compatibility_remux')
+      || (session.repairResult && session.repairResult.plan.strategy !== 'compatibility_remux')
+      || (session.status === 'repairing' && repairProgress?.strategy !== 'compatibility_remux')
+      || repairPlanError
+      || (repairError && !compatibilityWorkflowActive),
   );
 
   const repairDisabledReason = !repairBasisResult
@@ -630,7 +677,7 @@ function VideoRepairPanel() {
           </Card>
         </div>
 
-        {compatibilityEligible && (
+        {compatibilityWorkflowActive && (
           <Card bordered={false} className="video-repair-section video-repair-compatibility-card !mt-3.5">
             <div className="video-repair-section-heading">
               <div>
@@ -639,12 +686,18 @@ function VideoRepairPanel() {
                   파일 자체가 정상이어도 일부 편집 프로그램에서는 MP4 구조나 타임스탬프 때문에 열리지 않을 수 있습니다.
                 </div>
               </div>
-              <Tag color="orange">선택 기능</Tag>
+              <Tag color="orange">
+                {compatibilityRepairResult
+                  ? '복구 완료'
+                  : compatibilityRepairProgress
+                    ? '복구 중'
+                    : '선택 기능'}
+              </Tag>
             </div>
 
             <Alert
               showIcon
-              type="info"
+              type="warning"
               className="video-repair-compatibility-alert"
               message="영상과 오디오는 재인코딩하지 않고 MP4 구조·타임스탬프·인덱스와 출력 파일명만 호환성에 맞게 다시 구성합니다."
             />
@@ -658,38 +711,92 @@ function VideoRepairPanel() {
               />
             )}
 
-            {compatibilityPlan && (
+            {repairError && compatibilityWorkflowActive && (
+              <Alert showIcon type="error" message="호환성 복구 실패" description={repairError} />
+            )}
+
+            {compatibilityDisplayPlan && !compatibilityRepairResult && (
               <div className="video-repair-repair-plan">
                 <Descriptions size="small" column={2}>
                   <Descriptions.Item label="처리 방식">무손실 MP4 재구성</Descriptions.Item>
                   <Descriptions.Item label="화질·음질">
                     <Tag color="success">재인코딩 없음</Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="예상 처리">{compatibilityPlan.expectedTime}</Descriptions.Item>
+                  <Descriptions.Item label="예상 처리">{compatibilityDisplayPlan.expectedTime}</Descriptions.Item>
                   <Descriptions.Item label="필요 여유 공간">
-                    {formatFileSize(compatibilityPlan.requiredFreeBytes)}
+                    {formatFileSize(compatibilityDisplayPlan.requiredFreeBytes)}
                   </Descriptions.Item>
                   <Descriptions.Item label="출력 파일" span={2}>
-                    <Text className="video-repair-path" title={compatibilityPlan.outputPath}>
-                      {compatibilityPlan.outputPath}
+                    <Text className="video-repair-path" title={compatibilityDisplayPlan.outputPath}>
+                      {compatibilityDisplayPlan.outputPath}
                     </Text>
                   </Descriptions.Item>
                 </Descriptions>
-                <div className="video-repair-actions">
-                  <Button
-                    type="primary"
-                    disabled={busy || !compatibilityPlan.executable}
-                    onClick={() => void handleStartRepair(compatibilityPlan)}
-                  >
-                    편집 호환성 복구
+
+                {session.status === 'repairing' && compatibilityRepairProgress ? (
+                  <RepairProgressView
+                    progress={compatibilityRepairProgress}
+                    plan={compatibilityRepairPlan ?? compatibilityDisplayPlan}
+                  />
+                ) : (
+                  <div className="video-repair-actions">
+                    <Button
+                      type="primary"
+                      disabled={busy || !compatibilityDisplayPlan.executable}
+                      onClick={() => void handleStartRepair(compatibilityDisplayPlan)}
+                    >
+                      편집 호환성 복구
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {compatibilityRepairResult && (
+              <div className="video-repair-repair-result">
+                <Alert
+                  showIcon
+                  type={compatibilityRepairResult.autoInspection?.status === 'normal' ? 'success' : 'warning'}
+                  message="호환성 복구 완료"
+                  description={
+                    compatibilityRepairResult.autoInspection
+                      ? `자동 빠른 검사: ${compatibilityRepairResult.autoInspection.summary}`
+                      : compatibilityRepairResult.autoInspectionError || '복구 파일의 자동 빠른 검사 결과를 확인하지 못했습니다.'
+                  }
+                />
+                <Descriptions size="small" column={2}>
+                  <Descriptions.Item label="결과 파일">
+                    {compatibilityRepairResult.outputFile.name}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="처리 시간">
+                    {formatElapsed(compatibilityRepairResult.elapsedSeconds)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="복구 방식">
+                    {repairStrategyLabels[compatibilityRepairResult.plan.strategy]}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="자동 빠른 검사">
+                    {compatibilityRepairResult.autoInspection ? '완료' : '확인 필요'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="저장 경로" span={2}>
+                    <Text className="video-repair-path" title={compatibilityRepairResult.outputFile.path}>
+                      {compatibilityRepairResult.outputFile.path}
+                    </Text>
+                  </Descriptions.Item>
+                </Descriptions>
+                <Space wrap>
+                  <Button disabled={busy} onClick={handleDeepInspectRepairResult}>
+                    복구 결과 정밀 검사
                   </Button>
-                </div>
+                  <Button onClick={() => void handleRevealFile(compatibilityRepairResult.outputFile.path)}>
+                    결과 파일 위치 열기
+                  </Button>
+                </Space>
               </div>
             )}
           </Card>
         )}
 
-        {(session.repairPlan || session.repairResult || session.status === 'repairing' || repairPlanError || repairError) && (
+        {generalRepairVisible && (
           <Card bordered={false} className="video-repair-section !mt-3.5">
             <div className="video-repair-section-heading">
               <div>
@@ -749,27 +856,7 @@ function VideoRepairPanel() {
             )}
 
             {session.status === 'repairing' && repairProgress && (
-              <div className="video-repair-inspection-progress video-repair-repair-progress">
-                <div className="video-repair-inspection-progress-heading">
-                  <Text>{repairProgress.stage}</Text>
-                  <Text className="app-muted">
-                    {[
-                      repairProgress.processedSeconds !== undefined && session.repairPlan?.durationSeconds
-                        ? `${formatDuration(repairProgress.processedSeconds)} / ${formatDuration(
-                            session.repairPlan.endSeconds || session.repairPlan.durationSeconds,
-                          )}`
-                        : undefined,
-                      repairProgress.speed ? `${repairProgress.speed.toFixed(2)}x` : undefined,
-                      `경과 ${formatElapsed(repairProgress.elapsedSeconds)}`,
-                    ].filter(Boolean).join(' · ')}
-                  </Text>
-                </div>
-                <Progress
-                  percent={Math.max(0, Math.min(100, Math.round(repairProgress.percent)))}
-                  size="small"
-                  status="active"
-                />
-              </div>
+              <RepairProgressView progress={repairProgress} plan={session.repairPlan} />
             )}
 
             {session.repairResult && (

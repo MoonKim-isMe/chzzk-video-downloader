@@ -1502,6 +1502,38 @@ select {
   margin-top: 12px;
 }
 
+.video-repair-progress-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.video-repair-progress-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.video-repair-progress-percent {
+  color: var(--app-text) !important;
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.video-repair-progress-time {
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.video-repair-progress-stage {
+  padding-top: 2px;
+  font-size: 11px;
+  line-height: 17px;
+  text-align: right;
+}
+
 
 .video-repair-inspection-history {
   display: flex;
