@@ -3,8 +3,50 @@ package videorepair
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestDeepInspectionThreadCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		profile  DeepInspectionCPUProfile
+		expected int
+	}{
+		{name: "low", profile: DeepInspectionCPUProfileLow, expected: 2},
+		{name: "default", profile: DeepInspectionCPUProfileDefault, expected: 4},
+		{name: "high", profile: DeepInspectionCPUProfileHigh, expected: 6},
+		{name: "max", profile: DeepInspectionCPUProfileMax, expected: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := DeepInspectionThreadCount(test.profile, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.expected {
+				t.Fatalf("unexpected thread count: got %d want %d", got, test.expected)
+			}
+		})
+	}
+}
+
+func TestDeepInspectionThreadCountRejectsUnknownProfile(t *testing.T) {
+	if _, err := DeepInspectionThreadCount("unknown", 8); err == nil {
+		t.Fatal("expected unknown profile error")
+	}
+}
+
+func TestDeepDecodeArgsAppliesThreadLimit(t *testing.T) {
+	limited := strings.Join(deepDecodeArgs("sample.mp4", 4), " ")
+	if !strings.Contains(limited, "-threads 4 -i sample.mp4") {
+		t.Fatalf("thread limit must be applied before input: %s", limited)
+	}
+	maximum := strings.Join(deepDecodeArgs("sample.mp4", 0), " ")
+	if strings.Contains(maximum, "-threads") {
+		t.Fatalf("max profile must leave FFmpeg thread selection automatic: %s", maximum)
+	}
+}
 
 func TestApplyDeepProgressLine(t *testing.T) {
 	state := deepProgressState{}
@@ -234,7 +276,7 @@ func TestBuildDeepInspectionTruncatedDecode(t *testing.T) {
 func TestDeepInspectStopsWhenContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := DeepInspect(ctx, "ffprobe", "ffmpeg", "unused.mp4", nil)
+	_, err := DeepInspect(ctx, "ffprobe", "ffmpeg", "unused.mp4", 1, nil)
 	if err == nil || err != context.Canceled {
 		t.Fatalf("expected context cancellation, got %v", err)
 	}

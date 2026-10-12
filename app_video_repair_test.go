@@ -237,6 +237,7 @@ func TestStartDeepVideoInspectionUsesBundledToolchainAndProgress(t *testing.T) {
 		ffprobePath string,
 		ffmpegPath string,
 		path string,
+		threadCount int,
 		handler videorepair.ProgressHandler,
 	) (videorepair.InspectionResult, error) {
 		if ffprobePath != "ffprobe-test" || ffmpegPath != "ffmpeg-test" {
@@ -244,6 +245,9 @@ func TestStartDeepVideoInspectionUsesBundledToolchainAndProgress(t *testing.T) {
 		}
 		if path != "C:/video/deep.mp4" {
 			t.Fatalf("unexpected inspection path: %s", path)
+		}
+		if threadCount < 1 {
+			t.Fatalf("default CPU profile must limit FFmpeg threads: %d", threadCount)
 		}
 		handler(videorepair.InspectionProgress{
 			Mode:             videorepair.InspectionModeDeep,
@@ -261,7 +265,7 @@ func TestStartDeepVideoInspectionUsesBundledToolchainAndProgress(t *testing.T) {
 		}, nil
 	}
 
-	result, err := app.StartDeepVideoInspection("C:/video/deep.mp4")
+	result, err := app.StartDeepVideoInspection("C:/video/deep.mp4", "default")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,6 +274,20 @@ func TestStartDeepVideoInspectionUsesBundledToolchainAndProgress(t *testing.T) {
 	}
 	if len(emitted) != 1 || emitted[0].ProcessedSeconds != 60 || emitted[0].Speed != 2.5 {
 		t.Fatalf("unexpected deep progress: %#v", emitted)
+	}
+}
+
+
+func TestStartDeepVideoInspectionRejectsUnknownCPUProfile(t *testing.T) {
+	app := NewApp()
+	app.downloadManager = repairTestDownloadService{
+		status: downloader.ToolchainStatus{
+			FFprobe: downloader.ToolStatus{Available: true, Path: "ffprobe-test"},
+			FFmpeg:  downloader.ToolStatus{Available: true, Path: "ffmpeg-test"},
+		},
+	}
+	if _, err := app.StartDeepVideoInspection("C:/video/deep.mp4", "unknown"); err == nil {
+		t.Fatal("expected invalid CPU profile error")
 	}
 }
 

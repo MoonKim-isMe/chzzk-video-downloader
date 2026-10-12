@@ -1462,6 +1462,32 @@ select {
   line-height: 19px;
 }
 
+.video-repair-deep-cpu-control {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--app-primary) 5%, var(--app-surface-strong));
+}
+
+.video-repair-deep-cpu-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.video-repair-cpu-segmented .ant-segmented-item-label {
+  padding-inline: 8px;
+}
+
+.video-repair-deep-cpu-description {
+  font-size: 11px;
+  line-height: 17px;
+}
+
 
 .video-repair-inspection-progress {
   display: flex;

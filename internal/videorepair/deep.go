@@ -23,6 +23,33 @@ const (
 	maxDeepDiagnosticTail     = 32
 )
 
+type DeepInspectionCPUProfile string
+
+const (
+	DeepInspectionCPUProfileLow     DeepInspectionCPUProfile = "low"
+	DeepInspectionCPUProfileDefault DeepInspectionCPUProfile = "default"
+	DeepInspectionCPUProfileHigh    DeepInspectionCPUProfile = "high"
+	DeepInspectionCPUProfileMax     DeepInspectionCPUProfile = "max"
+)
+
+func DeepInspectionThreadCount(profile DeepInspectionCPUProfile, logicalCPUs int) (int, error) {
+	if logicalCPUs < 1 {
+		logicalCPUs = 1
+	}
+	switch profile {
+	case "", DeepInspectionCPUProfileDefault:
+		return (logicalCPUs + 1) / 2, nil
+	case DeepInspectionCPUProfileLow:
+		return (logicalCPUs + 3) / 4, nil
+	case DeepInspectionCPUProfileHigh:
+		return (logicalCPUs*3 + 3) / 4, nil
+	case DeepInspectionCPUProfileMax:
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("지원하지 않는 정밀 검사 CPU 사용량입니다: %s", profile)
+	}
+}
+
 var deepDiagnosticTimePattern = regexp.MustCompile(`(?i)(?:pts_time[:=]|time=)\s*([0-9:.]+)`)
 
 type deepProcessLine struct {
@@ -79,6 +106,7 @@ func DeepInspect(
 	ffprobePath string,
 	ffmpegPath string,
 	path string,
+	threadCount int,
 	handler ProgressHandler,
 ) (InspectionResult, error) {
 	if err := ctx.Err(); err != nil {
@@ -91,6 +119,9 @@ func DeepInspect(
 	}
 	ffprobePath = strings.TrimSpace(ffprobePath)
 	ffmpegPath = strings.TrimSpace(ffmpegPath)
+	if threadCount < 0 {
+		return InspectionResult{}, fmt.Errorf("정밀 검사 스레드 수는 0 이상이어야 합니다")
+	}
 	if ffprobePath == "" || ffmpegPath == "" {
 		return InspectionResult{}, fmt.Errorf("정밀 검사 실행 도구 경로가 필요합니다")
 	}
@@ -135,6 +166,7 @@ func DeepInspect(
 		ffmpegPath,
 		file,
 		probe,
+		threadCount,
 		handler,
 	)
 	if err != nil {
@@ -171,6 +203,7 @@ func runDeepDecode(
 	ffmpegPath string,
 	file FileInfo,
 	probe quickProbeResponse,
+	threadCount int,
 	handler ProgressHandler,
 ) (deepDecodeSummary, string, error) {
 	var summary deepDecodeSummary
@@ -178,24 +211,7 @@ func runDeepDecode(
 		return summary, "", err
 	}
 
-	cmd := exec.CommandContext(
-		ctx,
-		ffmpegPath,
-		"-hide_banner",
-		"-nostdin",
-		"-v", "warning",
-		"-stats_period", "0.5",
-		"-err_detect", "ignore_err",
-		"-i", file.Path,
-		"-map", "0:v?",
-		"-map", "0:a?",
-		"-sn",
-		"-dn",
-		"-progress", "pipe:1",
-		"-nostats",
-		"-f", "null",
-		"-",
-	)
+	cmd := exec.CommandContext(ctx, ffmpegPath, deepDecodeArgs(file.Path, threadCount)...)
 	hideConsoleWindow(cmd)
 
 	stdout, err := cmd.StdoutPipe()
@@ -332,6 +348,30 @@ func runDeepDecode(
 		summary.ProcessedSeconds = file.DurationSeconds
 	}
 	return summary, logPath, nil
+}
+
+func deepDecodeArgs(path string, threadCount int) []string {
+	args := []string{
+		"-hide_banner",
+		"-nostdin",
+		"-v", "warning",
+		"-stats_period", "0.5",
+		"-err_detect", "ignore_err",
+	}
+	if threadCount > 0 {
+		args = append(args, "-threads", strconv.Itoa(threadCount))
+	}
+	return append(args,
+		"-i", path,
+		"-map", "0:v?",
+		"-map", "0:a?",
+		"-sn",
+		"-dn",
+		"-progress", "pipe:1",
+		"-nostats",
+		"-f", "null",
+		"-",
+	)
 }
 
 func scanDeepProcessStream(

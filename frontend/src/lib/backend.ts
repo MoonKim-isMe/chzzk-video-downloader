@@ -8,6 +8,7 @@ import type {
 import type { AppSettings } from '../types/settings';
 import type { UpdateInfo } from '../types/update';
 import type {
+  VideoDeepInspectionCPUProfile,
   VideoInspectionResult,
   VideoRepairFileInfo,
   VideoRepairPlan,
@@ -27,7 +28,7 @@ interface BackendApp {
   SelectDownloadDirectory(currentDirectory: string): Promise<string>;
   SelectVideoRepairFile(currentFile: string): Promise<VideoRepairFileInfo>;
   StartQuickVideoInspection(path: string): Promise<VideoInspectionResult>;
-  StartDeepVideoInspection(path: string): Promise<VideoInspectionResult>;
+  StartDeepVideoInspection(path: string, cpuProfile: VideoDeepInspectionCPUProfile): Promise<VideoInspectionResult>;
   CancelVideoInspection(): Promise<boolean>;
   CreateVideoRepairPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
   CreateVideoCompatibilityPlan(result: VideoInspectionResult): Promise<VideoRepairPlan>;
@@ -93,8 +94,8 @@ export const selectVideoRepairFile = (currentFile = '') =>
 export const startQuickVideoInspection = (path: string) =>
   app().StartQuickVideoInspection(path);
 
-export const startDeepVideoInspection = (path: string) =>
-  app().StartDeepVideoInspection(path);
+export const startDeepVideoInspection = (path: string, cpuProfile: VideoDeepInspectionCPUProfile) =>
+  app().StartDeepVideoInspection(path, cpuProfile);
 
 export const cancelVideoInspection = () => app().CancelVideoInspection();
 

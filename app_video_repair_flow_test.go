@@ -43,7 +43,7 @@ func TestVideoRepairScenarioQuickThenDeepThenRepairUsesDeepResult(t *testing.T) 
 		return repairScenarioResult(file, videorepair.InspectionModeQuick, true), nil
 	}
 	app.deepVideoInspector = func(
-		context.Context, string, string, string, videorepair.ProgressHandler,
+		context.Context, string, string, string, int, videorepair.ProgressHandler,
 	) (videorepair.InspectionResult, error) {
 		result := repairScenarioResult(file, videorepair.InspectionModeDeep, false)
 		result.Container.Status = videorepair.HealthStatusNormal
@@ -62,7 +62,7 @@ func TestVideoRepairScenarioQuickThenDeepThenRepairUsesDeepResult(t *testing.T) 
 		t.Fatal("quick inspection must recommend deep inspection in this scenario")
 	}
 
-	deep, err := app.StartDeepVideoInspection(file.Path)
+	deep, err := app.StartDeepVideoInspection(file.Path, "default")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,13 +84,13 @@ func TestVideoRepairScenarioQuickThenDeepThenRepairUsesDeepResult(t *testing.T) 
 func TestVideoRepairScenarioDeepThenRepair(t *testing.T) {
 	app, file := newRepairScenarioApp(t)
 	app.deepVideoInspector = func(
-		context.Context, string, string, string, videorepair.ProgressHandler,
+		context.Context, string, string, string, int, videorepair.ProgressHandler,
 	) (videorepair.InspectionResult, error) {
 		return repairScenarioResult(file, videorepair.InspectionModeDeep, false), nil
 	}
 	app.videoRepairer = repairScenarioStub
 
-	deep, err := app.StartDeepVideoInspection(file.Path)
+	deep, err := app.StartDeepVideoInspection(file.Path, "default")
 	if err != nil {
 		t.Fatal(err)
 	}
