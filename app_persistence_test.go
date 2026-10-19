@@ -92,8 +92,11 @@ func TestInitializePersistenceRestoresChannelsSettingsAndHistory(t *testing.T) {
 	}
 
 	tasks := app.GetDownloadTasks()
-	if len(tasks) != 0 {
-		t.Fatalf("recovered cancelled history must be hidden: %#v", tasks)
+	if len(tasks) != 1 ||
+		tasks[0].Status != downloader.TaskStatusFailed ||
+		tasks[0].ErrorCode != downloader.DownloadFailureInterrupted ||
+		tasks[0].Error == "" {
+		t.Fatalf("restarted interrupted history must remain visible as failed: %#v", tasks)
 	}
 	if app.ensureDownloadQueue().MaxConcurrent() != settingsValue.MaxConcurrentDownloads {
 		t.Fatalf("restored concurrency was not applied: %d", app.ensureDownloadQueue().MaxConcurrent())

@@ -12,6 +12,7 @@ const (
 	DownloadFailurePartialDataConflict           DownloadFailureKind = "partial_data_conflict"
 	DownloadFailureHLSInitializationFragmentOrder DownloadFailureKind = "hls_initialization_fragment_order"
 	DownloadFailureSourceURLMissing DownloadFailureKind = "source_url_missing"
+	DownloadFailureInterrupted DownloadFailureKind = "interrupted"
 )
 
 type DownloadFailure struct {

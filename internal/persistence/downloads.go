@@ -178,9 +178,9 @@ func (d *Database) RecoverInterruptedDownloads() error {
 	_, err := d.db.Exec(`UPDATE download_tasks
 	SET
 		status = ?,
-		error_code = '',
+		error_code = ?,
 		error = CASE
-			WHEN error = '' THEN '앱 종료로 다운로드가 중단되었습니다.'
+			WHEN error = '' THEN '앱 종료 또는 비정상적인 중단으로 다운로드가 완료되지 않았습니다.'
 			ELSE error
 		END,
 		finished_at = CASE
@@ -189,7 +189,8 @@ func (d *Database) RecoverInterruptedDownloads() error {
 		END,
 		updated_at = ?
 	WHERE status IN (?, ?)`,
-		string(downloader.TaskStatusCancelled),
+		string(downloader.TaskStatusFailed),
+		string(downloader.DownloadFailureInterrupted),
 		now,
 		now,
 		string(downloader.TaskStatusQueued),

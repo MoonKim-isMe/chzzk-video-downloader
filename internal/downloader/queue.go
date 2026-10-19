@@ -203,8 +203,10 @@ func (q *Queue) Stop() {
 		if !ok || task.Status != TaskStatusQueued {
 			continue
 		}
-		task.Status = TaskStatusCancelled
+		task.Status = TaskStatusFailed
 		task.FinishedAt = now
+		task.Error = "앱 종료로 다운로드가 중단되었습니다."
+		task.ErrorCode = DownloadFailureInterrupted
 		q.tasks[taskID] = task
 		delete(q.requests, taskID)
 		cancelledQueued = append(cancelledQueued, task)
@@ -212,8 +214,8 @@ func (q *Queue) Stop() {
 	q.pending = nil
 
 	cancels := make([]context.CancelFunc, 0, len(q.active))
-	for taskID, cancel := range q.active {
-		q.cancelRequested[taskID] = struct{}{}
+	for _, cancel := range q.active {
+		// An app shutdown is not an explicit user cancellation.
 		cancels = append(cancels, cancel)
 	}
 	q.mu.Unlock()
@@ -281,15 +283,27 @@ func (q *Queue) run(ctx context.Context, taskID string, request DownloadRequest)
 			task.Error = err.Error()
 		}
 	} else if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			task.Status = TaskStatusCancelled
-		} else {
-			task.Status = TaskStatusFailed
-		}
+		task.Status = TaskStatusFailed
 		task.Error = err.Error()
 		task.ErrorCode = ""
 		task.LogPath = result.LogPath
-		if kind, ok := downloadFailureKind(err); ok {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Only Cancel() represents an intentional user cancellation.
+			message := "다운로드 실행이 예기치 않게 중단되었습니다."
+			if q.stopped {
+				message = "앱 종료로 다운로드가 중단되었습니다."
+			}
+			interruption := &DownloadFailure{
+				Kind: DownloadFailureInterrupted, Message: message, Cause: err,
+			}
+			task.Error = message
+			task.ErrorCode = interruption.Kind
+			// Manager intentionally skips logs for user cancellation. Keep
+			// a failure log when a non-user interruption is detected.
+			if logPath, logErr := writeDownloadFailureLog(request, CommandSpec{}, result, interruption); logErr == nil {
+				task.LogPath = logPath
+			}
+		} else if kind, ok := downloadFailureKind(err); ok {
 			task.ErrorCode = kind
 		}
 	} else {
