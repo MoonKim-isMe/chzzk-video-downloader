@@ -93,10 +93,11 @@ func writeSourceURLSegmentCache(folder, path string, content []byte) error {
 		file.Close()
 		return err
 	}
-	if err = file.Sync(); err != nil {
-		file.Close()
-		return err
-	}
+	// A successful HTTP response is already buffered in full before this
+	// temporary file is renamed. Per-segment fsync stalls every download,
+	// especially with 2-8 concurrent workers. Closing + atomic rename keeps
+	// incomplete writes invisible; after a sudden power loss the OS may lose
+	// the newest cached segments and they will be downloaded again.
 	if err = file.Close(); err != nil {
 		return err
 	}

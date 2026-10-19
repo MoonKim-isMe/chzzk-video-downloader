@@ -280,10 +280,15 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			Cause: err,
 		}
 	}
+
+	acceleration, err := normalizeConcurrentFragments(request.ConcurrentFragments)
+	if err != nil {
+		return original, CommandSpec{}, err
+	}
 	// FFmpeg reads the local manifest only once. Route segment requests
 	// through a loopback proxy so expired CDN signatures can be renewed
 	// without restarting the download or discarding the partial MP4.
-	proxy, err := startSourceURLSegmentProxy(ctx, source.URL, manifestDir, func(refreshCtx context.Context) (string, error) {
+	proxy, err := startSourceURLSegmentProxyWithAcceleration(ctx, source.URL, manifestDir, func(refreshCtx context.Context) (string, error) {
 		fresh, refreshErr := fetchSourceURLHLS(refreshCtx, request, &http.Client{Timeout: 20 * time.Second})
 		if refreshErr != nil {
 			return "", refreshErr
@@ -292,7 +297,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			return "", fmt.Errorf("갱신된 HLS 스트림의 영상 또는 화질이 달라졌습니다")
 		}
 		return fresh.URL, nil
-	}, client, cacheDir)
+	}, client, cacheDir, acceleration)
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{
 			Kind: DownloadFailureSourceURLMissing,
@@ -429,6 +434,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	result.FinalPath = destination
 	// Only a fully completed, promoted download removes cached media.
 	// Failures and interruptions keep successful segments for the next attempt.
+	proxy.Close() // Stop speculative workers before deleting cached segments.
 	_ = os.RemoveAll(cacheDir)
 	return result, spec, nil
 }
