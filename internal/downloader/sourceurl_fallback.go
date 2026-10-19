@@ -69,9 +69,24 @@ func maxHeightFromFormatSelector(selector string) (int, error) {
 }
 
 func selectSourceURLHLS(manifest []byte, selector string) (string, int, error) {
-	maxHeight, err := maxHeightFromFormatSelector(selector)
-	if err != nil {
-		return "", 0, err
+	return selectSourceURLHLSForType(manifest, selector, DownloadTypeVideo)
+}
+
+// CHZZK's HLS representations contain both H.264 video and AAC audio.
+// For MP3, choose the highest-quality available muxed HLS stream, then
+// decode only its audio track in FFmpeg.
+func selectSourceURLHLSForType(manifest []byte, selector string, downloadType DownloadType) (string, int, error) {
+	var maxHeight int
+	if NormalizeDownloadType(downloadType) == DownloadTypeAudio {
+		if selected := strings.TrimSpace(selector); selected != "" && selected != "bestaudio/best" {
+			return "", 0, fmt.Errorf("MP3 대체 다운로드에서는 지원하지 않는 오디오 선택식입니다")
+		}
+	} else {
+		var err error
+		maxHeight, err = maxHeightFromFormatSelector(selector)
+		if err != nil {
+			return "", 0, err
+		}
 	}
 	var mpd sourceURLManifest
 	if err := xml.Unmarshal(manifest, &mpd); err != nil {
@@ -179,7 +194,7 @@ func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *htt
 	if err != nil || len(body) > 2*1024*1024 {
 		return sourceURLHLSStream{}, fmt.Errorf("MPD 재생 정보를 읽을 수 없습니다")
 	}
-	playlist, height, err := selectSourceURLHLS(body, request.FormatSelector)
+	playlist, height, err := selectSourceURLHLSForType(body, request.FormatSelector, request.DownloadType)
 	if err != nil {
 		return sourceURLHLSStream{}, err
 	}
@@ -204,23 +219,32 @@ func sourceURLFallbackFileName(title string, videoNo int64, ext string) string {
 	return fmt.Sprintf("%s [%d].%s", title, videoNo, ext)
 }
 
+// sourceURLFallbackOutputFormat preserves video container settings but always
+// writes MP3 for audio jobs, regardless of the application's video format.
+func sourceURLFallbackOutputFormat(request DownloadRequest) (string, error) {
+	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+		return "mp3", nil
+	}
+	format, err := normalizeOutputFormat(request.OutputFormat)
+	if err != nil {
+		return "", err
+	}
+	if format == "webm" {
+		return "", fmt.Errorf("HLS 대체 다운로드는 WebM 무손실 변환을 지원하지 않습니다")
+	}
+	if format == "" {
+		return "mp4", nil
+	}
+	return format, nil
+}
+
 func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequest, stream sourceURLHLSStream, outputPath string) (CommandSpec, error) {
 	if !toolchain.FFmpeg.Available {
 		return CommandSpec{}, fmt.Errorf("FFmpeg를 사용할 수 없습니다")
 	}
-	outputFormat, err := normalizeOutputFormat(request.OutputFormat)
+	outputFormat, err := sourceURLFallbackOutputFormat(request)
 	if err != nil {
 		return CommandSpec{}, err
-	}
-	if outputFormat == "webm" {
-		return CommandSpec{}, fmt.Errorf("HLS 대체 다운로드는 WebM 무손실 변환을 지원하지 않습니다")
-	}
-	if outputFormat == "" {
-		outputFormat = "mp4"
-	}
-	format := "mp4"
-	if outputFormat == "mkv" {
-		format = "matroska"
 	}
 	if strings.TrimSpace(stream.PlaylistPath) == "" || !filepath.IsAbs(stream.PlaylistPath) {
 		return CommandSpec{}, fmt.Errorf("서명을 적용한 로컬 HLS 재생목록이 필요합니다")
@@ -232,11 +256,24 @@ func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequ
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
 		"-seg_max_retry", "3",
 		"-i", stream.PlaylistPath,
-		"-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
-		"-stats_period", "0.5", "-progress", "pipe:1", "-nostats",
 	}
+	if outputFormat == "mp3" {
+		if !strings.EqualFold(filepath.Ext(outputPath), ".mp3") {
+			return CommandSpec{}, fmt.Errorf("MP3 대체 다운로드의 결과 경로는 .mp3 파일이어야 합니다")
+		}
+		// Require an actual audio stream instead of silently producing a
+		// video-only result. Match yt-dlp's best-quality MP3 setting.
+		args = append(args, "-map", "0:a:0", "-vn", "-codec:a", "libmp3lame", "-q:a", "0")
+	} else {
+		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy")
+	}
+	args = append(args, "-stats_period", "0.5", "-progress", "pipe:1", "-nostats")
 	if outputFormat == "mp4" {
 		args = append(args, "-movflags", "+faststart")
+	}
+	format := outputFormat
+	if outputFormat == "mkv" {
+		format = "matroska"
 	}
 	args = append(args, "-f", format, outputPath)
 	return CommandSpec{Path: toolchain.FFmpeg.Path, Args: args}, nil
@@ -272,7 +309,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	}
 	// This folder is independent of .chzzk-temp so the usual failure cleanup
 	// cannot discard segments already downloaded in a previous attempt.
-	cacheDir, err := sourceURLSegmentCacheDir(request.OutputDir, source.VideoNo, source.Height, manifestDir)
+	cacheDir, err := sourceURLSegmentCacheDirForType(request.OutputDir, source.VideoNo, source.Height, manifestDir, request.DownloadType)
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{
 			Kind: DownloadFailureSourceURLMissing,
@@ -287,7 +324,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	}
 	// FFmpeg reads the local manifest only once. Route segment requests
 	// through a loopback proxy so expired CDN signatures can be renewed
-	// without restarting the download or discarding the partial MP4.
+	// without restarting the download or discarding the partial output file.
 	proxy, err := startSourceURLSegmentProxyWithAcceleration(ctx, source.URL, manifestDir, func(refreshCtx context.Context) (string, error) {
 		fresh, refreshErr := fetchSourceURLHLS(refreshCtx, request, &http.Client{Timeout: 20 * time.Second})
 		if refreshErr != nil {
@@ -306,12 +343,9 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 	}
 	defer proxy.Close()
-	format, err := normalizeOutputFormat(request.OutputFormat)
+	format, err := sourceURLFallbackOutputFormat(request)
 	if err != nil {
 		return original, CommandSpec{}, err
-	}
-	if format == "" {
-		format = "mp4"
 	}
 	path := filepath.Join(tempDir, sourceURLFallbackFileName(source.Title, source.VideoNo, format))
 	spec, err := buildSourceURLFFmpegCommand(toolchain, request, source, path)

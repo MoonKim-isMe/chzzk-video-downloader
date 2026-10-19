@@ -29,6 +29,10 @@ func ApplySettings(request StartDownloadRequest, value appsettings.AppSettings) 
 	request.OutputDir = value.DownloadDir
 	request.FormatSelector = formatSelector
 	request.OutputFormat = string(value.OutputFormat)
+	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+		request.FormatSelector = "bestaudio/best"
+		request.OutputFormat = ""
+	}
 	request.ConcurrentFragments = concurrentFragments
 	request.RateLimitBytesPerSecond = rateLimitBytesPerSecond
 	return request, nil

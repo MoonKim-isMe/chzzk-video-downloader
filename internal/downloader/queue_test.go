@@ -690,3 +690,36 @@ func TestQueueStoresStructuredFailureCode(t *testing.T) {
 		t.Fatalf("unexpected error message: %q", failed.Error)
 	}
 }
+
+func TestQueueAllowsVideoAndMP3ButRejectsSameTypeDuplicate(t *testing.T) {
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, nil, 1)
+	video, err := queue.Enqueue(queueRequest(5555))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStartedCount(t, executor, 1)
+
+	audioRequest := queueRequest(5555)
+	audioRequest.DownloadType = DownloadTypeAudio
+	audio, err := queue.Enqueue(audioRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if audio.DownloadType != DownloadTypeAudio || audio.Status != TaskStatusQueued {
+		t.Fatalf("MP3 should be queued independently: %#v", audio)
+	}
+	if _, err := queue.Enqueue(audioRequest); err == nil {
+		t.Fatal("duplicate MP3 task must be rejected")
+	}
+	if _, err := queue.Enqueue(queueRequest(5555)); err == nil {
+		t.Fatal("duplicate video task must be rejected")
+	}
+
+	executor.release(video.URL)
+	waitForTaskStatus(t, queue, video.TaskID, TaskStatusCompleted)
+	waitForTaskStatus(t, queue, audio.TaskID, TaskStatusRunning)
+	waitForStartedCount(t, executor, 2)
+	executor.release(audio.URL)
+	waitForTaskStatus(t, queue, audio.TaskID, TaskStatusCompleted)
+}

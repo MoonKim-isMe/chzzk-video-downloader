@@ -268,3 +268,54 @@ func commandTempPath(args []string) string {
 	}
 	return ""
 }
+
+func TestBuildDownloadCommandExtractsMP3WithoutVideoContainerOptions(t *testing.T) {
+	outputDir := t.TempDir()
+	spec, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		DownloadType: DownloadTypeAudio,
+		URL: "https://chzzk.naver.com/video/12345",
+		OutputDir: outputDir,
+		FormatSelector: "bv*+ba/b",
+		OutputFormat: "mkv",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pair := range [][2]string{
+		{"--format", "bestaudio/best"},
+		{"--audio-format", "mp3"},
+		{"--audio-quality", "0"},
+	} {
+		if !hasArgumentPair(spec.Args, pair[0], pair[1]) {
+			t.Fatalf("MP3 argument pair missing: %v", pair)
+		}
+	}
+	if !slices.Contains(spec.Args, "--extract-audio") {
+		t.Fatal("missing --extract-audio")
+	}
+	for _, flag := range []string{"--merge-output-format", "--remux-video"} {
+		if slices.Contains(spec.Args, flag) {
+			t.Fatalf("MP3 command contains video option %q", flag)
+		}
+	}
+	audioTemp, err := nativeTemporaryDownloadDirForRequest(DownloadRequest{
+		DownloadType: DownloadTypeAudio, URL: "https://chzzk.naver.com/video/12345", OutputDir: outputDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasArgumentPair(spec.Args, "--paths", "temp:"+audioTemp) {
+		t.Fatalf("MP3 temporary path mismatch: %#v", spec.Args)
+	}
+}
+
+func TestBuildDownloadCommandRejectsUnknownDownloadType(t *testing.T) {
+	_, err := BuildDownloadCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		DownloadType: "unsupported",
+		URL: "https://chzzk.naver.com/video/12345",
+		OutputDir: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("expected invalid download type error")
+	}
+}

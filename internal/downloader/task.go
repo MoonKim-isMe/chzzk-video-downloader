@@ -19,7 +19,22 @@ const (
 	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
+type DownloadType string
+
+const (
+	DownloadTypeVideo DownloadType = "video"
+	DownloadTypeAudio DownloadType = "audio"
+)
+
+func NormalizeDownloadType(value DownloadType) DownloadType {
+	if value == "" {
+		return DownloadTypeVideo
+	}
+	return value
+}
+
 type StartDownloadRequest struct {
+	DownloadType            DownloadType          `json:"downloadType,omitempty"`
 	VideoNo                 int64                 `json:"videoNo"`
 	VideoTitle              string                `json:"videoTitle"`
 	ChannelName             string                `json:"channelName"`
@@ -35,6 +50,7 @@ type StartDownloadRequest struct {
 }
 
 type DownloadTask struct {
+	DownloadType      DownloadType     `json:"downloadType"`
 	TaskID            string           `json:"taskId"`
 	VideoNo           int64            `json:"videoNo"`
 	VideoTitle        string           `json:"videoTitle"`
@@ -54,6 +70,9 @@ type DownloadTask struct {
 }
 
 func (r StartDownloadRequest) Validate() error {
+	if kind := NormalizeDownloadType(r.DownloadType); kind != DownloadTypeVideo && kind != DownloadTypeAudio {
+		return fmt.Errorf("지원하지 않는 다운로드 유형입니다: %s", kind)
+	}
 	if r.VideoNo <= 0 {
 		return fmt.Errorf("유효한 VOD 번호가 필요합니다")
 	}
@@ -71,6 +90,7 @@ func (r StartDownloadRequest) Validate() error {
 
 func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 	return DownloadRequest{
+		DownloadType: NormalizeDownloadType(r.DownloadType),
 		URL:            r.URL,
 		OutputDir:      r.OutputDir,
 		FormatSelector: r.FormatSelector,

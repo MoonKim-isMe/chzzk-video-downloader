@@ -733,11 +733,12 @@ func (a *App) RecoverDownload(taskID string) (downloader.DownloadTask, error) {
 		return downloader.DownloadTask{}, fmt.Errorf("임시 파일 정리로 복구할 수 있는 오류가 아닙니다")
 	}
 
-	if err := downloader.CleanupTemporaryDownload(task.OutputDir, task.VideoNo); err != nil {
+	if err := downloader.CleanupTemporaryDownloadType(task.OutputDir, task.VideoNo, task.DownloadType); err != nil {
 		return downloader.DownloadTask{}, err
 	}
 
 	retried, err := a.StartDownload(downloader.StartDownloadRequest{
+		DownloadType:      task.DownloadType,
 		VideoNo:           task.VideoNo,
 		VideoTitle:        task.VideoTitle,
 		ChannelName:       task.ChannelName,

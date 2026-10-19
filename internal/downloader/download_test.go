@@ -689,3 +689,293 @@ func TestIsFFmpegDownloaderStartLine(t *testing.T) {
 	}
 }
 
+func TestAudioHLSFallbackUsesSplitAndCreatesMP3(t *testing.T) {
+	outputDir := t.TempDir()
+	toolchain := readyToolchain(t.TempDir())
+	request := DownloadRequest{
+		DownloadType: DownloadTypeAudio,
+		URL: "https://chzzk.naver.com/video/15461111",
+		OutputDir: outputDir,
+		FormatSelector: "bestaudio/best",
+	}
+	var attempts int
+	var conversions int
+
+	result, _, err := executeDownloadWithHLSFallback(
+		context.Background(), request, toolchain,
+		CommandSpec{Path: toolchain.YTDLP.Path, Args: []string{"initial"}},
+		nil,
+		func(_ context.Context, spec CommandSpec, _ ProgressHandler, _ LineHandler) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{}, &DownloadFailure{
+					Kind: DownloadFailureHLSInitializationFragmentOrder,
+					Message: "HLS recovery required",
+					Cause: errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			if !slices.Contains(spec.Args, "--hls-split-discontinuity") {
+				t.Fatalf("split HLS was skipped: %#v", spec.Args)
+			}
+			formatID := argumentValue(spec.Args, "--format")
+			if formatID != "audio-0" && formatID != "audio-1" {
+				t.Fatalf("unexpected audio format: %s", formatID)
+			}
+			tempDir := commandTemporaryDir(spec.Args)
+			path := filepath.Join(tempDir, "sample [15461111]."+formatID+".m4a")
+			if err := os.WriteFile(path, []byte("audio-segment"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return DownloadResult{
+				FinalPath: path,
+				LastProgress: DownloadProgress{Status: "completed", Percent: 100},
+			}, nil
+		},
+		func(_ context.Context, spec CommandSpec, emit LineHandler) error {
+			if spec.Path == toolchain.YTDLP.Path {
+				if slices.Contains(spec.Args, "--hls-split-discontinuity") {
+					emit(OutputLine{
+						Stream: StreamStdout,
+						Text: hlsSplitFormatProbePrefix +
+							`[{"format_id":"audio-0","vcodec":"none","acodec":"mp4a","ext":"m4a"},{"format_id":"audio-1","vcodec":"none","acodec":"mp4a","ext":"m4a"}]`,
+					})
+					return nil
+				}
+				if !hasArgumentPair(spec.Args, "--format", "bestaudio/best") {
+					t.Fatalf("audio probe did not use bestaudio: %#v", spec.Args)
+				}
+				emit(OutputLine{
+					Stream: StreamStdout,
+					Text: hlsFormatProbeSinglePrefix +
+						`{"format_id":"audio","vcodec":"none","acodec":"mp4a","ext":"m4a"}`,
+				})
+				return nil
+			}
+			if spec.Path != toolchain.FFmpeg.Path {
+				t.Fatalf("unexpected process: %s", spec.Path)
+			}
+			output := spec.Args[len(spec.Args)-1]
+			if slices.Contains(spec.Args, "-codec:a") {
+				conversions++
+				if !hasArgumentPair(spec.Args, "-map", "0:a:0") ||
+					!hasArgumentPair(spec.Args, "-codec:a", "libmp3lame") {
+					t.Fatalf("MP3 codec selection missing: %#v", spec.Args)
+				}
+				return os.WriteFile(output, []byte("mp3-result"), 0o644)
+			}
+			if !hasArgumentPair(spec.Args, "-f", "concat") {
+				t.Fatalf("missing HLS audio concat: %#v", spec.Args)
+			}
+			return os.WriteFile(output, []byte("joined"), 0o644)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 || conversions != 1 {
+		t.Fatalf("expected initial + 2 split downloads and 1 mp3 conversion: attempts=%d converts=%d", attempts, conversions)
+	}
+	want := filepath.Join(outputDir, "sample [15461111].mp3")
+	if result.FinalPath != want || result.LastProgress.Status != "completed" {
+		t.Fatalf("unexpected final result: %#v", result)
+	}
+	if data, err := os.ReadFile(want); err != nil || string(data) != "mp3-result" {
+		t.Fatalf("MP3 output was not promoted: %q %v", string(data), err)
+	}
+}
+
+func TestAudioHLSFallbackUsesFFmpegAfterSplitFails(t *testing.T) {
+	useFastFallbackMonitor(t)
+	outputDir := t.TempDir()
+	request := DownloadRequest{
+		DownloadType: DownloadTypeAudio,
+		URL: "https://chzzk.naver.com/video/15461111",
+		OutputDir: outputDir,
+	}
+	toolchain := readyToolchain(t.TempDir())
+	attempts := 0
+	var events []DownloadProgress
+	result, spec, err := executeDownloadWithHLSFallback(
+		context.Background(), request, toolchain,
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		func(progress DownloadProgress) { events = append(events, progress) },
+		func(_ context.Context, spec CommandSpec, _ ProgressHandler, report LineHandler) (DownloadResult, error) {
+			attempts++
+			if attempts == 1 {
+				return DownloadResult{
+					DiagnosticLines: []OutputLine{{Stream: StreamStderr, Text: "audio-native-failed"}},
+				}, &DownloadFailure{
+					Kind: DownloadFailureHLSInitializationFragmentOrder,
+					Message: "HLS recovery required",
+					Cause: errors.New("Initialization fragment found after media fragments"),
+				}
+			}
+			for _, pair := range [][2]string{
+				{"--downloader", "m3u8:ffmpeg"},
+				{"--format", "bestaudio/best"},
+				{"--audio-format", "mp3"},
+			} {
+				if !hasArgumentPair(spec.Args, pair[0], pair[1]) {
+					t.Fatalf("audio fallback option missing %v: %#v", pair, spec.Args)
+				}
+			}
+			if !slices.Contains(spec.Args, "--extract-audio") {
+				t.Fatal("MP3 extraction was lost in ffmpeg fallback")
+			}
+			if report != nil {
+				report(OutputLine{Stream: StreamStderr, Text: "[debug] Invoking ffmpeg downloader"})
+			}
+			tempDir := commandTemporaryDir(spec.Args)
+			path := filepath.Join(tempDir, "done.mp3")
+			if err := os.WriteFile(path, []byte("fallback-mp3"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return DownloadResult{
+				FinalPath: path,
+				LastProgress: DownloadProgress{Status: "completed", Percent: 100},
+			}, nil
+		},
+		unavailableSplitRawRunner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 || !hasArgumentPair(spec.Args, "--downloader", "m3u8:ffmpeg") {
+		t.Fatalf("wrong fallback sequence, attempts=%d spec=%#v", attempts, spec)
+	}
+	want := filepath.Join(outputDir, "done.mp3")
+	if result.FinalPath != want {
+		t.Fatalf("unexpected MP3 final path: %q", result.FinalPath)
+	}
+	if data, err := os.ReadFile(want); err != nil || string(data) != "fallback-mp3" {
+		t.Fatalf("ffmpeg fallback MP3 was not promoted: %q %v", string(data), err)
+	}
+	seenPreparing := false
+	for _, event := range events {
+		if event.Status == progressStatusFallbackPreparing {
+			seenPreparing = true
+		}
+	}
+	if !seenPreparing {
+		t.Fatalf("fallback preparing status missing: %#v", events)
+	}
+}
+
+func TestAudioHLSFallbackDoesNotRetryAuthenticationFailure(t *testing.T) {
+	attempts := 0
+	denied := NewAuthenticationRequiredFailure(errors.New("401 unauthorized"))
+	_, _, err := executeDownloadWithHLSFallback(
+		context.Background(),
+		DownloadRequest{DownloadType: DownloadTypeAudio, URL: "https://chzzk.naver.com/video/100", OutputDir: t.TempDir()},
+		readyToolchain(t.TempDir()),
+		CommandSpec{Path: "yt-dlp.exe"},
+		nil,
+		func(context.Context, CommandSpec, ProgressHandler, LineHandler) (DownloadResult, error) {
+			attempts++
+			return DownloadResult{}, denied
+		},
+		func(context.Context, CommandSpec, LineHandler) error {
+			t.Fatal("authentication errors must not start a split probe")
+			return nil
+		},
+	)
+	if !errors.Is(err, denied) || attempts != 1 {
+		t.Fatalf("unexpected authentication retry: attempts=%d err=%v", attempts, err)
+	}
+}
+
+func TestAudioHLSFallbackRetriesFFmpegWhenSplitMP3ConversionFails(t *testing.T) {
+	useFastFallbackMonitor(t)
+	outputDir := t.TempDir()
+	toolchain := readyToolchain(t.TempDir())
+	request := DownloadRequest{
+		DownloadType: DownloadTypeAudio,
+		URL: "https://chzzk.naver.com/video/15461111",
+		OutputDir: outputDir,
+	}
+	attempts := 0
+	result, spec, err := executeDownloadWithHLSFallback(
+		context.Background(), request, toolchain,
+		CommandSpec{Path: "yt-dlp.exe", Args: []string{"initial"}},
+		nil,
+		func(_ context.Context, spec CommandSpec, _ ProgressHandler, _ LineHandler) (DownloadResult, error) {
+			attempts++
+			switch attempts {
+			case 1:
+				return DownloadResult{}, &DownloadFailure{
+					Kind: DownloadFailureHLSInitializationFragmentOrder,
+					Message: "HLS recovery required",
+					Cause: errors.New("Initialization fragment found after media fragments"),
+				}
+			case 2:
+				if !slices.Contains(spec.Args, "--hls-split-discontinuity") {
+					t.Fatalf("split was not attempted first: %#v", spec.Args)
+				}
+				path := filepath.Join(commandTemporaryDir(spec.Args), "sample [15461111].audio-0.m4a")
+				if err := os.WriteFile(path, []byte("original audio"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return DownloadResult{FinalPath: path}, nil
+			case 3:
+				if !hasArgumentPair(spec.Args, "--downloader", "m3u8:ffmpeg") ||
+					!hasArgumentPair(spec.Args, "--audio-format", "mp3") {
+					t.Fatalf("final ffmpeg MP3 attempt missing: %#v", spec.Args)
+				}
+				path := filepath.Join(commandTemporaryDir(spec.Args), "recovered.mp3")
+				if err := os.WriteFile(path, []byte("recovered"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return DownloadResult{
+					FinalPath: path,
+					LastProgress: DownloadProgress{Status: "completed", Percent: 100},
+				}, nil
+			default:
+				t.Fatalf("unexpected extra fallback attempt: %d", attempts)
+				return DownloadResult{}, nil
+			}
+		},
+		func(_ context.Context, spec CommandSpec, lineHandler LineHandler) error {
+			if spec.Path == toolchain.YTDLP.Path {
+				if slices.Contains(spec.Args, "--hls-split-discontinuity") {
+					lineHandler(OutputLine{
+						Stream: StreamStdout,
+						Text: hlsSplitFormatProbePrefix +
+							`[{"format_id":"audio-0","vcodec":"none","acodec":"mp4a","ext":"m4a"}]`,
+					})
+				} else {
+					lineHandler(OutputLine{
+						Stream: StreamStdout,
+						Text: hlsFormatProbeSinglePrefix +
+							`{"format_id":"audio","vcodec":"none","acodec":"mp4a","ext":"m4a"}`,
+					})
+				}
+				return nil
+			}
+			if spec.Path != toolchain.FFmpeg.Path || !hasArgumentPair(spec.Args, "-codec:a", "libmp3lame") {
+				t.Fatalf("unexpected conversion command: %#v", spec)
+			}
+			lineHandler(OutputLine{Stream: StreamStderr, Text: "MP3 conversion failure diagnostic"})
+			return errors.New("MP3 conversion failed")
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 || !hasArgumentPair(spec.Args, "--downloader", "m3u8:ffmpeg") {
+		t.Fatalf("expected conversion error to trigger final ffmpeg attempt: attempts=%d spec=%#v", attempts, spec)
+	}
+	want := filepath.Join(outputDir, "recovered.mp3")
+	if result.FinalPath != want {
+		t.Fatalf("unexpected recovered MP3 path: %s", result.FinalPath)
+	}
+	if data, err := os.ReadFile(want); err != nil || string(data) != "recovered" {
+		t.Fatalf("recovered MP3 missing: %q %v", string(data), err)
+	}
+	joined := ""
+	for _, line := range result.DiagnosticLines {
+		joined += line.Text + "\n"
+	}
+	if !strings.Contains(joined, "MP3 conversion failure diagnostic") {
+		t.Fatalf("conversion diagnostics were lost: %s", joined)
+	}
+}

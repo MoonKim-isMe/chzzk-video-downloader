@@ -64,6 +64,7 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 	for _, taskID := range q.order {
 		task := q.tasks[taskID]
 		if task.VideoNo == request.VideoNo &&
+			NormalizeDownloadType(task.DownloadType) == NormalizeDownloadType(request.DownloadType) &&
 			(task.Status == TaskStatusQueued || task.Status == TaskStatusRunning) {
 			q.mu.Unlock()
 			return DownloadTask{}, fmt.Errorf("이미 대기 또는 진행 중인 VOD입니다")
@@ -77,6 +78,7 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 		q.counter.Add(1),
 	)
 	task := DownloadTask{
+		DownloadType:      NormalizeDownloadType(request.DownloadType),
 		TaskID:            taskID,
 		VideoNo:           request.VideoNo,
 		VideoTitle:        request.VideoTitle,

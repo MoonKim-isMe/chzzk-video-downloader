@@ -21,6 +21,7 @@ const (
 var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
 
 type DownloadRequest struct {
+	DownloadType            DownloadType          `json:"downloadType,omitempty"`
 	URL                     string                `json:"url"`
 	OutputDir               string                `json:"outputDir"`
 	FormatSelector          string                `json:"formatSelector,omitempty"`
@@ -79,8 +80,14 @@ func buildDownloadCommandWithTempDir(
 		return CommandSpec{}, fmt.Errorf("다운로드 임시 경로가 필요합니다")
 	}
 
+	downloadType := NormalizeDownloadType(request.DownloadType)
+	if downloadType != DownloadTypeVideo && downloadType != DownloadTypeAudio {
+		return CommandSpec{}, fmt.Errorf("지원하지 않는 다운로드 유형입니다: %s", downloadType)
+	}
 	formatSelector := strings.TrimSpace(request.FormatSelector)
-	if formatSelector == "" {
+	if downloadType == DownloadTypeAudio {
+		formatSelector = "bestaudio/best"
+	} else if formatSelector == "" {
 		formatSelector = DefaultFormatSelector
 	}
 	outputTemplate := strings.TrimSpace(request.OutputTemplate)
@@ -88,9 +95,12 @@ func buildDownloadCommandWithTempDir(
 		outputTemplate = DefaultOutputTemplate
 	}
 
-	outputFormat, err := normalizeOutputFormat(request.OutputFormat)
-	if err != nil {
-		return CommandSpec{}, err
+	outputFormat := ""
+	if downloadType == DownloadTypeVideo {
+		outputFormat, err = normalizeOutputFormat(request.OutputFormat)
+		if err != nil {
+			return CommandSpec{}, err
+		}
 	}
 	concurrentFragments, err := normalizeConcurrentFragments(request.ConcurrentFragments)
 	if err != nil {
@@ -151,7 +161,13 @@ func buildDownloadCommandWithTempDir(
 		}
 		env = append(env, "PATH="+fallbackPath)
 	}
-	if outputFormat != "" {
+	if downloadType == DownloadTypeAudio {
+		args = append(args,
+			"--extract-audio",
+			"--audio-format", "mp3",
+			"--audio-quality", "0",
+		)
+	} else if outputFormat != "" {
 		args = append(args,
 			"--merge-output-format", outputFormat,
 			"--remux-video", outputFormat,

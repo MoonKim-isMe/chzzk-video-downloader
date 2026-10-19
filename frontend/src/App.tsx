@@ -34,7 +34,7 @@ import { mergeDownloadTaskSnapshot, upsertDownloadTask } from './lib/downloadTas
 import { onDownloadState } from './lib/runtime';
 import type { AuthenticationSettings } from './types/authentication';
 import type { Channel } from './types/channel';
-import type { DownloadTask, DownloadTaskStatus } from './types/download';
+import type { DownloadTask, DownloadTaskStatus, DownloadType } from './types/download';
 import type { AppSettings, ThemeMode } from './types/settings';
 import type { UpdateInfo } from './types/update';
 import type { Video } from './types/video';
@@ -207,10 +207,10 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   );
 
   const activeDownloadStatusByVideoNo = useMemo(() => {
-    const active = new Map<number, DownloadTaskStatus>();
+    const active = new Map<string, DownloadTaskStatus>();
     downloadTasks.forEach((task) => {
       if (task.status === 'queued' || task.status === 'running') {
-        active.set(task.videoNo, task.status);
+        active.set(`${task.videoNo}:${task.downloadType === 'audio' ? 'audio' : 'video'}`, task.status);
       }
     });
     return active;
@@ -240,10 +240,11 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   };
 
   const handleQueueVideo = useCallback(
-    async (video: Video) => {
+    async (video: Video, downloadType: DownloadType = 'video') => {
       try {
         const task = await startDownload({
           videoNo: video.videoNo,
+          downloadType,
           videoTitle: video.videoTitle,
           channelName: video.channel.channelName,
           thumbnailImageUrl: video.thumbnailImageUrl,
@@ -252,7 +253,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         });
         setDownloadTasks((current) => upsertDownloadTask(current, task));
         message.success(
-          task.status === 'running' ? '다운로드를 시작했습니다.' : '다운로드 목록에 추가했습니다.',
+          task.status === 'running' ? `${downloadType === 'audio' ? 'MP3' : '동영상'} 다운로드를 시작했습니다.` : '다운로드 목록에 추가했습니다.',
         );
       } catch (cause) {
         message.error(cause instanceof Error ? cause.message : String(cause));

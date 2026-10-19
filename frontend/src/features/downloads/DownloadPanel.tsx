@@ -202,6 +202,7 @@ function DownloadTaskRow({
     setWorking(true);
     try {
       const resumed = await startDownload({
+        downloadType: task.downloadType,
         videoNo: task.videoNo,
         videoTitle: task.videoTitle,
         channelName: task.channelName,
@@ -268,6 +269,7 @@ function DownloadTaskRow({
           <div className="min-w-0">
             <div className="download-task-badges">
               <Tag color={meta.color}>{meta.label}</Tag>
+              <Tag color={task.downloadType === 'audio' ? 'purple' : 'default'}>{task.downloadType === 'audio' ? 'MP3' : '동영상'}</Tag>
               {fallbackActive && (
                 <Tooltip
                   title={
