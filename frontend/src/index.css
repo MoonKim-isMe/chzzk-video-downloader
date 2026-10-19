@@ -619,18 +619,23 @@ select {
   line-height: 16px;
 }
 
-.video-tag-chips {
+.video-tag-chips,
+.url-video-tags {
   display: flex;
-  min-height: 24px;
-  max-height: 24px;
-  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: 6px;
+  min-height: 24px;
+}
+
+.video-tag-chips {
   margin-top: 10px;
-  overflow: hidden;
 }
 
 .video-tag-chip {
   display: inline-flex;
+  flex: 0 0 auto;
   min-height: 24px;
   align-items: center;
   padding: 3px 8px;
@@ -640,6 +645,7 @@ select {
   color: var(--app-text-secondary);
   font-size: 11px;
   line-height: 16px;
+  white-space: nowrap;
 }
 
 .video-card-action {
@@ -773,13 +779,6 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 14px 28px;
-}
-
-.url-video-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 24px;
 }
 
 .url-result-loading {
