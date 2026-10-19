@@ -31,6 +31,16 @@
 ### Go 문법 오류 보정 (2026-10-19)
 
 - [x] PKG-7M-8. 영상 ID 정규식 수정 반영 과정에서 중복 삽입된 `package`/`import` 선언을 제거하여 Go 문법 오류를 해결
+- [x] PKG-7M-9. HLS 재생목록의 상대 `.ts` 세그먼트에 `_lsu_sa_` 서명 전달, 임시 재생목록 생성 및 FFmpeg 파일 입력 연동
 - 컴파일 오류: `sourceurl_fallback.go:63`, `:209`, `:211` — 닫히지 않은 정규식 raw 문자열과 중복 소스 삽입에 따른 연쇄 오류
 - 복구된 소스를 `gofmt`로 검사하고 격리된 Go 표준 라이브러리 테스트 패키지에서 관련 단위 테스트를 재실행
 - 프로젝트 전체 Go 1.25 및 Windows Wails 빌드는 사용자 환경에서 별도 확인 필요
+
+### HLS 첫 세그먼트 서명 누락 보정 (2026-10-19)
+
+- 실제 Windows 로그: FFmpeg의 첫 세그먼트 주소에서 `_lsu_sa_` 쿼리가 사라져 `Error when loading first segment`가 발생했습니다. HAR의 성공한 브라우저 세그먼트 요청에는 같은 서명이 존재합니다.
+- MPD로 선택한 원본 HLS 재생목록을 요청하고 상대 세그먼트 URL, 키/초기화 구간 및 중첩 재생목록의 인증 쿼리를 보존한 임시 로컬 m3u8 파일을 생성합니다.
+- HTTPS `pstatic.net` 도메인만 허용하고, 중첩 깊이/파일 수/크기를 제한합니다. FFmpeg 명령에는 서명된 원격 URL 대신 로컬 manifest 경로만 노출하며 종료 시 manifest를 삭제합니다.
+- 로컬 파일 입력에서는 HTTP 전용 FFmpeg `-user_agent`/`-headers` 옵션이 `Option not found`로 실패하므로 제거하고, `-protocol_whitelist`로 필요한 파일 및 HTTPS 프로토콜을 허용합니다.
+- 격리 Go 환경에서 `go test -count=1 ./...`, `go vet ./...` 통과. 서명이 필요한 모의 HTTP 세그먼트를 로컬 HLS manifest로 불러와 FFmpeg가 MP4를 생성하는 테스트 통과.
+- CHZZK CDN의 실제 응답, Windows Portable의 전체 VOD 다운로드 및 취소/재시도 검증은 **PKG-7M-6 미완료**로 유지합니다.

@@ -27,11 +27,12 @@ var (
 )
 
 type sourceURLHLSStream struct {
-	URL      string
-	Title    string
-	VideoNo  int64
-	Height   int
-	Duration int64
+	URL          string
+	PlaylistPath string
+	Title        string
+	VideoNo      int64
+	Height       int
+	Duration     int64
 }
 
 type sourceURLManifest struct {
@@ -217,14 +218,15 @@ func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequ
 	if outputFormat == "mkv" {
 		format = "matroska"
 	}
-	if !validSourceURLHLSAddress(stream.URL) {
-		return CommandSpec{}, fmt.Errorf("유효하지 않은 HLS 재생 주소입니다")
+	if strings.TrimSpace(stream.PlaylistPath) == "" || !filepath.IsAbs(stream.PlaylistPath) {
+		return CommandSpec{}, fmt.Errorf("서명을 적용한 로컬 HLS 재생목록이 필요합니다")
 	}
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin", "-n",
-		"-user_agent", "Mozilla/5.0",
-		"-headers", "Referer: https://chzzk.naver.com/\r\nOrigin: https://chzzk.naver.com\r\n",
-		"-i", stream.URL,
+		// The input is a local manifest; HTTP-only -headers/-user_agent options
+		// would fail at open time with "Option not found" on the file protocol.
+		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+		"-i", stream.PlaylistPath,
 		"-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
 		"-stats_period", "0.5", "-progress", "pipe:1", "-nostats",
 	}
@@ -246,6 +248,22 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	}
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return original, CommandSpec{}, err
+	}
+	manifestDir := filepath.Join(tempDir, "signed-hls")
+	// The local HLS playlist contains ephemeral playback signatures.
+	defer os.RemoveAll(manifestDir)
+	client := &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 || !validSignedHLSResource(req.URL) {
+			return fmt.Errorf("허용되지 않은 HLS 재생목록 이동입니다")
+		}
+		return nil
+	}}
+	source.PlaylistPath, err = prepareSignedHLSPlaylist(ctx, client, source.URL, manifestDir)
+	if err != nil {
+		if ctx.Err() != nil {
+			return original, CommandSpec{}, ctx.Err()
+		}
+		return original, CommandSpec{}, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "HLS 세그먼트 인증 정보를 준비하지 못했습니다.", Cause: err}
 	}
 	format, err := normalizeOutputFormat(request.OutputFormat)
 	if err != nil {

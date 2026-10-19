@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -74,15 +75,18 @@ func TestBuildSourceURLFFmpegCommandUsesVideoAudioNoOverwrite(t *testing.T) {
 	status := ToolchainStatus{}
 	status.FFmpeg.Available = true
 	status.FFmpeg.Path = "ffmpeg.exe"
-	spec, err := buildSourceURLFFmpegCommand(status, DownloadRequest{OutputFormat: "mp4"}, sourceURLHLSStream{URL: "https://cdn.pstatic.net/playlist.m3u8?signature=sensitive"}, "movie.mp4")
+	spec, err := buildSourceURLFFmpegCommand(status, DownloadRequest{OutputFormat: "mp4"}, sourceURLHLSStream{URL: "https://cdn.pstatic.net/playlist.m3u8?signature=sensitive", PlaylistPath: filepath.Join(t.TempDir(), "playlist.m3u8")}, "movie.mp4")
 	if err != nil {
 		t.Fatal(err)
 	}
 	args := strings.Join(spec.Args, " ")
-	for _, fragment := range []string{"-n", "-map 0:v:0", "-map 0:a:0?", "-c copy", "-progress pipe:1", "-f mp4", "movie.mp4"} {
+	for _, fragment := range []string{"-n", "-map 0:v:0", "-map 0:a:0?", "-c copy", "-progress pipe:1", "-protocol_whitelist file,http,https,tcp,tls,crypto", "-f mp4", "movie.mp4"} {
 		if !strings.Contains(args, fragment) {
 			t.Fatalf("missing argument %s: %s", fragment, args)
 		}
+	}
+	if strings.Contains(args, "signature=sensitive") {
+		t.Fatal("signed CDN URL leaked to FFmpeg command")
 	}
 	if !strings.HasSuffix(args, "movie.mp4") {
 		t.Fatal("output path must be the last argument")
