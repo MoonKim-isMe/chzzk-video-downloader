@@ -56,6 +56,19 @@ func sourceURLSegmentCacheDir(outputDir string, videoNo int64, height int, manif
 		strconv.FormatInt(videoNo, 10), strconv.Itoa(height), fingerprint), nil
 }
 
+// Separate audio and video caches so simultaneous MP3/video downloads cannot
+// remove each other's active media segments when one job completes.
+func sourceURLSegmentCacheDirForType(outputDir string, videoNo int64, height int, manifestDir string, downloadType DownloadType) (string, error) {
+	dir, err := sourceURLSegmentCacheDir(outputDir, videoNo, height, manifestDir)
+	if err != nil {
+		return "", err
+	}
+	if NormalizeDownloadType(downloadType) == DownloadTypeAudio {
+		return filepath.Join(filepath.Dir(dir), "audio", filepath.Base(dir)), nil
+	}
+	return dir, nil
+}
+
 func sourceURLCacheableMediaURL(u *url.URL) bool {
 	if !validSignedHLSResource(u) {
 		return false
