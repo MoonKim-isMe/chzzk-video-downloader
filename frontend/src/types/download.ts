@@ -1,3 +1,5 @@
+export type DownloadType = 'video' | 'audio';
+
 export type DownloadTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type DownloadErrorCode =
   | 'authentication_required'
@@ -36,6 +38,7 @@ export interface DownloadProgress {
 }
 
 export interface StartDownloadRequest {
+  downloadType?: DownloadType;
   videoNo: number;
   videoTitle: string;
   channelName: string;
@@ -47,6 +50,7 @@ export interface StartDownloadRequest {
 }
 
 export interface DownloadTask {
+  downloadType?: DownloadType;
   taskId: string;
   videoNo: number;
   videoTitle: string;

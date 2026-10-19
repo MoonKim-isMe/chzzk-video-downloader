@@ -44,3 +44,20 @@ func TestDefaultOutputDir(t *testing.T) {
 		t.Fatalf("unexpected default path: %s", path)
 	}
 }
+
+func TestStartDownloadRequestSupportsMP3Type(t *testing.T) {
+	request := StartDownloadRequest{
+		VideoNo: 42, VideoTitle: "테스트", URL: "https://chzzk.naver.com/video/42",
+		OutputDir: t.TempDir(), DownloadType: DownloadTypeAudio,
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if request.DownloadRequest().DownloadType != DownloadTypeAudio {
+		t.Fatal("MP3 type was not forwarded to the downloader")
+	}
+	request.DownloadType = "zip"
+	if err := request.Validate(); err == nil {
+		t.Fatal("unknown download type should be rejected")
+	}
+}

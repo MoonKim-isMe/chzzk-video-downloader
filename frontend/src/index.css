@@ -646,6 +646,21 @@ select {
   margin-top: 16px;
 }
 
+.download-format-group.ant-space-compact {
+  display: flex;
+  width: 100%;
+}
+
+.download-format-group .download-format-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.download-format-group .download-format-more {
+  flex: 0 0 38px;
+  padding-inline: 0;
+}
+
 .channel-vod-empty-content {
   display: grid;
   min-height: 100%;

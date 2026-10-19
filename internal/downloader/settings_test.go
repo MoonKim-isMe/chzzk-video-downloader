@@ -219,3 +219,14 @@ func hasArgumentPair(args []string, key, value string) bool {
 	}
 	return false
 }
+
+func TestApplySettingsForMP3IgnoresVideoResolutionAndContainer(t *testing.T) {
+	value := appsettings.Defaults(t.TempDir())
+	request, err := ApplySettings(StartDownloadRequest{DownloadType: DownloadTypeAudio}, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.FormatSelector != "bestaudio/best" || request.OutputFormat != "" {
+		t.Fatalf("MP3 should not inherit video format: %#v", request)
+	}
+}

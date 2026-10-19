@@ -42,15 +42,7 @@ func CleanupTemporaryDownload(outputDir string, videoNo int64) error {
 }
 
 func temporaryDownloadDirForRequest(request DownloadRequest) (string, error) {
-	videoURL, err := normalizeVideoURL(request.URL)
-	if err != nil {
-		return "", err
-	}
-	videoNo, err := videoNoFromNormalizedURL(videoURL)
-	if err != nil {
-		return "", err
-	}
-	return TemporaryDownloadDir(request.OutputDir, videoNo)
+	return temporaryRootForRequest(request)
 }
 
 func nativeTemporaryDownloadDir(outputDir string, videoNo int64) (string, error) {
@@ -73,7 +65,9 @@ func fallbackTemporaryDownloadDir(outputDir string, videoNo int64, runID string)
 	return filepath.Join(root, fallbackTemporaryDirectoryNamePrefix+runID), nil
 }
 
-func nativeTemporaryDownloadDirForRequest(request DownloadRequest) (string, error) {
+// Audio and video can run simultaneously for the same VOD. Store their
+// fragments in separate top-level directories to avoid cleanup races.
+func temporaryRootForRequest(request DownloadRequest) (string, error) {
 	videoURL, err := normalizeVideoURL(request.URL)
 	if err != nil {
 		return "", err
@@ -82,19 +76,34 @@ func nativeTemporaryDownloadDirForRequest(request DownloadRequest) (string, erro
 	if err != nil {
 		return "", err
 	}
-	return nativeTemporaryDownloadDir(request.OutputDir, videoNo)
+	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+		outputDir, err := normalizeOutputDir(request.OutputDir)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(outputDir, temporaryDownloadDirectoryName, "audio-"+strconv.FormatInt(videoNo, 10)), nil
+	}
+	return TemporaryDownloadDir(request.OutputDir, videoNo)
+}
+
+func nativeTemporaryDownloadDirForRequest(request DownloadRequest) (string, error) {
+	root, err := temporaryRootForRequest(request)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, nativeTemporaryDirectoryName), nil
 }
 
 func fallbackTemporaryDownloadDirForRequest(request DownloadRequest, runID string) (string, error) {
-	videoURL, err := normalizeVideoURL(request.URL)
+	root, err := temporaryRootForRequest(request)
 	if err != nil {
 		return "", err
 	}
-	videoNo, err := videoNoFromNormalizedURL(videoURL)
-	if err != nil {
-		return "", err
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return "", fmt.Errorf("대체 다운로드 실행 ID가 필요합니다")
 	}
-	return fallbackTemporaryDownloadDir(request.OutputDir, videoNo, runID)
+	return filepath.Join(root, fallbackTemporaryDirectoryNamePrefix+runID), nil
 }
 
 func cleanupTemporaryDownloadRequest(request DownloadRequest) error {
@@ -106,7 +115,29 @@ func cleanupTemporaryDownloadRequest(request DownloadRequest) error {
 	if err != nil {
 		return err
 	}
-	return CleanupTemporaryDownload(request.OutputDir, videoNo)
+	return CleanupTemporaryDownloadType(request.OutputDir, videoNo, request.DownloadType)
+}
+
+func CleanupTemporaryDownloadType(outputDir string, videoNo int64, downloadType DownloadType) error {
+	if NormalizeDownloadType(downloadType) != DownloadTypeAudio {
+		return CleanupTemporaryDownload(outputDir, videoNo)
+	}
+	if videoNo <= 0 {
+		return fmt.Errorf("유효한 VOD 번호가 필요합니다")
+	}
+	outputDir, err := normalizeOutputDir(outputDir)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(outputDir, temporaryDownloadDirectoryName, "audio-"+strconv.FormatInt(videoNo, 10))
+	if err := os.RemoveAll(root); err != nil {
+		return fmt.Errorf("MP3 다운로드 임시 파일을 정리할 수 없습니다: %w", err)
+	}
+	parent := filepath.Dir(root)
+	if entries, readErr := os.ReadDir(parent); readErr == nil && len(entries) == 0 {
+		_ = os.Remove(parent)
+	}
+	return nil
 }
 
 func videoNoFromNormalizedURL(videoURL string) (int64, error) {

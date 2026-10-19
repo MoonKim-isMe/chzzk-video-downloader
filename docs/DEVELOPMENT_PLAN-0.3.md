@@ -18,7 +18,16 @@ v0.3 완료 기준:
 - 기존 v0.1의 Settings, SQLite 데이터, 북마크 및 다운로드 이력을 손실 없이 유지한다.
 - Windows amd64 Portable 배포에서 변경된 제품명과 v0.3 버전 정책을 검증한다.
 
-v0.3 기본 범위에서 YouTube 재생목록 전체 다운로드, YouTube 채널 저장/구독 관리, CHZZK MP3 다운로드는 포함하지 않는다. YouTube URL은 단일 영상 중심으로 처리하고 playlist 파라미터가 포함되어도 기존 `--no-playlist` 정책을 유지한다.
+v0.3 기본 범위에서 YouTube 재생목록 전체 다운로드, YouTube 채널 저장/구독 관리는 포함하지 않는다. CHZZK MP3 다운로드는 별도 선행 기능으로 구현하고, 이 문서의 Phase 12는 YouTube MP3 확장 작업으로 유지한다. YouTube URL은 단일 영상 중심으로 처리하고 playlist 파라미터가 포함되어도 기존 `--no-playlist` 정책을 유지한다.
+
+
+### 선행 기능 — CHZZK MP3 다운로드
+
+- [ ] CHZZK 영상 카드 및 URL 검색 결과에 `동영상 | MP3 | ▼` 버튼 그룹 추가
+- [ ] yt-dlp + ffmpeg MP3 추출 및 작업 유형별 Queue, 임시 경로, 다운로드 이력 분리
+- [ ] 기존 영상 다운로드 회귀, Go 테스트, 프론트엔드 타입 검사 및 MP3 실 다운로드 검증
+- [ ] MP3도 기존 HLS 오류 시 내부 구간 분할 복구 → ffmpeg HLS 대체 다운로드 순으로 재시도하고 최종 MP3 변환·파일 경로 검증
+- [ ] 구간 다운로드는 ▼ 메뉴의 비활성화 항목으로 안내하고 실제 기능은 후속 작업으로 진행
 
 
 ### Phase 9 — Multi Provider 기반 및 제품명 전환

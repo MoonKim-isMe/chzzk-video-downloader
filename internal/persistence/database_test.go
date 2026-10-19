@@ -34,7 +34,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 8 {
+	if version != 9 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -50,7 +50,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 8 {
+	if version != 9 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -421,5 +421,38 @@ func TestDownloadHistoryPersistsErrorCode(t *testing.T) {
 	}
 	if tasks[0].LogPath != task.LogPath {
 		t.Fatalf("unexpected restored log path: %q", tasks[0].LogPath)
+	}
+}
+
+func TestDownloadHistoryStoresMP3AndLegacyVideoType(t *testing.T) {
+	database := openTestDatabase(t)
+	for _, task := range []downloader.DownloadTask{
+		{
+			TaskID: "video-legacy", VideoNo: 2001, VideoTitle: "동영상",
+			URL: "https://chzzk.naver.com/video/2001",
+			OutputDir: t.TempDir(), Status: downloader.TaskStatusCompleted,
+			QueuedAt: "2026-10-19T00:00:00Z",
+		},
+		{
+			TaskID: "audio-task", VideoNo: 2001, VideoTitle: "MP3",
+			DownloadType: downloader.DownloadTypeAudio,
+			URL: "https://chzzk.naver.com/video/2001",
+			OutputDir: t.TempDir(), Status: downloader.TaskStatusCompleted,
+			FinalPath: filepath.Join(t.TempDir(), "audio.mp3"),
+			QueuedAt: "2026-10-19T00:00:01Z",
+		},
+	} {
+		if err := database.UpsertDownloadTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tasks, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 2 || tasks[0].DownloadType != downloader.DownloadTypeVideo ||
+		tasks[1].DownloadType != downloader.DownloadTypeAudio ||
+		filepath.Ext(tasks[1].FinalPath) != ".mp3" {
+		t.Fatalf("unexpected download types after round trip: %#v", tasks)
 	}
 }

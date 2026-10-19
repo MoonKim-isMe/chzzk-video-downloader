@@ -1,8 +1,9 @@
-import { Alert, Avatar, Button, Card, Empty, Image, Input, Space, Tag, Typography } from 'antd';
+import { Alert, Avatar, Card, Empty, Image, Input, Space, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { resolveVideoURL } from '../../lib/backend';
-import type { DownloadTaskStatus } from '../../types/download';
+import type { DownloadTaskStatus, DownloadType } from '../../types/download';
+import DownloadButtonGroup from './DownloadButtonGroup';
 import type { Video } from '../../types/video';
 
 const { Text, Title } = Typography;
@@ -25,23 +26,24 @@ function formatDuration(seconds: number) {
 }
 
 interface VideoUrlTabProps {
-  activeDownloadStatusByVideoNo: Map<number, DownloadTaskStatus>;
-  onQueueVideo: (video: Video) => Promise<void>;
+  activeDownloadStatusByVideoNo: Map<string, DownloadTaskStatus>;
+  onQueueVideo: (video: Video, downloadType?: DownloadType) => Promise<void>;
 }
 
 function VideoUrlTab({ activeDownloadStatusByVideoNo, onQueueVideo }: VideoUrlTabProps) {
   const [url, setURL] = useState('');
   const [video, setVideo] = useState<Video>();
   const [loading, setLoading] = useState(false);
-  const [queueing, setQueueing] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [error, setError] = useState('');
 
-  const downloadStatus = video
-    ? activeDownloadStatusByVideoNo.get(video.videoNo)
+  const videoDownloadStatus = video
+    ? activeDownloadStatusByVideoNo.get(`${video.videoNo}:video`)
     : undefined;
-  const active = downloadStatus === 'queued' || downloadStatus === 'running';
+  const audioDownloadStatus = video
+    ? activeDownloadStatusByVideoNo.get(`${video.videoNo}:audio`)
+    : undefined;
 
   useEffect(() => {
     setThumbnailFailed(false);
@@ -68,19 +70,6 @@ function VideoUrlTab({ activeDownloadStatusByVideoNo, onQueueVideo }: VideoUrlTa
       setResolved(true);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleQueue = async () => {
-    if (!video || active || queueing) {
-      return;
-    }
-
-    setQueueing(true);
-    try {
-      await onQueueVideo(video);
-    } finally {
-      setQueueing(false);
     }
   };
 
@@ -152,10 +141,10 @@ function VideoUrlTab({ activeDownloadStatusByVideoNo, onQueueVideo }: VideoUrlTa
                   {video.videoCategoryValue && (
                     <Tag color="blue">{video.videoCategoryValue}</Tag>
                   )}
-                  {downloadStatus === 'running' && (
-                    <Tag color="processing">다운로드 중</Tag>
-                  )}
-                  {downloadStatus === 'queued' && <Tag>다운로드 대기 중</Tag>}
+                  {videoDownloadStatus === 'running' && <Tag color="processing">동영상 다운로드 중</Tag>}
+                  {videoDownloadStatus === 'queued' && <Tag>동영상 대기 중</Tag>}
+                  {audioDownloadStatus === 'running' && <Tag color="purple">MP3 다운로드 중</Tag>}
+                  {audioDownloadStatus === 'queued' && <Tag>MP3 대기 중</Tag>}
                 </Space>
 
                 <Title level={3} className="url-video-title !mb-0 !mt-3">
@@ -197,20 +186,12 @@ function VideoUrlTab({ activeDownloadStatusByVideoNo, onQueueVideo }: VideoUrlTa
                   ))}
                 </div>
 
-                <Button
-                  type={active ? 'default' : 'primary'}
+                <DownloadButtonGroup
                   size="large"
-                  block
-                  disabled={active}
-                  loading={queueing}
-                  onClick={() => void handleQueue()}
-                >
-                  {downloadStatus === 'running'
-                    ? '다운로드 중'
-                    : downloadStatus === 'queued'
-                      ? '다운로드 대기 중'
-                      : '다운로드 추가'}
-                </Button>
+                  videoStatus={videoDownloadStatus}
+                  audioStatus={audioDownloadStatus}
+                  onQueue={(downloadType) => onQueueVideo(video, downloadType)}
+                />
               </div>
             </div>
           </section>

@@ -16,6 +16,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		thumbnail_image_url,
 		url,
 		output_dir,
+		download_type,
 		status,
 		progress_status,
 		progress_percent,
@@ -32,7 +33,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		started_at,
 		finished_at,
 		updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(task_id) DO UPDATE SET
 		video_no = excluded.video_no,
 		video_title = excluded.video_title,
@@ -40,6 +41,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		thumbnail_image_url = excluded.thumbnail_image_url,
 		url = excluded.url,
 		output_dir = excluded.output_dir,
+		download_type = excluded.download_type,
 		status = excluded.status,
 		progress_status = excluded.progress_status,
 		progress_percent = excluded.progress_percent,
@@ -63,6 +65,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task.ThumbnailImageURL,
 		task.URL,
 		task.OutputDir,
+		string(downloader.NormalizeDownloadType(task.DownloadType)),
 		string(task.Status),
 		task.Progress.Status,
 		task.Progress.Percent,
@@ -106,6 +109,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		thumbnail_image_url,
 		url,
 		output_dir,
+		download_type,
 		status,
 		progress_status,
 		progress_percent,
@@ -141,6 +145,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			&task.ThumbnailImageURL,
 			&task.URL,
 			&task.OutputDir,
+			&task.DownloadType,
 			&status,
 			&task.Progress.Status,
 			&task.Progress.Percent,

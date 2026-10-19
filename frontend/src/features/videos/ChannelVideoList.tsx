@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getChannelVideos } from '../../lib/backend';
 import type { Channel } from '../../types/channel';
-import type { DownloadTaskStatus } from '../../types/download';
+import type { DownloadTaskStatus, DownloadType } from '../../types/download';
 import type { Video, VideoListResult } from '../../types/video';
 import VideoCard from './VideoCard';
 
@@ -14,8 +14,8 @@ const PAGE_SIZE = 24;
 interface ChannelVideoListProps {
   authenticationEnabled: boolean;
   channel: Channel;
-  activeDownloadStatusByVideoNo: Map<number, DownloadTaskStatus>;
-  onQueueVideo: (video: Video) => Promise<void>;
+  activeDownloadStatusByVideoNo: Map<string, DownloadTaskStatus>;
+  onQueueVideo: (video: Video, downloadType?: DownloadType) => Promise<void>;
 }
 
 interface FailedRequest {
@@ -168,7 +168,8 @@ function ChannelVideoList({
                 <VideoCard
                   key={video.videoNo}
                   video={video}
-                  downloadStatus={activeDownloadStatusByVideoNo.get(video.videoNo)}
+                  videoDownloadStatus={activeDownloadStatusByVideoNo.get(`${video.videoNo}:video`)}
+                  audioDownloadStatus={activeDownloadStatusByVideoNo.get(`${video.videoNo}:audio`)}
                   onQueue={onQueueVideo}
                 />
               ))}

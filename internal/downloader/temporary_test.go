@@ -163,3 +163,43 @@ func TestPromoteFallbackDownloadRejectsPathOutsideFallback(t *testing.T) {
 		t.Fatal("expected outside fallback path rejection")
 	}
 }
+
+func TestAudioTemporaryFilesAreIndependentFromVideo(t *testing.T) {
+	outputDir := t.TempDir()
+	video := DownloadRequest{URL: "https://chzzk.naver.com/video/12345", OutputDir: outputDir}
+	audio := video
+	audio.DownloadType = DownloadTypeAudio
+	videoDir, err := nativeTemporaryDownloadDirForRequest(video)
+	if err != nil {
+		t.Fatal(err)
+	}
+	audioDir, err := nativeTemporaryDownloadDirForRequest(audio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if videoDir == audioDir {
+		t.Fatal("MP3 and video must have independent temporary directories")
+	}
+	if err := os.MkdirAll(videoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	audioPart := filepath.Join(audioDir, "audio.part")
+	if err := os.WriteFile(audioPart, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupTemporaryDownloadRequest(video); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(audioPart); err != nil {
+		t.Fatalf("video cleanup removed MP3 fragments: %v", err)
+	}
+	if err := cleanupTemporaryDownloadRequest(audio); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(audioPart); !os.IsNotExist(err) {
+		t.Fatalf("MP3 fragments were not removed: %v", err)
+	}
+}

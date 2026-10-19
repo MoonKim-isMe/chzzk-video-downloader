@@ -229,6 +229,12 @@ func executeDiscontinuitySplitFallback(
 	if err != nil {
 		return result, usedSpec, err
 	}
+	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+		finalPath, err = convertHLSSplitToMP3(ctx, toolchain, finalPath, rawRun, &result.DiagnosticLines)
+		if err != nil {
+			return result, usedSpec, err
+		}
+	}
 
 	promotedPath, err := promoteFallbackDownload(splitDir, request.OutputDir, finalPath)
 	if err != nil {
@@ -256,7 +262,9 @@ func buildHLSFormatProbeCommand(toolchain ToolchainStatus, request DownloadReque
 		return CommandSpec{}, err
 	}
 	formatSelector := strings.TrimSpace(request.FormatSelector)
-	if formatSelector == "" {
+	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+		formatSelector = "bestaudio/best"
+	} else if formatSelector == "" {
 		formatSelector = DefaultFormatSelector
 	}
 
@@ -801,6 +809,49 @@ func assembleHLSSplitFiles(
 	return finalTarget, diagnostics, nil
 }
 
+// convertHLSSplitToMP3 transcodes the already assembled HLS media without
+// affecting the video fallback or exposing user-selected time ranges.
+func convertHLSSplitToMP3(
+	ctx context.Context,
+	toolchain ToolchainStatus,
+	sourcePath string,
+	rawRun rawCommandRunner,
+	diagnostics *[]OutputLine,
+) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if strings.EqualFold(filepath.Ext(sourcePath), ".mp3") {
+		return sourcePath, nil
+	}
+	targetPath := strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath)) + ".mp3"
+	spec := CommandSpec{
+		Path: toolchain.FFmpeg.Path,
+		Args: []string{
+			"-hide_banner",
+			"-nostdin",
+			"-n",
+			"-i", sourcePath,
+			"-map", "0:a:0",
+			"-vn",
+			"-codec:a", "libmp3lame",
+			"-q:a", "0",
+			targetPath,
+		},
+	}
+	if err := runRawWithDiagnostics(ctx, rawRun, spec, diagnostics); err != nil {
+		return "", fmt.Errorf("HLS 분할 다운로드의 MP3 변환에 실패했습니다: %w", err)
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("HLS 분할 다운로드의 MP3 결과 파일을 확인할 수 없습니다: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return "", fmt.Errorf("HLS 분할 다운로드의 MP3 결과 파일이 비어 있거나 일반 파일이 아닙니다")
+	}
+	return targetPath, nil
+}
+
 func concatHLSSplitGroup(
 	ctx context.Context,
 	toolchain ToolchainStatus,
@@ -881,9 +932,13 @@ func hlsSplitFinalTarget(
 		}
 		stem = "VOD " + strconv.FormatInt(videoNo, 10)
 	}
-	outputExt, err := normalizeOutputFormat(request.OutputFormat)
-	if err != nil {
-		return "", err
+	outputExt := ""
+	if NormalizeDownloadType(request.DownloadType) != DownloadTypeAudio {
+		var err error
+		outputExt, err = normalizeOutputFormat(request.OutputFormat)
+		if err != nil {
+			return "", err
+		}
 	}
 	if outputExt == "" {
 		outputExt = ext

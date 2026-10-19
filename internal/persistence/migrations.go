@@ -148,6 +148,12 @@ var migrations = []migration{
 			)`,
 		},
 	},
+	{
+		version: 9,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN download_type TEXT NOT NULL DEFAULT 'video'`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

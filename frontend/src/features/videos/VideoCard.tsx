@@ -1,7 +1,8 @@
-import { Button, Card, Image, Space, Tag, Typography } from 'antd';
+import { Card, Image, Space, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 
-import type { DownloadTaskStatus } from '../../types/download';
+import type { DownloadTaskStatus, DownloadType } from '../../types/download';
+import DownloadButtonGroup from './DownloadButtonGroup';
 import type { Video } from '../../types/video';
 
 const { Text, Title } = Typography;
@@ -21,37 +22,25 @@ function formatDuration(seconds: number) {
 
 interface VideoCardProps {
   video: Video;
-  downloadStatus?: DownloadTaskStatus;
-  onQueue: (video: Video) => Promise<void>;
+  videoDownloadStatus?: DownloadTaskStatus;
+  audioDownloadStatus?: DownloadTaskStatus;
+  onQueue: (video: Video, downloadType?: DownloadType) => Promise<void>;
 }
 
-function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
-  const [queueing, setQueueing] = useState(false);
+function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue }: VideoCardProps) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
-  const active = downloadStatus === 'queued' || downloadStatus === 'running';
+  const active = videoDownloadStatus === 'queued' || videoDownloadStatus === 'running';
+  const audioActive = audioDownloadStatus === 'queued' || audioDownloadStatus === 'running';
 
   useEffect(() => {
     setThumbnailFailed(false);
   }, [video.thumbnailImageUrl]);
 
-  const handleQueue = async () => {
-    if (active || queueing) {
-      return;
-    }
-
-    setQueueing(true);
-    try {
-      await onQueue(video);
-    } finally {
-      setQueueing(false);
-    }
-  };
-
   return (
     <Card
       size="small"
       className={`video-card h-full overflow-hidden bg-slate-900/80 ${
-        active ? 'border-emerald-500/70' : 'border-slate-800'
+        active || audioActive ? 'border-emerald-500/70' : 'border-slate-800'
       }`}
       styles={{ body: { padding: 12, height: '100%' } }}
     >
@@ -79,8 +68,10 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
           {video.videoType && <Tag>{video.videoType}</Tag>}
           {video.adult && <Tag color="red">성인</Tag>}
           {video.videoCategoryValue && <Tag color="blue">{video.videoCategoryValue}</Tag>}
-          {downloadStatus === 'running' && <Tag color="processing">다운로드 중</Tag>}
-          {downloadStatus === 'queued' && <Tag>다운로드 대기 중</Tag>}
+          {videoDownloadStatus === 'running' && <Tag color="processing">동영상 다운로드 중</Tag>}
+          {videoDownloadStatus === 'queued' && <Tag>동영상 대기 중</Tag>}
+          {audioDownloadStatus === 'running' && <Tag color="purple">MP3 다운로드 중</Tag>}
+          {audioDownloadStatus === 'queued' && <Tag>MP3 대기 중</Tag>}
         </Space>
 
           <Title
@@ -113,20 +104,12 @@ function VideoCard({ video, downloadStatus, onQueue }: VideoCardProps) {
             ))}
           </div>
 
-          <Button
-            block
+          <DownloadButtonGroup
             className="video-card-action"
-            type={active ? 'default' : 'primary'}
-            disabled={active}
-            loading={queueing}
-            onClick={() => void handleQueue()}
-          >
-            {downloadStatus === 'running'
-              ? '다운로드 중'
-              : downloadStatus === 'queued'
-                ? '다운로드 대기 중'
-                : '다운로드 추가'}
-          </Button>
+            videoStatus={videoDownloadStatus}
+            audioStatus={audioDownloadStatus}
+            onQueue={(downloadType) => onQueue(video, downloadType)}
+          />
         </div>
       </div>
     </Card>

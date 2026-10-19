@@ -402,3 +402,60 @@ func TestResolveHLSSplitCompletedFileFindsActualUTF8Filename(t *testing.T) {
 		t.Fatalf("unexpected resolved size: %d", info.Size())
 	}
 }
+
+func TestBuildHLSFormatProbeCommandUsesMP3Selector(t *testing.T) {
+	spec, err := buildHLSFormatProbeCommand(readyToolchain(t.TempDir()), DownloadRequest{
+		DownloadType: DownloadTypeAudio,
+		URL: "https://chzzk.naver.com/video/15461111",
+		FormatSelector: "bv*+ba/b",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasArgumentPair(spec.Args, "--format", "bestaudio/best") {
+		t.Fatalf("audio fallback must select bestaudio: %#v", spec.Args)
+	}
+}
+
+func TestConvertHLSSplitToMP3DoesNotSuppressConversionErrors(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "audio.m4a")
+	if err := os.WriteFile(src, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ffmpegErr := errors.New("MP3 encoder unavailable")
+	var lines []OutputLine
+	_, err := convertHLSSplitToMP3(
+		context.Background(), readyToolchain(t.TempDir()), src,
+		func(_ context.Context, spec CommandSpec, report LineHandler) error {
+			if !hasArgumentPair(spec.Args, "-codec:a", "libmp3lame") {
+				t.Fatalf("missing MP3 encoder: %#v", spec.Args)
+			}
+			report(OutputLine{Stream: StreamStderr, Text: "mp3 conversion failed"})
+			return ffmpegErr
+		},
+		&lines,
+	)
+	if !errors.Is(err, ffmpegErr) {
+		t.Fatalf("missing MP3 encoder error: %v", err)
+	}
+	if len(lines) != 1 || !strings.Contains(lines[0].Text, "conversion failed") {
+		t.Fatalf("missing MP3 conversion diagnostic: %#v", lines)
+	}
+}
+
+func TestConvertHLSSplitToMP3HonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := convertHLSSplitToMP3(
+		ctx, readyToolchain(t.TempDir()), "source.m4a",
+		func(context.Context, CommandSpec, LineHandler) error {
+			t.Fatal("cancelled conversion should never spawn ffmpeg")
+			return nil
+		},
+		nil,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected conversion cancellation: %v", err)
+	}
+}
+
