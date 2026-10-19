@@ -70,6 +70,15 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 		},
 		m.runner.Run,
 	)
+	if isDownloadFailureKind(err, DownloadFailureSourceURLMissing) && ctx.Err() == nil {
+		fallbackResult, fallbackSpec, fallbackErr := m.executeSourceURLFallback(
+			ctx, request, toolchain, handler, result, err,
+		)
+		result, err = fallbackResult, fallbackErr
+		if fallbackSpec.Path != "" {
+			usedSpec = fallbackSpec
+		}
+	}
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			if logPath, logErr := writeDownloadFailureLog(request, usedSpec, result, err); logErr == nil {

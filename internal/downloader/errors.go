@@ -11,6 +11,7 @@ const (
 	DownloadFailureAuthenticationRequired       DownloadFailureKind = "authentication_required"
 	DownloadFailurePartialDataConflict           DownloadFailureKind = "partial_data_conflict"
 	DownloadFailureHLSInitializationFragmentOrder DownloadFailureKind = "hls_initialization_fragment_order"
+	DownloadFailureSourceURLMissing DownloadFailureKind = "source_url_missing"
 )
 
 type DownloadFailure struct {
@@ -55,6 +56,13 @@ func classifyDownloadFailure(err error) error {
 		"the json object must be str, bytes or bytearray, not nonetype",
 	):
 		return NewAuthenticationRequiredFailure(err)
+
+	case strings.Contains(text, "keyerror('sourceurl')") || strings.Contains(text, "keyerror(\"sourceurl\")"):
+		return &DownloadFailure{
+			Kind: DownloadFailureSourceURLMissing,
+			Message: "CHZZK 재생 정보 해석에 실패하여 HLS 대체 다운로드를 시도합니다.",
+			Cause: err,
+		}
 
 	case strings.Contains(text, "initialization fragment found after media fragments"):
 		return &DownloadFailure{
