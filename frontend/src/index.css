@@ -624,14 +624,9 @@ select {
   display: flex;
   min-width: 0;
   max-width: 100%;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
-  min-height: 28px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--app-text-muted) 45%, transparent) transparent;
+  min-height: 24px;
 }
 
 .video-tag-chips {
@@ -641,15 +636,15 @@ select {
 .video-tag-chip {
   display: inline-flex;
   flex: 0 0 auto;
-  min-height: 28px;
+  min-height: 24px;
   align-items: center;
   padding: 3px 8px;
   border: 1px solid var(--app-border-soft);
   border-radius: 999px;
   background: var(--app-surface-soft);
   color: var(--app-text-secondary);
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 16px;
   white-space: nowrap;
 }
 
