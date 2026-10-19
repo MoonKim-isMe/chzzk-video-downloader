@@ -229,9 +229,23 @@ function SettingsDrawer({
               새로 Queue에 추가하는 작업부터 아래 옵션을 사용합니다.
             </Paragraph>
 
+            <div className="mb-2 flex items-center gap-2">
+              <label htmlFor="settings-download-dir" className="text-sm">
+                <Text>다운로드 폴더</Text>
+              </label>
+              <Button
+                type="link"
+                size="small"
+                className="!h-auto !p-0"
+                loading={openingDirectory}
+                disabled={!downloadDirectory?.trim() || selectingDirectory}
+                onClick={() => void handleOpenDirectory()}
+              >
+                폴더 열기
+              </Button>
+            </div>
             <Form.Item
               name="downloadDir"
-              label="다운로드 폴더"
               rules={[
                 {
                   validator: async (_, value?: string) => {
@@ -246,29 +260,19 @@ function SettingsDrawer({
               ]}
             >
               <Input
+                id="settings-download-dir"
                 readOnly
                 placeholder="다운로드 폴더를 선택해 주세요."
                 addonAfter={
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="text"
-                      size="small"
-                      loading={selectingDirectory}
-                      disabled={openingDirectory}
-                      onClick={() => void handleSelectDirectory()}
-                    >
-                      폴더 선택
-                    </Button>
-                    <Button
-                      type="text"
-                      size="small"
-                      loading={openingDirectory}
-                      disabled={!downloadDirectory?.trim() || selectingDirectory}
-                      onClick={() => void handleOpenDirectory()}
-                    >
-                      폴더 열기
-                    </Button>
-                  </div>
+                  <Button
+                    type="text"
+                    size="small"
+                    loading={selectingDirectory}
+                    disabled={openingDirectory}
+                    onClick={() => void handleSelectDirectory()}
+                  >
+                    폴더 선택
+                  </Button>
                 }
               />
             </Form.Item>
