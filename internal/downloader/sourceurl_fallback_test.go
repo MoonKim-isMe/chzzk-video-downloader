@@ -16,6 +16,29 @@ const sourceURLFixture = `<?xml version="1.0" encoding="UTF-8"?>
 <SegmentList><Initialization range="0-12370"/><SegmentURL mediaRange="12371-78115"/></SegmentList>
 </Representation></AdaptationSet></Period></MPD>`
 
+func TestValidSourceURLVideoIDAcceptsCHZZKPlaybackID(t *testing.T) {
+	tests := []struct {
+		videoID string
+		want    bool
+	}{
+		{videoID: "AAE9A5EEBB58A65EAD9362EE1B296CDDB4EC", want: true}, // Actual 36-char HAR video ID.
+		{videoID: strings.Repeat("a", 32), want: true}, // Preserve existing supported length.
+		{videoID: strings.Repeat("B", 64), want: true},
+		{videoID: strings.Repeat("0", 31), want: false},
+		{videoID: strings.Repeat("0", 65), want: false},
+		{videoID: strings.Repeat("G", 36), want: false},
+		{videoID: strings.Repeat("A", 35) + "/", want: false},
+		{videoID: strings.Repeat("A", 35) + "?", want: false},
+		{videoID: strings.Repeat("A", 35) + " ", want: false},
+		{videoID: "", want: false},
+	}
+	for _, tt := range tests {
+		if got := validSourceURLVideoID(tt.videoID); got != tt.want {
+			t.Errorf("video ID length %d: got %t, want %t", len(tt.videoID), got, tt.want)
+		}
+	}
+}
+
 func TestSelectSourceURLHLSIgnoresMissingInitializationSourceURL(t *testing.T) {
 	tests := []struct {
 		selector, suffix string

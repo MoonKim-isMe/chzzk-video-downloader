@@ -21,7 +21,33 @@ import (
 
 const sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
 
-var sourceURLHeightLimit = regexp.MustCompile(`\[height<=([0-9]+)\]`)
+var (
+	sourceURLHeightLimit    = regexp.MustCompile(`\[height<=([0-9]+)\]`)
+	sourceURLVideoIDPattern = regexp.MustCompile(`^[0-9A-Fa-f]{32,64}package downloader
+
+import (
+	"context"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
+)
+
+const sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
+
+)
+)
 
 type sourceURLHLSStream struct {
 	URL      string
@@ -102,6 +128,13 @@ func selectSourceURLHLS(manifest []byte, selector string) (string, int, error) {
 	return bestURL, bestHeight, nil
 }
 
+// CHZZK VOD IDs are opaque hexadecimal identifiers. The HAR for VOD 15651133
+// contains a 36-character ID; rejecting anything other than 32 characters
+// prevents the fallback from reaching the playback API.
+func validSourceURLVideoID(videoID string) bool {
+	return sourceURLVideoIDPattern.MatchString(videoID)
+}
+
 func validSourceURLHLSAddress(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" || !strings.HasSuffix(strings.ToLower(u.Path), ".m3u8") {
@@ -128,7 +161,7 @@ func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *htt
 	if info.VideoID == "" || info.InKey == "" {
 		return sourceURLHLSStream{}, fmt.Errorf("재생에 필요한 영상 식별 정보가 없습니다")
 	}
-	if len(info.VideoID) != 32 || strings.Trim(info.VideoID, "0123456789ABCDEFabcdef") != "" {
+	if !validSourceURLVideoID(info.VideoID) {
 		return sourceURLHLSStream{}, fmt.Errorf("영상 식별 정보가 올바르지 않습니다")
 	}
 
