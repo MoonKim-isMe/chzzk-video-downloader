@@ -4,7 +4,8 @@ export type DownloadErrorCode =
   | 'partial_data_conflict'
   | 'hls_initialization_fragment_order'
   | 'source_url_missing'
-  | 'interrupted';
+  | 'interrupted'
+  | 'hls_download_stalled';
 
 export interface ToolStatus {
   name: string;

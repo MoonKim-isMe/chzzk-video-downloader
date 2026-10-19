@@ -13,6 +13,7 @@ const (
 	DownloadFailureHLSInitializationFragmentOrder DownloadFailureKind = "hls_initialization_fragment_order"
 	DownloadFailureSourceURLMissing DownloadFailureKind = "source_url_missing"
 	DownloadFailureInterrupted DownloadFailureKind = "interrupted"
+	DownloadFailureHLSStalled DownloadFailureKind = "hls_download_stalled"
 )
 
 type DownloadFailure struct {

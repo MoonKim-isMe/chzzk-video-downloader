@@ -19,7 +19,11 @@ import (
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 )
 
-const sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
+const (
+	sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
+	// A brief stalled segment should not prematurely cancel a large VOD.
+	sourceURLHLSStallTimeout = 180 * time.Second
+)
 
 var (
 	sourceURLHeightLimit    = regexp.MustCompile(`\[height<=([0-9]+)\]`)
@@ -226,6 +230,7 @@ func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequ
 		// The input is a local manifest; HTTP-only -headers/-user_agent options
 		// would fail at open time with "Option not found" on the file protocol.
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+		"-seg_max_retry", "3",
 		"-i", stream.PlaylistPath,
 		"-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
 		"-stats_period", "0.5", "-progress", "pipe:1", "-nostats",
@@ -290,10 +295,23 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	run := func(runCtx context.Context, spec CommandSpec, progressHandler ProgressHandler, lineHandler LineHandler) (DownloadResult, error) {
 		result := DownloadResult{}
 		var seconds float64
+		var processedBytes int64
 		err := m.runner.Run(runCtx, spec, func(line OutputLine) {
-			result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, line)
+			// Keep FFmpeg errors and significant progress fields rather than
+			// filling the bounded diagnostic buffer with frames/fps counters.
+			if line.Stream == StreamStderr ||
+				strings.HasPrefix(line.Text, "out_time=") ||
+				strings.HasPrefix(line.Text, "total_size=") ||
+				strings.HasPrefix(line.Text, "progress=") {
+				result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, line)
+			}
 			if lineHandler != nil {
 				lineHandler(line)
+			}
+			if strings.HasPrefix(line.Text, "total_size=") {
+				if size, e := strconv.ParseInt(strings.TrimPrefix(line.Text, "total_size="), 10, 64); e == nil && size >= 0 {
+					processedBytes = size
+				}
 			}
 			if strings.HasPrefix(line.Text, "out_time_us=") || strings.HasPrefix(line.Text, "out_time_ms=") {
 				raw := strings.SplitN(line.Text, "=", 2)[1]
@@ -313,7 +331,11 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 				if pct > 99.9 {
 					pct = 99.9
 				}
-				result.LastProgress = DownloadProgress{Status: progressStatusFallbackDownloading, Percent: pct}
+				result.LastProgress = DownloadProgress{
+					Status: progressStatusFallbackDownloading,
+					Percent: pct,
+					DownloadedBytes: processedBytes,
+				}
 				if progressHandler != nil {
 					progressHandler(result.LastProgress)
 				}
@@ -336,7 +358,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 		return result, nil
 	}
-	result, runErr, reason := runMonitoredHLSFallback(ctx, tempDir, spec, func(p DownloadProgress) {
+	result, runErr, reason := runMonitoredHLSFallbackWithStallTimeout(ctx, tempDir, spec, func(p DownloadProgress) {
 		mu.Lock()
 		if p.Percent > latestPercent {
 			latestPercent = p.Percent
@@ -347,10 +369,16 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		if handler != nil {
 			handler(p)
 		}
-	}, run)
+	}, run, sourceURLHLSStallTimeout)
 	result.DiagnosticLines = mergeSourceURLFallbackDiagnostics(original.DiagnosticLines, originalErr, result.DiagnosticLines)
 	if reason != fallbackMonitorStopNone {
-		return result, spec, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "FFmpeg 대체 다운로드 진행이 중단되었습니다.", Cause: runErr}
+		failure := sourceURLMonitorFailure(reason, runErr, result.LastProgress)
+		result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, OutputLine{
+			Stream: StreamStderr,
+			Text: fmt.Sprintf("HLS fallback monitor: reason=%s progress=%.1f%% bytes=%d timeout_seconds=%d",
+				reason, result.LastProgress.Percent, result.LastProgress.DownloadedBytes, int(sourceURLHLSStallTimeout.Seconds())),
+		})
+		return result, spec, failure
 	}
 	if runErr != nil {
 		return result, spec, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "FFmpeg HLS 대체 다운로드에 실패했습니다.", Cause: runErr}
@@ -361,6 +389,33 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	}
 	result.FinalPath = destination
 	return result, spec, nil
+}
+
+// A child watchdog cancels its own context, but this is not an app/user
+// cancellation. Use a non-wrapping cause so the queue preserves the actual
+// HLS stall error instead of reclassifying it as "interrupted".
+func sourceURLMonitorFailure(reason fallbackMonitorStopReason, runErr error, last DownloadProgress) *DownloadFailure {
+	switch reason {
+	case fallbackMonitorStopDownloadStalled:
+		return &DownloadFailure{
+			Kind: DownloadFailureHLSStalled,
+			Message: fmt.Sprintf("HLS 대체 다운로드가 %d초 동안 진행되지 않아 중단되었습니다.", int(sourceURLHLSStallTimeout.Seconds())),
+			Cause: fmt.Errorf("HLS 감시기: 파일 크기 증가 없음, 진행률 %.1f%%, 기록 크기 %d바이트, FFmpeg 종료 결과: %v",
+				last.Percent, last.DownloadedBytes, runErr),
+		}
+	case fallbackMonitorStopPreparationTimeout:
+		return &DownloadFailure{
+			Kind: DownloadFailureHLSStalled,
+			Message: "FFmpeg HLS 대체 다운로드를 시작하지 못해 중단되었습니다.",
+			Cause: fmt.Errorf("HLS 감시기: 다운로드 준비 시간 초과, FFmpeg 종료 결과: %v", runErr),
+		}
+	default:
+		return &DownloadFailure{
+			Kind: DownloadFailureSourceURLMissing,
+			Message: "FFmpeg HLS 대체 다운로드의 진행 상태를 확인하지 못했습니다.",
+			Cause: fmt.Errorf("HLS 감시기: %s, FFmpeg 종료 결과: %v", reason, runErr),
+		}
+	}
 }
 
 func mergeSourceURLFallbackDiagnostics(original []OutputLine, firstErr error, fallback []OutputLine) []OutputLine {

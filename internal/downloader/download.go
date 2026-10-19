@@ -253,6 +253,20 @@ func runMonitoredHLSFallback(
 	handler ProgressHandler,
 	run downloadAttemptRunner,
 ) (DownloadResult, error, fallbackMonitorStopReason) {
+	return runMonitoredHLSFallbackWithStallTimeout(ctx, tempDir, spec, handler, run, ffmpegFallbackStallTimeout)
+}
+
+// HLS signed-URL downloads can experience longer segment delays than native
+// downloads. Keep the legacy fallback timeout unchanged, and configure the
+// sourceURL fallback independently.
+func runMonitoredHLSFallbackWithStallTimeout(
+	ctx context.Context,
+	tempDir string,
+	spec CommandSpec,
+	handler ProgressHandler,
+	run downloadAttemptRunner,
+	stallTimeout time.Duration,
+) (DownloadResult, error, fallbackMonitorStopReason) {
 	fallbackCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -369,8 +383,8 @@ func runMonitoredHLSFallback(
 			}
 
 			if downloaderStarted &&
-				ffmpegFallbackStallTimeout > 0 &&
-				now.Sub(lastGrowth) >= ffmpegFallbackStallTimeout {
+				stallTimeout > 0 &&
+				now.Sub(lastGrowth) >= stallTimeout {
 				cancel()
 				current := <-outcomes
 				return current.result, current.err, fallbackMonitorStopDownloadStalled

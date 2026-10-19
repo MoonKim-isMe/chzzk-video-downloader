@@ -1,9 +1,12 @@
 package downloader
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const sourceURLFixture = `<?xml version="1.0" encoding="UTF-8"?>
@@ -80,7 +83,7 @@ func TestBuildSourceURLFFmpegCommandUsesVideoAudioNoOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := strings.Join(spec.Args, " ")
-	for _, fragment := range []string{"-n", "-map 0:v:0", "-map 0:a:0?", "-c copy", "-progress pipe:1", "-protocol_whitelist file,http,https,tcp,tls,crypto", "-f mp4", "movie.mp4"} {
+	for _, fragment := range []string{"-n", "-map 0:v:0", "-map 0:a:0?", "-c copy", "-progress pipe:1", "-protocol_whitelist file,http,https,tcp,tls,crypto", "-seg_max_retry 3", "-f mp4", "movie.mp4"} {
 		if !strings.Contains(args, fragment) {
 			t.Fatalf("missing argument %s: %s", fragment, args)
 		}
@@ -106,3 +109,43 @@ func TestClassifySourceURLFailure(t *testing.T) {
 		t.Fatalf("unexpected failure: %v", err)
 	}
 }
+
+func TestSourceURLMonitorTimeoutIsNotAnAppInterruption(t *testing.T) {
+	failed := sourceURLMonitorFailure(
+		fallbackMonitorStopDownloadStalled,
+		context.Canceled,
+		DownloadProgress{Status: progressStatusFallbackDownloading, Percent: 50.9, DownloadedBytes: 2003304496},
+	)
+	if failed.Kind != DownloadFailureHLSStalled {
+		t.Fatalf("unexpected stop kind: %v", failed)
+	}
+	if errors.Is(failed, context.Canceled) {
+		t.Fatalf("internal monitor timeout must not be classified as user cancellation: %v", failed)
+	}
+	if !strings.Contains(failed.Error(), "180초") || !strings.Contains(failed.Cause.Error(), "50.9%") {
+		t.Fatalf("timeout diagnostic missing: %v", failed)
+	}
+}
+
+func TestSourceURLMonitorReportsIndependentStallTimeout(t *testing.T) {
+	previousPoll := ffmpegFallbackPollInterval
+	ffmpegFallbackPollInterval = 5 * time.Millisecond
+	defer func() { ffmpegFallbackPollInterval = previousPoll }()
+
+	result, err, reason := runMonitoredHLSFallbackWithStallTimeout(
+		context.Background(), t.TempDir(), CommandSpec{}, nil,
+		func(ctx context.Context, _ CommandSpec, handler ProgressHandler, _ LineHandler) (DownloadResult, error) {
+			handler(DownloadProgress{Status: progressStatusFallbackDownloading, Percent: 50.9, DownloadedBytes: 2003304496})
+			<-ctx.Done()
+			return DownloadResult{LastProgress: DownloadProgress{Percent: 50.9, DownloadedBytes: 2003304496}}, ctx.Err()
+		},
+		35*time.Millisecond,
+	)
+	if reason != fallbackMonitorStopDownloadStalled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("watchdog did not recognize a stalled child: reason=%q err=%v", reason, err)
+	}
+	if result.LastProgress.Percent != 50.9 || result.LastProgress.DownloadedBytes != 2003304496 {
+		t.Fatalf("last FFmpeg progress lost: %#v", result.LastProgress)
+	}
+}
+
