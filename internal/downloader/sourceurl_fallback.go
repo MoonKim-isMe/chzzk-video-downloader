@@ -23,30 +23,7 @@ const sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
 
 var (
 	sourceURLHeightLimit    = regexp.MustCompile(`\[height<=([0-9]+)\]`)
-	sourceURLVideoIDPattern = regexp.MustCompile(`^[0-9A-Fa-f]{32,64}package downloader
-
-import (
-	"context"
-	"encoding/xml"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
-)
-
-const sourceURLPlaybackEndpoint = "https://play.vod.naver.com/v3/playback/"
-
-)
+	sourceURLVideoIDPattern = regexp.MustCompile(`^[0-9A-Fa-f]{32,64}$`)
 )
 
 type sourceURLHLSStream struct {
