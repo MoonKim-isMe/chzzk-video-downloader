@@ -24,31 +24,46 @@ const (
 )
 
 type sourceURLSegmentProxy struct {
-	mu         sync.Mutex
-	resources  map[string]*url.URL
-	failedIDs  map[string]bool
-	original   *url.URL
-	current    *url.URL
-	renew      func(context.Context) (string, error)
-	client     *http.Client
-	listener   net.Listener
-	server     *http.Server
-	stopWatch  func() bool
-	prefix     string
-	requests   int
-	retries    int
-	refreshes  int
+	mu              sync.Mutex
+	resources       map[string]*url.URL
+	failedIDs       map[string]bool
+	original        *url.URL
+	current         *url.URL
+	renew           func(context.Context) (string, error)
+	client          *http.Client
+	listener        net.Listener
+	server          *http.Server
+	stopWatch       func() bool
+	cacheDir        string
+	cacheHits       int
+	reusedBytes     int64
+	cacheWrites     int
+	cacheErrors     int
+	prefix          string
+	requests        int
+	retries         int
+	refreshes       int
 	refreshAttempts int
-	lastStatus int
+	lastStatus      int
 }
 
-func startSourceURLSegmentProxy(ctx context.Context, originalURL, manifestDir string, renew func(context.Context) (string, error), client *http.Client) (*sourceURLSegmentProxy, error) {
+func startSourceURLSegmentProxy(ctx context.Context, originalURL, manifestDir string, renew func(context.Context) (string, error), client *http.Client, cacheDir ...string) (*sourceURLSegmentProxy, error) {
 	original, err := url.Parse(originalURL)
 	if err != nil || !validSourceURLHLSAddress(originalURL) || original.Query().Get("_lsu_sa_") == "" {
 		return nil, fmt.Errorf("서명된 HLS 주소를 확인할 수 없습니다")
 	}
 	if client == nil || renew == nil {
 		return nil, fmt.Errorf("HLS 세그먼트 연결 정보를 준비할 수 없습니다")
+	}
+	var persistentCache string
+	if len(cacheDir) > 0 {
+		persistentCache = cacheDir[0]
+		if !filepath.IsAbs(persistentCache) {
+			return nil, fmt.Errorf("이어받기 저장 폴더는 절대 경로여야 합니다")
+		}
+		if err := os.MkdirAll(persistentCache, 0o700); err != nil {
+			return nil, fmt.Errorf("이어받기 저장 폴더를 준비할 수 없습니다: %w", err)
+		}
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -66,6 +81,7 @@ func startSourceURLSegmentProxy(ctx context.Context, originalURL, manifestDir st
 		current: original,
 		renew: renew,
 		client: client,
+		cacheDir: persistentCache,
 		listener: listener,
 		prefix: "/hls/" + hex.EncodeToString(secret[:]) + "/",
 	}
@@ -91,7 +107,7 @@ func (p *sourceURLSegmentProxy) Close() {
 func (p *sourceURLSegmentProxy) Stats() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return fmt.Sprintf("HLS segment proxy: requests=%d retries=%d auth_refresh_attempts=%d auth_refreshes=%d failed_segments=%d last_http_status=%d", p.requests, p.retries, p.refreshAttempts, p.refreshes, len(p.failedIDs), p.lastStatus)
+	return fmt.Sprintf("HLS segment proxy: requests=%d retries=%d auth_refresh_attempts=%d auth_refreshes=%d failed_segments=%d last_http_status=%d cached_segments=%d reused_bytes=%d saved_segments=%d cache_errors=%d", p.requests, p.retries, p.refreshAttempts, p.refreshes, len(p.failedIDs), p.lastStatus, p.cacheHits, p.reusedBytes, p.cacheWrites, p.cacheErrors)
 }
 
 func (p *sourceURLSegmentProxy) HasFailedSegments() bool {
@@ -185,6 +201,21 @@ func (p *sourceURLSegmentProxy) ServeHTTP(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
+	var cacheFile string
+	if p.cacheDir != "" && sourceURLCacheableMediaURL(target) {
+		cacheFile = sourceURLSegmentCacheFile(p.cacheDir, target)
+		if cached, ok := readSourceURLSegmentCache(cacheFile); ok {
+			p.mu.Lock()
+			p.cacheHits++
+			p.reusedBytes += int64(len(cached))
+			delete(p.failedIDs, id)
+			p.mu.Unlock()
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(cached)
+			return
+		}
+	}
 	var refreshAttempted bool
 	for attempt := 0; attempt <= sourceURLSegmentRetries; attempt++ {
 		if r.Context().Err() != nil {
@@ -199,6 +230,17 @@ func (p *sourceURLSegmentProxy) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 		p.mu.Unlock()
 		if err == nil && status == http.StatusOK {
+			if cacheFile != "" {
+				if cacheErr := writeSourceURLSegmentCache(p.cacheDir, cacheFile, data); cacheErr != nil {
+					p.mu.Lock()
+					p.cacheErrors++
+					p.mu.Unlock()
+				} else {
+					p.mu.Lock()
+					p.cacheWrites++
+					p.mu.Unlock()
+				}
+			}
 			p.mu.Lock()
 			delete(p.failedIDs, id)
 			p.mu.Unlock()

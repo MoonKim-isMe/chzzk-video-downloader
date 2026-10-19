@@ -270,6 +270,16 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 		return original, CommandSpec{}, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "HLS 세그먼트 인증 정보를 준비하지 못했습니다.", Cause: err}
 	}
+	// This folder is independent of .chzzk-temp so the usual failure cleanup
+	// cannot discard segments already downloaded in a previous attempt.
+	cacheDir, err := sourceURLSegmentCacheDir(request.OutputDir, source.VideoNo, source.Height, manifestDir)
+	if err != nil {
+		return original, CommandSpec{}, &DownloadFailure{
+			Kind: DownloadFailureSourceURLMissing,
+			Message: "세그먼트 이어받기 정보를 준비하지 못했습니다.",
+			Cause: err,
+		}
+	}
 	// FFmpeg reads the local manifest only once. Route segment requests
 	// through a loopback proxy so expired CDN signatures can be renewed
 	// without restarting the download or discarding the partial MP4.
@@ -282,11 +292,11 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			return "", fmt.Errorf("갱신된 HLS 스트림의 영상 또는 화질이 달라졌습니다")
 		}
 		return fresh.URL, nil
-	}, client)
+	}, client, cacheDir)
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{
 			Kind: DownloadFailureSourceURLMissing,
-			Message: "HLS 세그먼트 재연결 기능을 준비하지 못했습니다.",
+			Message: "HLS 세그먼트 재연결 및 이어받기 기능을 준비하지 못했습니다.",
 			Cause: err,
 		}
 	}
@@ -417,6 +427,9 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		return result, spec, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "다운로드한 파일을 최종 폴더로 이동하지 못했습니다.", Cause: err}
 	}
 	result.FinalPath = destination
+	// Only a fully completed, promoted download removes cached media.
+	// Failures and interruptions keep successful segments for the next attempt.
+	_ = os.RemoveAll(cacheDir)
 	return result, spec, nil
 }
 
