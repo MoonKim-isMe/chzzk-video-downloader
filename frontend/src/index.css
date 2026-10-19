@@ -619,27 +619,38 @@ select {
   line-height: 16px;
 }
 
-.video-tag-chips {
+.video-tag-chips,
+.url-video-tags {
   display: flex;
-  min-height: 24px;
-  max-height: 24px;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: nowrap;
   gap: 6px;
+  min-height: 28px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-muted) 45%, transparent) transparent;
+}
+
+.video-tag-chips {
   margin-top: 10px;
-  overflow: hidden;
 }
 
 .video-tag-chip {
   display: inline-flex;
-  min-height: 24px;
+  flex: 0 0 auto;
+  min-height: 28px;
   align-items: center;
   padding: 3px 8px;
   border: 1px solid var(--app-border-soft);
   border-radius: 999px;
   background: var(--app-surface-soft);
   color: var(--app-text-secondary);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .video-card-action {
@@ -773,13 +784,6 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 14px 28px;
-}
-
-.url-video-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 24px;
 }
 
 .url-result-loading {

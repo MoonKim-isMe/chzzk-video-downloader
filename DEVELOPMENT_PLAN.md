@@ -27,6 +27,19 @@
 - 테스트 코드 추가: 정상 폴더·없는 폴더·파일 경로·빈 값·OS 실행 오류
 - 미실행: `go test ./...`, `yarn typecheck`, `yarn build`, Windows 실제 화면 검증 (GitHub 연결 환경에서 로컬 의존성 실행 불가)
 
+## Phase 4-E 보완 — 검색·URL 입력 해시태그 한 줄 표시
+
+- [x] DL-UX-8. 검색 결과 동영상 카드의 해시태그를 한 줄로 배치하고 기존 잘림 현상 제거
+- [x] DL-UX-9. URL 직접 입력 조회 결과에도 동일한 한 줄 해시태그 스타일 적용
+- [x] DL-UX-10. 긴 해시태그와 많은 항목은 줄바꿈 없이 가로 스크롤로 모두 확인 가능하도록 처리
+- [ ] DL-UX-11. Windows 앱에서 검색·URL 직접 입력 화면의 표시 및 가로 스크롤 동작 확인
+
+### 검증
+
+- 공통 CSS 정적 확인: 두 해시태그 영역에 동일한 `nowrap`·가로 스크롤을 적용하고 개별 해시태그의 축소·줄바꿈을 방지
+- Chromium CSS 레이아웃 스모크 픽스처: 검색 카드 260px/URL 영역 450px, 태그 10개에서 한 줄 배치·마지막 태그 접근·13px 폰트 확인
+- 미실행: `yarn typecheck`, `yarn build`, Windows 앱 실화면 확인 (전체 프론트엔드 의존성 및 Windows 실행 환경 없음)
+
 ## Phase 7-M — CHZZK sourceURL MPD 오류의 HLS 대체 다운로드
 
 - [x] PKG-7M-1. 비로그인 HAR의 CHZZK 영상 API 및 NAVER MPD 구조 분석 (`15651133`)
