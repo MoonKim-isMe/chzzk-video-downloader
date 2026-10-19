@@ -235,3 +235,48 @@ func TestSelectDownloadDirectoryWrapsDialogError(t *testing.T) {
 		t.Fatal("expected dialog error")
 	}
 }
+
+func TestOpenDownloadDirectoryOpensCurrentFieldValue(t *testing.T) {
+	app := NewApp()
+	directory := t.TempDir()
+	var opened string
+	app.folderOpener = func(path string) error {
+		opened = path
+		return nil
+	}
+
+	if err := app.OpenDownloadDirectory("  " + directory + "  "); err != nil {
+		t.Fatal(err)
+	}
+	if opened != directory {
+		t.Fatalf("opened directory: got %q want %q", opened, directory)
+	}
+}
+
+func TestOpenDownloadDirectoryRejectsInvalidPaths(t *testing.T) {
+	app := NewApp()
+	base := t.TempDir()
+	file := filepath.Join(base, "video.mp4")
+	if err := os.WriteFile(file, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app.folderOpener = func(string) error {
+		t.Fatal("folder opener should not be called for an invalid path")
+		return nil
+	}
+
+	for _, directory := range []string{"", "  ", ".", filepath.Join(base, "missing"), file} {
+		if err := app.OpenDownloadDirectory(directory); err == nil {
+			t.Errorf("expected invalid folder error for %q", directory)
+		}
+	}
+}
+
+func TestOpenDownloadDirectoryWrapsOpenError(t *testing.T) {
+	app := NewApp()
+	want := errors.New("explorer failed")
+	app.folderOpener = func(string) error { return want }
+	if err := app.OpenDownloadDirectory(t.TempDir()); !errors.Is(err, want) {
+		t.Fatalf("expected wrapped opener error, got %v", err)
+	}
+}
