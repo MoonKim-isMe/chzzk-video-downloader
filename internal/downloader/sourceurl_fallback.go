@@ -270,6 +270,27 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 		return original, CommandSpec{}, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "HLS 세그먼트 인증 정보를 준비하지 못했습니다.", Cause: err}
 	}
+	// FFmpeg reads the local manifest only once. Route segment requests
+	// through a loopback proxy so expired CDN signatures can be renewed
+	// without restarting the download or discarding the partial MP4.
+	proxy, err := startSourceURLSegmentProxy(ctx, source.URL, manifestDir, func(refreshCtx context.Context) (string, error) {
+		fresh, refreshErr := fetchSourceURLHLS(refreshCtx, request, &http.Client{Timeout: 20 * time.Second})
+		if refreshErr != nil {
+			return "", refreshErr
+		}
+		if fresh.VideoNo != source.VideoNo || fresh.Height != source.Height {
+			return "", fmt.Errorf("갱신된 HLS 스트림의 영상 또는 화질이 달라졌습니다")
+		}
+		return fresh.URL, nil
+	}, client)
+	if err != nil {
+		return original, CommandSpec{}, &DownloadFailure{
+			Kind: DownloadFailureSourceURLMissing,
+			Message: "HLS 세그먼트 재연결 기능을 준비하지 못했습니다.",
+			Cause: err,
+		}
+	}
+	defer proxy.Close()
 	format, err := normalizeOutputFormat(request.OutputFormat)
 	if err != nil {
 		return original, CommandSpec{}, err
@@ -371,6 +392,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 	}, run, sourceURLHLSStallTimeout)
 	result.DiagnosticLines = mergeSourceURLFallbackDiagnostics(original.DiagnosticLines, originalErr, result.DiagnosticLines)
+	result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, OutputLine{Stream: StreamStderr, Text: proxy.Stats()})
 	if reason != fallbackMonitorStopNone {
 		failure := sourceURLMonitorFailure(reason, runErr, result.LastProgress)
 		result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, OutputLine{
@@ -382,6 +404,12 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	}
 	if runErr != nil {
 		return result, spec, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "FFmpeg HLS 대체 다운로드에 실패했습니다.", Cause: runErr}
+	}
+	if proxy.HasFailedSegments() {
+		return result, spec, &DownloadFailure{
+			Kind: DownloadFailureSourceURLMissing,
+			Message: "일부 HLS 세그먼트를 받지 못해 다운로드를 완료하지 않았습니다.",
+		}
 	}
 	destination, err = promoteFallbackDownload(tempDir, request.OutputDir, result.FinalPath)
 	if err != nil {
