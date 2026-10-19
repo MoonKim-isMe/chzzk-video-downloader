@@ -7,6 +7,7 @@ import {
   Progress,
   Skeleton,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -235,7 +236,21 @@ function DownloadTaskRow({
           <div className="min-w-0">
             <div className="download-task-badges">
               <Tag color={meta.color}>{meta.label}</Tag>
-              {fallbackActive && <Tag color="warning">대체 방식 재시도</Tag>}
+              {fallbackActive && (
+                <Tooltip
+                  title={
+                    <>
+                      <div>일반 다운로드 방식에 문제가 발생하여 대체 방식으로 재시도 중입니다.</div>
+                      <div className="mt-2">
+                        대체 방식에서는 진행률과 남은 시간이 실시간으로 갱신되지 않거나 실제와 다르게 표시될 수 있습니다.
+                        표시되는 진행 상황과 관계없이 다운로드는 정상적으로 진행될 수 있습니다.
+                      </div>
+                    </>
+                  }
+                >
+                  <Tag color="warning">대체 방식 재시도</Tag>
+                </Tooltip>
+              )}
               {queuePosition !== undefined && <Tag>대기 {queuePosition}번째</Tag>}
               <Text className="app-muted !text-xs">{task.channelName}</Text>
             </div>
