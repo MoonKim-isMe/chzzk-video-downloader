@@ -226,7 +226,7 @@ function SettingsDrawer({
               다운로드
             </Title>
             <Paragraph className="app-muted !mb-5 !text-xs">
-              새로 Queue에 추가하는 작업부터 아래 옵션을 사용합니다.
+              새로 시작되는 작업부터 아래 옵션을 사용합니다
             </Paragraph>
 
             <div className="mb-2 flex items-center gap-2">
@@ -234,9 +234,25 @@ function SettingsDrawer({
                 <Text>다운로드 폴더</Text>
               </label>
               <Button
-                type="link"
+                type="default"
                 size="small"
-                className="!h-auto !p-0"
+                className="settings-folder-open-button"
+                icon={
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 8V6a2 2 0 0 1 2-2h5l2 2h6a2 2 0 0 1 2 2v3" />
+                    <path d="M3 19h16a2 2 0 0 0 1.9-1.4l1-4A2 2 0 0 0 20 11H6a2 2 0 0 0-1.9 1.4L2 18a1 1 0 0 0 1 1Z" />
+                  </svg>
+                }
                 loading={openingDirectory}
                 disabled={!downloadDirectory?.trim() || selectingDirectory}
                 onClick={() => void handleOpenDirectory()}
