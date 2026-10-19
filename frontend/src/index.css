@@ -1234,6 +1234,53 @@ select {
   border-radius: 14px;
 }
 
+.settings-folder-open-button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--app-border-soft) !important;
+  border-radius: 7px;
+  background: var(--app-surface-soft) !important;
+  color: var(--app-text-secondary) !important;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.settings-folder-open-button.ant-btn:not(:disabled):hover,
+.settings-folder-open-button.ant-btn:not(:disabled):focus-visible {
+  border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-border)) !important;
+  background: var(--app-primary-soft) !important;
+  color: var(--app-primary) !important;
+}
+
+.settings-folder-open-button.ant-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-folder-open-button.ant-btn:disabled {
+  opacity: 0.5;
+}
+
+.settings-folder-open-button .ant-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-folder-open-button svg {
+  display: block;
+}
+
 /* Existing Phase 2~5 components still use Tailwind slate utilities.
    Map those tokens to the selected app theme until each screen receives its UX pass. */
 :root[data-theme="light"] [class~="bg-slate-950"] {

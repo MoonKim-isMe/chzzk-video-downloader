@@ -26,6 +26,7 @@ interface BackendApp {
   GetDownloadToolchainStatus(): Promise<ToolchainStatus>;
   GetDefaultDownloadDir(): Promise<string>;
   SelectDownloadDirectory(currentDirectory: string): Promise<string>;
+  OpenDownloadDirectory(directory: string): Promise<void>;
   SelectVideoRepairFile(currentFile: string): Promise<VideoRepairFileInfo>;
   StartQuickVideoInspection(path: string): Promise<VideoInspectionResult>;
   StartDeepVideoInspection(path: string, cpuProfile: VideoDeepInspectionCPUProfile): Promise<VideoInspectionResult>;
@@ -87,6 +88,8 @@ export const getDefaultDownloadDir = () => app().GetDefaultDownloadDir();
 
 export const selectDownloadDirectory = (currentDirectory: string) =>
   app().SelectDownloadDirectory(currentDirectory);
+
+export const openDownloadDirectory = (directory: string) => app().OpenDownloadDirectory(directory);
 
 export const selectVideoRepairFile = (currentFile = '') =>
   app().SelectVideoRepairFile(currentFile);
