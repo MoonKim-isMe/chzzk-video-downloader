@@ -355,6 +355,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 				result.LastProgress = DownloadProgress{
 					Status: progressStatusFallbackDownloading,
 					Percent: pct,
+					ProcessedMediaSeconds: seconds,
 					DownloadedBytes: processedBytes,
 				}
 				if progressHandler != nil {

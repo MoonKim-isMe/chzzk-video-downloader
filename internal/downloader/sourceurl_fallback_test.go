@@ -149,3 +149,121 @@ func TestSourceURLMonitorReportsIndependentStallTimeout(t *testing.T) {
 	}
 }
 
+// Test the original 180-second failure mode on a short clock: the temporary
+// directory never grows, while the actual FFmpeg processed media time grows.
+func TestSourceURLMonitorKeepsAliveFromMediaProgress(t *testing.T) {
+	testCases := []struct {
+		name     string
+		progress func(int) DownloadProgress
+	}{
+		{
+			name: "FFmpeg total_size increases",
+			progress: func(i int) DownloadProgress {
+				return DownloadProgress{Status: progressStatusFallbackDownloading, DownloadedBytes: int64(i) * 1024}
+			},
+		},
+		{
+			name: "FFmpeg out_time increases without file growth",
+			progress: func(i int) DownloadProgress {
+				return DownloadProgress{Status: progressStatusFallbackDownloading, ProcessedMediaSeconds: float64(i) * 4}
+			},
+		},
+		{
+			name: "progress percentage advances",
+			progress: func(i int) DownloadProgress {
+				return DownloadProgress{Status: progressStatusFallbackDownloading, Percent: float64(i)}
+			},
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			previousPoll := ffmpegFallbackPollInterval
+			ffmpegFallbackPollInterval = 5 * time.Millisecond
+			defer func() { ffmpegFallbackPollInterval = previousPoll }()
+
+			result, err, reason := runMonitoredHLSFallbackWithStallTimeout(
+				context.Background(), t.TempDir(), CommandSpec{}, nil,
+				func(ctx context.Context, _ CommandSpec, report ProgressHandler, _ LineHandler) (DownloadResult, error) {
+					for i := 1; i <= 9; i++ {
+						if err := ctx.Err(); err != nil {
+							return DownloadResult{}, err
+						}
+						report(test.progress(i))
+						time.Sleep(10 * time.Millisecond)
+					}
+					return DownloadResult{}, nil
+				}, 35*time.Millisecond,
+			)
+			if reason != fallbackMonitorStopNone || err != nil {
+				t.Fatalf("growing FFmpeg progress must prevent watchdog timeout: reason=%q result=%#v err=%v", reason, result, err)
+			}
+		})
+	}
+}
+
+// Progress=continue or a repeated total_size must not mask a genuinely
+// stalled download, even when FFmpeg keeps emitting heartbeat lines.
+func TestSourceURLMonitorRejectsUnchangedFFmpegHeartbeat(t *testing.T) {
+	previousPoll := ffmpegFallbackPollInterval
+	ffmpegFallbackPollInterval = 5 * time.Millisecond
+	defer func() { ffmpegFallbackPollInterval = previousPoll }()
+	_, err, reason := runMonitoredHLSFallbackWithStallTimeout(
+		context.Background(), t.TempDir(), CommandSpec{}, nil,
+		func(ctx context.Context, _ CommandSpec, report ProgressHandler, _ LineHandler) (DownloadResult, error) {
+			ticker := time.NewTicker(5 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return DownloadResult{}, ctx.Err()
+				case <-ticker.C:
+					report(DownloadProgress{
+						Status: progressStatusFallbackDownloading, Percent: 40,
+						ProcessedMediaSeconds: 100, DownloadedBytes: 4000,
+					})
+				}
+			}
+		},
+		35*time.Millisecond,
+	)
+	if reason != fallbackMonitorStopDownloadStalled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("unchanged FFmpeg progress must stall: reason=%q err=%v", reason, err)
+	}
+}
+
+// Directory scan failures are diagnostic events, not evidence of inactivity
+// when FFmpeg continues to report increasing media time.
+func TestSourceURLMonitorPreservesFileScanError(t *testing.T) {
+	previousPoll := ffmpegFallbackPollInterval
+	ffmpegFallbackPollInterval = 5 * time.Millisecond
+	defer func() { ffmpegFallbackPollInterval = previousPoll }()
+
+	brokenDirectory := filepath.Join(t.TempDir(), "invalid\x00path")
+	result, err, reason := runMonitoredHLSFallbackWithStallTimeout(
+		context.Background(), brokenDirectory, CommandSpec{}, nil,
+		func(ctx context.Context, _ CommandSpec, report ProgressHandler, _ LineHandler) (DownloadResult, error) {
+			for i := 1; i <= 6; i++ {
+				if err := ctx.Err(); err != nil {
+					return DownloadResult{}, err
+				}
+				report(DownloadProgress{Status: progressStatusFallbackDownloading, ProcessedMediaSeconds: float64(i)})
+				time.Sleep(10 * time.Millisecond)
+			}
+			return DownloadResult{}, nil
+		},
+		30*time.Millisecond,
+	)
+	if err != nil || reason != fallbackMonitorStopNone {
+		t.Fatalf("failed file scan should not stop active FFmpeg: reason=%q err=%v", reason, err)
+	}
+	var found bool
+	for _, line := range result.DiagnosticLines {
+		if strings.Contains(line.Text, "temporary file size scan failures=") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("file scan failure was not recorded: %#v", result.DiagnosticLines)
+	}
+}
+
