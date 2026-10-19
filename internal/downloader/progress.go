@@ -14,13 +14,16 @@ const (
 )
 
 type DownloadProgress struct {
-	Status              string  `json:"status"`
-	Percent             float64 `json:"percent"`
-	DownloadedBytes     int64   `json:"downloadedBytes"`
-	TotalBytes          int64   `json:"totalBytes"`
-	TotalBytesEstimated bool    `json:"totalBytesEstimated"`
-	SpeedBytesPerSecond float64 `json:"speedBytesPerSecond"`
-	ETASeconds          int64   `json:"etaSeconds"`
+	Status  string  `json:"status"`
+	Percent float64 `json:"percent"`
+	// FFmpeg's processed media position is used for watchdog liveness only.
+	// It is not the wall-clock elapsed time and is never serialized to the UI.
+	ProcessedMediaSeconds float64 `json:"-"`
+	DownloadedBytes       int64   `json:"downloadedBytes"`
+	TotalBytes            int64   `json:"totalBytes"`
+	TotalBytesEstimated   bool    `json:"totalBytesEstimated"`
+	SpeedBytesPerSecond   float64 `json:"speedBytesPerSecond"`
+	ETASeconds            int64   `json:"etaSeconds"`
 }
 
 func parseProgressLine(line string) (DownloadProgress, bool) {

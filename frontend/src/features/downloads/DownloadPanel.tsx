@@ -19,6 +19,7 @@ import {
   openDownloadFolder,
   openDownloadLog,
   recoverDownload,
+  startDownload,
 } from '../../lib/backend';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
@@ -147,6 +148,11 @@ function DownloadTaskRow({
   const fallbackPreparing = task.progress.status === 'fallback_preparing';
   const fallbackDownloading = task.progress.status === 'fallback_downloading';
   const fallbackActive = task.status === 'running' && (fallbackPreparing || fallbackDownloading);
+  const canResume = task.status === 'failed' && (
+    task.errorCode === 'source_url_missing' ||
+    task.errorCode === 'hls_download_stalled' ||
+    task.errorCode === 'interrupted'
+  );
   const total = task.progress.totalBytes > 0
     ? `${task.progress.totalBytesEstimated ? '약 ' : ''}${formatBytes(task.progress.totalBytes)}`
     : '-';
@@ -181,6 +187,32 @@ function DownloadTaskRow({
       const recovered = await recoverDownload(task.taskId);
       onTaskRecovered(task.taskId, recovered);
       message.success('임시 파일을 정리하고 다운로드를 다시 시작했습니다.');
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!canResume || working) {
+      return;
+    }
+
+    setWorking(true);
+    try {
+      const resumed = await startDownload({
+        videoNo: task.videoNo,
+        videoTitle: task.videoTitle,
+        channelName: task.channelName,
+        thumbnailImageUrl: task.thumbnailImageUrl,
+        url: task.url,
+        outputDir: task.outputDir,
+      });
+      // Segment cache persists independently of the failed task history.
+      onTaskRecovered(task.taskId, resumed);
+      await deleteDownloadTask(task.taskId);
+      message.success('저장된 구간을 재사용해 다운로드를 이어받습니다.');
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -277,6 +309,11 @@ function DownloadTaskRow({
             )}
             {task.status === 'failed' && (
               <>
+                {canResume && (
+                  <Button type="primary" size="small" loading={working} onClick={() => void handleResume()}>
+                    이어받기
+                  </Button>
+                )}
                 {task.logPath && (
                   <Button size="small" disabled={working} onClick={() => void handleOpenLog()}>
                     로그 파일 열기
@@ -320,7 +357,8 @@ function DownloadTaskRow({
               <Progress
                 percent={Math.round(task.progress.percent * 10) / 10}
                 status={meta.progressStatus}
-                showInfo={!fallbackActive || task.progress.percent > 0}
+                showInfo
+                format={fallbackActive && task.progress.percent <= 0 ? () => '\u00a0' : undefined}
                 size="small"
               />
             </div>

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -70,6 +71,15 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 		},
 		m.runner.Run,
 	)
+	if isDownloadFailureKind(err, DownloadFailureSourceURLMissing) && ctx.Err() == nil {
+		fallbackResult, fallbackSpec, fallbackErr := m.executeSourceURLFallback(
+			ctx, request, toolchain, handler, result, err,
+		)
+		result, err = fallbackResult, fallbackErr
+		if fallbackSpec.Path != "" {
+			usedSpec = fallbackSpec
+		}
+	}
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			if logPath, logErr := writeDownloadFailureLog(request, usedSpec, result, err); logErr == nil {
@@ -244,6 +254,20 @@ func runMonitoredHLSFallback(
 	handler ProgressHandler,
 	run downloadAttemptRunner,
 ) (DownloadResult, error, fallbackMonitorStopReason) {
+	return runMonitoredHLSFallbackWithStallTimeout(ctx, tempDir, spec, handler, run, ffmpegFallbackStallTimeout)
+}
+
+// HLS signed-URL downloads can experience longer segment delays than native
+// downloads. Keep the legacy fallback timeout unchanged, and configure the
+// sourceURL fallback independently.
+func runMonitoredHLSFallbackWithStallTimeout(
+	ctx context.Context,
+	tempDir string,
+	spec CommandSpec,
+	handler ProgressHandler,
+	run downloadAttemptRunner,
+	stallTimeout time.Duration,
+) (DownloadResult, error, fallbackMonitorStopReason) {
 	fallbackCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -268,7 +292,30 @@ func runMonitoredHLSFallback(
 	startedAt := time.Now()
 	lastSample := startedAt
 	lastGrowth := startedAt
-	lastBytes, _ := temporaryDownloadSize(tempDir)
+	lastBytes, initialSizeErr := temporaryDownloadSize(tempDir)
+	var scanErrorCount int
+	var lastScanError error
+	if initialSizeErr != nil {
+		scanErrorCount++
+		lastScanError = initialSizeErr
+	}
+
+	// The on-disk size may not change even while FFmpeg reports real media
+	// progress (buffering, filesystem behavior, or a failed directory scan).
+	// Do not count repeated unchanged progress/heartbeat events as activity.
+	var progressMu sync.Mutex
+	var maxReportedBytes int64
+	var maxMediaSeconds, maxReportedPercent float64
+	var lastProgressAt time.Time
+	finish := func(result DownloadResult, err error, reason fallbackMonitorStopReason) (DownloadResult, error, fallbackMonitorStopReason) {
+		if scanErrorCount > 0 {
+			result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, OutputLine{
+				Stream: StreamStderr,
+				Text: fmt.Sprintf("HLS monitor: temporary file size scan failures=%d last_error=%v", scanErrorCount, lastScanError),
+			})
+		}
+		return result, err, reason
+	}
 
 	go func() {
 		result, err := run(
@@ -277,6 +324,22 @@ func runMonitoredHLSFallback(
 			func(progress DownloadProgress) {
 				if progress.Status != "completed" {
 					markDownloaderStarted()
+					progressMu.Lock()
+					if progress.DownloadedBytes > maxReportedBytes ||
+						progress.ProcessedMediaSeconds > maxMediaSeconds ||
+						progress.Percent > maxReportedPercent {
+						lastProgressAt = time.Now()
+						if progress.DownloadedBytes > maxReportedBytes {
+							maxReportedBytes = progress.DownloadedBytes
+						}
+						if progress.ProcessedMediaSeconds > maxMediaSeconds {
+							maxMediaSeconds = progress.ProcessedMediaSeconds
+						}
+						if progress.Percent > maxReportedPercent {
+							maxReportedPercent = progress.Percent
+						}
+					}
+					progressMu.Unlock()
 					progress.Status = progressStatusFallbackDownloading
 				}
 				if handler != nil {
@@ -318,28 +381,31 @@ func runMonitoredHLSFallback(
 	for {
 		select {
 		case current := <-outcomes:
-			return current.result, current.err, fallbackMonitorStopNone
+			return finish(current.result, current.err, fallbackMonitorStopNone)
 
 		case <-ctx.Done():
 			cancel()
 			current := <-outcomes
-			return current.result, current.err, fallbackMonitorStopNone
+			return finish(current.result, current.err, fallbackMonitorStopNone)
 
 		case <-downloaderStartedSignal:
 			reportDownloading()
 
 		case now := <-ticker.C:
 			currentBytes, sizeErr := temporaryDownloadSize(tempDir)
-			if sizeErr == nil && currentBytes != lastBytes {
-				reportDownloading()
-
+			if sizeErr != nil {
+				scanErrorCount++
+				lastScanError = sizeErr
+			} else if currentBytes != lastBytes {
 				elapsed := now.Sub(lastSample).Seconds()
 				speed := 0.0
-				if currentBytes > lastBytes && elapsed > 0 {
-					speed = float64(currentBytes-lastBytes) / elapsed
+				if currentBytes > lastBytes {
+					reportDownloading()
+					lastGrowth = now
+					if elapsed > 0 {
+						speed = float64(currentBytes-lastBytes) / elapsed
+					}
 				}
-
-				lastGrowth = now
 				lastBytes = currentBytes
 				if handler != nil {
 					handler(DownloadProgress{
@@ -351,20 +417,28 @@ func runMonitoredHLSFallback(
 			}
 			lastSample = now
 
+			// Read after the filesystem poll, just before the stall decision.
+			// FFmpeg progress and file growth are independent liveness signals.
+			progressMu.Lock()
+			if lastProgressAt.After(lastGrowth) {
+				lastGrowth = lastProgressAt
+			}
+			progressMu.Unlock()
+
 			if !downloaderStarted &&
 				ffmpegFallbackPreparationTimeout > 0 &&
 				now.Sub(startedAt) >= ffmpegFallbackPreparationTimeout {
 				cancel()
 				current := <-outcomes
-				return current.result, current.err, fallbackMonitorStopPreparationTimeout
+				return finish(current.result, current.err, fallbackMonitorStopPreparationTimeout)
 			}
 
 			if downloaderStarted &&
-				ffmpegFallbackStallTimeout > 0 &&
-				now.Sub(lastGrowth) >= ffmpegFallbackStallTimeout {
+				stallTimeout > 0 &&
+				now.Sub(lastGrowth) >= stallTimeout {
 				cancel()
 				current := <-outcomes
-				return current.result, current.err, fallbackMonitorStopDownloadStalled
+				return finish(current.result, current.err, fallbackMonitorStopDownloadStalled)
 			}
 		}
 	}

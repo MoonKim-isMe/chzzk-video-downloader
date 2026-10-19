@@ -345,7 +345,8 @@ func TestDownloadHistoryPersistenceAndInterruptedRecovery(t *testing.T) {
 	if len(tasks) != 2 {
 		t.Fatalf("expected 2 tasks, got %d", len(tasks))
 	}
-	if tasks[0].Status != downloader.TaskStatusCancelled ||
+	if tasks[0].Status != downloader.TaskStatusFailed ||
+		tasks[0].ErrorCode != downloader.DownloadFailureInterrupted ||
 		tasks[0].FinishedAt == "" ||
 		tasks[0].Error == "" ||
 		!tasks[0].Progress.TotalBytesEstimated {

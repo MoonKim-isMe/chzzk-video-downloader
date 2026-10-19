@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -244,6 +245,43 @@ func TestQueueFailureStartsNextTask(t *testing.T) {
 	queue.Stop()
 }
 
+func TestQueueUnexpectedContextCancellationRetainsFailureLog(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	executor := newControlledExecutor()
+	failedEvents := make(chan DownloadTask, 1)
+	queue := NewQueue(parent, executor, func(task DownloadTask) {
+		if task.Status == TaskStatusFailed {
+			select {
+			case failedEvents <- task:
+			default:
+			}
+		}
+	}, 1)
+	request := queueRequest(4501)
+	request.OutputDir = t.TempDir()
+	task, err := queue.Enqueue(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStartedCount(t, executor, 1)
+	cancel()
+
+	select {
+	case failed := <-failedEvents:
+		if failed.TaskID != task.TaskID || failed.ErrorCode != DownloadFailureInterrupted || failed.LogPath == "" {
+			t.Fatalf("unexpected interrupted task: %#v", failed)
+		}
+		if _, err := os.Stat(failed.LogPath); err != nil {
+			t.Fatalf("interruption log missing: %v", err)
+		}
+		if !strings.Contains(failed.Error, "중단") {
+			t.Fatalf("interruption reason missing: %q", failed.Error)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("interrupted task was not reported as failed")
+	}
+}
+
 func TestQueueRunningCancellationWinsCompletionRace(t *testing.T) {
 	executor := newControlledExecutor()
 	request := queueRequest(5001)
@@ -283,18 +321,25 @@ func TestQueueCancelRunningTaskStartsNext(t *testing.T) {
 	queue.Stop()
 }
 
-func TestQueueStopCancelsQueuedAndRunningTasks(t *testing.T) {
+func TestQueueStopRetainsQueuedAndRunningFailures(t *testing.T) {
 	executor := newControlledExecutor()
 	queue := NewQueue(context.Background(), executor, nil, 1)
 
-	first, _ := queue.Enqueue(queueRequest(7001))
+	firstRequest := queueRequest(7001)
+	firstRequest.OutputDir = t.TempDir()
+	secondRequest := queueRequest(7002)
+	secondRequest.OutputDir = t.TempDir()
+	first, _ := queue.Enqueue(firstRequest)
 	waitForStartedCount(t, executor, 1)
-	second, _ := queue.Enqueue(queueRequest(7002))
+	second, _ := queue.Enqueue(secondRequest)
 
 	queue.Stop()
 
-	waitForTaskStatus(t, queue, first.TaskID, TaskStatusCancelled)
-	queued := waitForTaskStatus(t, queue, second.TaskID, TaskStatusCancelled)
+	running := waitForTaskStatus(t, queue, first.TaskID, TaskStatusFailed)
+	queued := waitForTaskStatus(t, queue, second.TaskID, TaskStatusFailed)
+	if running.ErrorCode != DownloadFailureInterrupted || queued.ErrorCode != DownloadFailureInterrupted {
+		t.Fatalf("shutdown must retain interrupted tasks: running=%#v queued=%#v", running, queued)
+	}
 	if queued.FinishedAt == "" {
 		t.Fatal("stopped queued task should have finishedAt")
 	}

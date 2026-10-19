@@ -1058,7 +1058,25 @@ select {
 }
 
 .download-task-progress .ant-progress {
+  display: flex;
+  align-items: center;
+  width: 100%;
   margin: 0;
+}
+
+.download-task-progress .ant-progress-outer {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+
+.download-task-progress .ant-progress-text {
+  flex: 0 0 56px;
+  width: 56px;
+  min-width: 56px;
+  margin-inline-start: 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .download-task-metrics {
