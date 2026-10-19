@@ -205,7 +205,7 @@ function SettingsDrawer({
             <Title level={5} className="!mb-1 !mt-1">
               화면
             </Title>
-            <Paragraph className="app-muted !mb-4 !text-xs">
+            <Paragraph className="app-muted !mb-4 !text-[13px]">
               사용 환경에 맞게 앱의 밝기를 선택할 수 있습니다.
             </Paragraph>
 
@@ -225,7 +225,7 @@ function SettingsDrawer({
             <Title level={5} className="!mb-1 !mt-1">
               다운로드
             </Title>
-            <Paragraph className="app-muted !mb-5 !text-xs">
+            <Paragraph className="app-muted !mb-5 !text-[13px]">
               새로 시작되는 작업부터 아래 옵션을 사용합니다
             </Paragraph>
 
@@ -336,7 +336,7 @@ function SettingsDrawer({
             <Title level={5} className="!mb-1 !mt-1">
               업데이트
             </Title>
-            <Paragraph className="app-muted !mb-4 !text-xs">
+            <Paragraph className="app-muted !mb-4 !text-[13px]">
               GitHub Releases에서 새 버전이 있는지 확인합니다.
             </Paragraph>
             <Button loading={checkingForUpdates} onClick={onCheckForUpdates}>

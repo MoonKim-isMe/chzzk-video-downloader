@@ -76,6 +76,14 @@ func temporaryRootForRequest(request DownloadRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if request.Segment != nil {
+		outputDir, err := normalizeOutputDir(request.OutputDir)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(outputDir, temporaryDownloadDirectoryName,
+			"clip-"+strconv.FormatInt(videoNo, 10)+"-"+segmentFileIdentity(request.Segment)), nil
+	}
 	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
 		outputDir, err := normalizeOutputDir(request.OutputDir)
 		if err != nil {
@@ -115,7 +123,29 @@ func cleanupTemporaryDownloadRequest(request DownloadRequest) error {
 	if err != nil {
 		return err
 	}
+	if request.Segment != nil {
+		root, err := temporaryRootForRequest(request)
+		if err != nil {
+			return err
+		}
+		return os.RemoveAll(root)
+	}
 	return CleanupTemporaryDownloadType(request.OutputDir, videoNo, request.DownloadType)
+}
+
+// CleanupTemporaryDownloadSegment only removes the selected clip's temporary
+// files, never the entire VOD root shared by other running clips.
+func CleanupTemporaryDownloadSegment(outputDir string, videoNo int64, segment *DownloadSegment) error {
+	if segment == nil || videoNo <= 0 {
+		return fmt.Errorf("정리할 구간 정보가 올바르지 않습니다")
+	}
+	request := DownloadRequest{
+		URL: fmt.Sprintf("https://chzzk.naver.com/video/%d", videoNo),
+		OutputDir: outputDir, Segment: segment,
+	}
+	root, err := temporaryRootForRequest(request)
+	if err != nil { return err }
+	return os.RemoveAll(root)
 }
 
 func CleanupTemporaryDownloadType(outputDir string, videoNo int64, downloadType DownloadType) error {

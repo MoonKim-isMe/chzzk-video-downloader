@@ -130,7 +130,7 @@ function AuthenticationDrawer({
             <section className="settings-section">
               <Text className="app-eyebrow">AUTHENTICATION</Text>
               <Title level={5} className="!mb-1 !mt-1">인증파일 사용</Title>
-              <Paragraph className="app-muted !mb-5 !text-xs">
+              <Paragraph className="app-muted !mb-5 !text-[13px]">
                 로그인이 필요한 영상에 사용할 인증파일(cookies.txt)을 선택합니다.
               </Paragraph>
 
@@ -189,7 +189,7 @@ function AuthenticationDrawer({
                       <li>아래에서 생성한 <code>cookies.txt</code> 파일을 선택하면 됩니다.</li>
                     </ol>
                     <Button
-                      className="authentication-help-chip !mt-3 !h-7 !rounded-full !px-3 !text-xs !font-semibold !shadow-none"
+                      className="authentication-help-chip !mt-3 !h-7 !rounded-full !px-3 !text-[13px] !font-semibold !shadow-none"
                       onClick={() => setHelpOpen(true)}
                     >
                       Cookies.txt 생성방법이 어려운 분은 여기를 눌러주세요

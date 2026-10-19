@@ -44,6 +44,7 @@ interface BackendApp {
   CheckForUpdates(): Promise<UpdateInfo>;
   OpenReleasePage(rawURL: string): Promise<void>;
   StartDownload(request: StartDownloadRequest): Promise<DownloadTask>;
+  StartPreparedSegment(taskId: string): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
   RecoverDownload(taskId: string): Promise<DownloadTask>;
@@ -131,6 +132,8 @@ export const checkForUpdates = () => app().CheckForUpdates();
 export const openReleasePage = (rawURL: string) => app().OpenReleasePage(rawURL);
 
 export const startDownload = (request: StartDownloadRequest) => app().StartDownload(request);
+
+export const startPreparedSegment = (taskId: string) => app().StartPreparedSegment(taskId);
 
 export const getDownloadTasks = () => app().GetDownloadTasks();
 

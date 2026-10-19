@@ -22,6 +22,7 @@ var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
 
 type DownloadRequest struct {
 	DownloadType            DownloadType          `json:"downloadType,omitempty"`
+	Segment                 *DownloadSegment      `json:"segment,omitempty"`
 	URL                     string                `json:"url"`
 	OutputDir               string                `json:"outputDir"`
 	FormatSelector          string                `json:"formatSelector,omitempty"`
@@ -89,6 +90,13 @@ func buildDownloadCommandWithTempDir(
 		formatSelector = "bestaudio/best"
 	} else if formatSelector == "" {
 		formatSelector = DefaultFormatSelector
+	}
+	if request.Segment != nil && downloadType == DownloadTypeVideo &&
+		formatSelector == DefaultFormatSelector {
+		// CHZZK's HLS offers muxed A/V streams. Prefer one input for clip
+		// extraction, because merging separate A/V sections is less reliable.
+		// Keep the legacy formats as a fallback when no muxed stream exists.
+		formatSelector = "b[vcodec!=none][acodec!=none]/" + DefaultFormatSelector
 	}
 	outputTemplate := strings.TrimSpace(request.OutputTemplate)
 	if outputTemplate == "" {
@@ -160,6 +168,13 @@ func buildDownloadCommandWithTempDir(
 			fallbackPath += string(os.PathListSeparator) + currentPath
 		}
 		env = append(env, "PATH="+fallbackPath)
+	}
+	if request.Segment != nil {
+		start, end := ytDLPSectionRange(request.Segment)
+		args = append(args, "--download-sections", "*"+start+"-"+end)
+		if downloadType == DownloadTypeVideo {
+			args = append(args, "--force-keyframes-at-cuts")
+		}
 	}
 	if downloadType == DownloadTypeAudio {
 		args = append(args,

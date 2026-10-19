@@ -8,6 +8,7 @@ import (
 )
 
 func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
+	title, position, numbered, start, end, fileName := segmentTaskDatabaseValues(task.Segment)
 	_, err := d.db.Exec(`INSERT INTO download_tasks (
 		task_id,
 		video_no,
@@ -17,6 +18,12 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		url,
 		output_dir,
 		download_type,
+		segment_title,
+		segment_position,
+		segment_number_file_name,
+		segment_start,
+		segment_end,
+		segment_file_name,
 		status,
 		progress_status,
 		progress_percent,
@@ -33,7 +40,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		started_at,
 		finished_at,
 		updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(task_id) DO UPDATE SET
 		video_no = excluded.video_no,
 		video_title = excluded.video_title,
@@ -42,6 +49,12 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		url = excluded.url,
 		output_dir = excluded.output_dir,
 		download_type = excluded.download_type,
+		segment_title = excluded.segment_title,
+		segment_position = excluded.segment_position,
+		segment_number_file_name = excluded.segment_number_file_name,
+		segment_start = excluded.segment_start,
+		segment_end = excluded.segment_end,
+		segment_file_name = excluded.segment_file_name,
 		status = excluded.status,
 		progress_status = excluded.progress_status,
 		progress_percent = excluded.progress_percent,
@@ -66,6 +79,12 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task.URL,
 		task.OutputDir,
 		string(downloader.NormalizeDownloadType(task.DownloadType)),
+		title,
+		position,
+		numbered,
+		start,
+		end,
+		fileName,
 		string(task.Status),
 		task.Progress.Status,
 		task.Progress.Percent,
@@ -110,6 +129,12 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		url,
 		output_dir,
 		download_type,
+		segment_title,
+		segment_position,
+		segment_number_file_name,
+		segment_start,
+		segment_end,
+		segment_file_name,
 		status,
 		progress_status,
 		progress_percent,
@@ -137,6 +162,9 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		var task downloader.DownloadTask
 		var status string
 		var estimated int
+		var segmentTitle, segmentFileName string
+		var segmentPosition, segmentNumberFileName int
+		var segmentStart, segmentEnd int64
 		if err := rows.Scan(
 			&task.TaskID,
 			&task.VideoNo,
@@ -146,6 +174,12 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			&task.URL,
 			&task.OutputDir,
 			&task.DownloadType,
+			&segmentTitle,
+			&segmentPosition,
+			&segmentNumberFileName,
+			&segmentStart,
+			&segmentEnd,
+			&segmentFileName,
 			&status,
 			&task.Progress.Status,
 			&task.Progress.Percent,
@@ -165,6 +199,13 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			return nil, fmt.Errorf("다운로드 이력 데이터를 읽을 수 없습니다: %w", err)
 		}
 
+		if segmentPosition > 0 {
+			numberFileName := segmentNumberFileName != 0
+			task.Segment = &downloader.DownloadSegment{Title: segmentTitle, Position: segmentPosition, NumberFileName: &numberFileName, StartSeconds: segmentStart, FileName: segmentFileName}
+			if segmentEnd >= 0 {
+				task.Segment.EndSeconds = &segmentEnd
+			}
+		}
 		task.Status = downloader.TaskStatus(status)
 		if !validTaskStatus(task.Status) {
 			return nil, fmt.Errorf("저장된 다운로드 상태가 올바르지 않습니다: %s", status)
@@ -207,9 +248,25 @@ func (d *Database) RecoverInterruptedDownloads() error {
 	return nil
 }
 
+func segmentTaskDatabaseValues(segment *downloader.DownloadSegment) (string, int, int, int64, int64, string) {
+	if segment == nil {
+		return "", 0, 1, 0, -1, ""
+	}
+	numberFileName := 1
+	if segment.NumberFileName != nil && !*segment.NumberFileName {
+		numberFileName = 0
+	}
+	end := int64(-1)
+	if segment.EndSeconds != nil {
+		end = *segment.EndSeconds
+	}
+	return segment.Title, segment.Position, numberFileName, segment.StartSeconds, end, segment.FileName
+}
+
 func validTaskStatus(status downloader.TaskStatus) bool {
 	switch status {
-	case downloader.TaskStatusQueued,
+	case downloader.TaskStatusPrepared,
+		downloader.TaskStatusQueued,
 		downloader.TaskStatusRunning,
 		downloader.TaskStatusCompleted,
 		downloader.TaskStatusFailed,

@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"os"
+	"math"
 	"path/filepath"
 	"strings"
 )
@@ -13,6 +14,7 @@ type TaskStatus string
 
 const (
 	TaskStatusQueued    TaskStatus = "queued"
+	TaskStatusPrepared  TaskStatus = "prepared"
 	TaskStatusRunning   TaskStatus = "running"
 	TaskStatusCompleted TaskStatus = "completed"
 	TaskStatusFailed    TaskStatus = "failed"
@@ -33,8 +35,34 @@ func NormalizeDownloadType(value DownloadType) DownloadType {
 	return value
 }
 
+// DownloadSegment describes an inclusive second-based interval selected by the user.
+// A nil EndSeconds means the final second of the VOD.
+// FileName is server-assigned and is never trusted from a frontend request.
+type DownloadSegment struct {
+	Title        string `json:"title"`
+	Position     int    `json:"position"`
+	NumberFileName *bool `json:"numberFileName,omitempty"`
+	StartSeconds int64  `json:"startSeconds"`
+	EndSeconds   *int64 `json:"endSeconds,omitempty"`
+	FileName     string `json:"fileName,omitempty"`
+}
+
+func (s DownloadSegment) Validate() error {
+	if strings.TrimSpace(s.Title) == "" {
+		return fmt.Errorf("구간 제목이 필요합니다")
+	}
+	if s.Position <= 0 {
+		return fmt.Errorf("구간 순서는 1 이상이어야 합니다")
+	}
+	if s.StartSeconds < 0 || s.StartSeconds >= math.MaxInt64 || s.EndSeconds != nil && (*s.EndSeconds < s.StartSeconds || *s.EndSeconds >= math.MaxInt64) {
+		return fmt.Errorf("구간의 시작·종료 시간이 올바르지 않습니다")
+	}
+	return nil
+}
+
 type StartDownloadRequest struct {
 	DownloadType            DownloadType          `json:"downloadType,omitempty"`
+	Segment                 *DownloadSegment      `json:"segment,omitempty"`
 	VideoNo                 int64                 `json:"videoNo"`
 	VideoTitle              string                `json:"videoTitle"`
 	ChannelName             string                `json:"channelName"`
@@ -51,6 +79,7 @@ type StartDownloadRequest struct {
 
 type DownloadTask struct {
 	DownloadType      DownloadType     `json:"downloadType"`
+	Segment           *DownloadSegment `json:"segment,omitempty"`
 	TaskID            string           `json:"taskId"`
 	VideoNo           int64            `json:"videoNo"`
 	VideoTitle        string           `json:"videoTitle"`
@@ -73,6 +102,11 @@ func (r StartDownloadRequest) Validate() error {
 	if kind := NormalizeDownloadType(r.DownloadType); kind != DownloadTypeVideo && kind != DownloadTypeAudio {
 		return fmt.Errorf("지원하지 않는 다운로드 유형입니다: %s", kind)
 	}
+	if r.Segment != nil {
+		if err := r.Segment.Validate(); err != nil {
+			return err
+		}
+	}
 	if r.VideoNo <= 0 {
 		return fmt.Errorf("유효한 VOD 번호가 필요합니다")
 	}
@@ -91,6 +125,7 @@ func (r StartDownloadRequest) Validate() error {
 func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 	return DownloadRequest{
 		DownloadType: NormalizeDownloadType(r.DownloadType),
+		Segment:      r.Segment,
 		URL:            r.URL,
 		OutputDir:      r.OutputDir,
 		FormatSelector: r.FormatSelector,

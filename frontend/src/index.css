@@ -152,7 +152,7 @@ select {
   border-radius: 999px;
   background: color-mix(in srgb, var(--app-primary) 12%, transparent);
   color: var(--app-primary);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -243,7 +243,7 @@ select {
   background: transparent !important;
   color: var(--app-text-secondary) !important;
   box-shadow: none !important;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -428,7 +428,7 @@ select {
   border-radius: 999px;
   background: var(--app-primary-soft);
   color: var(--app-primary);
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .channel-sidebar-body {
@@ -610,12 +610,12 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
 }
 
 .video-card-metrics .ant-typography {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
 }
 
@@ -643,7 +643,7 @@ select {
   border-radius: 999px;
   background: var(--app-surface-soft);
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
   white-space: nowrap;
 }
@@ -887,12 +887,12 @@ select {
   border-radius: 999px;
   background: var(--app-surface-soft);
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .download-summary strong {
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .download-capability-wrap {
@@ -982,7 +982,7 @@ select {
   border-radius: 999px;
   background: var(--app-surface-soft);
   color: var(--app-text-secondary);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -1099,7 +1099,7 @@ select {
   gap: 4px 14px;
   margin-top: 2px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
 }
 
@@ -1107,7 +1107,7 @@ select {
 .download-task-completed-meta {
   margin-top: 10px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
 }
 
@@ -1130,7 +1130,7 @@ select {
   margin-top: 8px;
   overflow: hidden;
   color: #f87171;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 16px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1248,7 +1248,7 @@ select {
 
 .app-eyebrow {
   color: var(--app-primary) !important;
-  font-size: 10px !important;
+  font-size: 13px !important;
   font-weight: 800 !important;
   letter-spacing: 0.14em;
 }
@@ -1278,7 +1278,7 @@ select {
   background: var(--app-surface-soft) !important;
   color: var(--app-text-secondary) !important;
   box-shadow: none;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
   transition:
@@ -1440,7 +1440,7 @@ select {
 .video-repair-compatibility-alert .ant-alert-message {
   margin: 0 !important;
   color: var(--app-text-secondary) !important;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 17px;
   white-space: nowrap;
 }
@@ -1471,7 +1471,7 @@ select {
   display: block;
   overflow: hidden;
   color: var(--app-text-muted) !important;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1537,7 +1537,7 @@ select {
   border-radius: 11px;
   background: color-mix(in srgb, var(--app-surface-strong) 55%, transparent);
   color: var(--app-text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 19px;
 }
 
@@ -1563,7 +1563,7 @@ select {
 }
 
 .video-repair-deep-cpu-description {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 17px;
 }
 
@@ -1583,7 +1583,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .video-repair-inspection-progress-heading > .app-muted {
@@ -1632,7 +1632,7 @@ select {
 
 .video-repair-format-list {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 18px;
 }
 
@@ -1679,14 +1679,14 @@ select {
 }
 
 .video-repair-progress-time {
-  font-size: 10px;
+  font-size: 13px;
   line-height: 15px;
   white-space: nowrap;
 }
 
 .video-repair-progress-stage {
   padding-top: 2px;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 17px;
   text-align: right;
 }
@@ -1718,7 +1718,7 @@ select {
 .video-repair-inspection-history-item .app-muted {
   min-width: 0;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1748,14 +1748,14 @@ select {
 
 .video-repair-result-stat > span {
   color: var(--app-text-muted);
-  font-size: 10px;
+  font-size: 13px;
   line-height: 15px;
 }
 
 .video-repair-result-stat > strong {
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1784,7 +1784,7 @@ select {
 .video-repair-detail-collapse .ant-collapse-header {
   align-items: center !important;
   color: var(--app-text) !important;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -1805,14 +1805,14 @@ select {
   gap: 6px;
   margin-bottom: 8px;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .video-repair-detail-note {
   margin-top: 3px;
   color: var(--app-text-muted) !important;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 17px;
 }
 
@@ -1997,4 +1997,277 @@ select {
   margin-inline-end: 8px !important;
   font-size: 13px !important;
   line-height: 1 !important;
+}
+
+/* Compact segment editor, with a distinct header and single-line rows. */
+.segment-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  margin: 16px 2px 8px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-soft);
+}
+
+.segment-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--app-border);
+  box-shadow: inset 3px 0 0 var(--app-primary);
+  background: linear-gradient(105deg, var(--app-primary-soft), var(--app-surface-strong) 78%);
+}
+
+.segment-editor-heading-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.segment-editor-heading-import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 9px 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 28%, var(--app-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--app-surface-soft) 72%, var(--app-primary-soft));
+}
+
+.segment-editor-heading-import-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.segment-editor-heading-import-label .ant-typography {
+  font-size: 14px;
+}
+
+.segment-editor-heading-import .ant-btn {
+  font-weight: 700;
+}
+
+.segment-editor-error {
+  padding: 12px 16px 0;
+}
+
+.segment-editor-list-header,
+.segment-editor-footer-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.segment-editor-list-header {
+  padding: 14px 16px 8px;
+}
+
+.segment-editor-list-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.segment-editor-empty {
+  display: block;
+  padding: 4px 16px 14px;
+}
+
+.segment-editor-list-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0 16px 12px;
+}
+
+.segment-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 580px;
+}
+
+.segment-editor-grid {
+  display: grid;
+  grid-template-columns: 52px minmax(160px, 1fr) minmax(88px, 116px) minmax(88px, 116px) 43px;
+  align-items: center;
+  gap: 8px;
+}
+
+.segment-editor-grid-heading {
+  padding: 0 10px 5px;
+  border-bottom: 1px solid var(--app-border-soft);
+}
+
+.segment-editor-row {
+  padding: 6px 10px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 9px;
+  background: var(--app-surface);
+}
+
+.segment-editor-row.is-unselected {
+  opacity: 0.68;
+}
+
+.segment-editor-row-select {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.segment-editor-row .ant-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.segment-editor-row .ant-input:nth-of-type(n + 2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.segment-editor-row-error {
+  grid-column: 2 / -1;
+}
+
+.segment-editor-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface-strong) 72%, var(--app-surface-soft));
+}
+
+.segment-editor-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .segment-editor-heading {
+    padding: 12px 14px;
+  }
+  .segment-editor-heading-import {
+    width: 100%;
+  }
+  .segment-editor-error {
+    padding: 12px 12px 0;
+  }
+  .segment-editor-list-header {
+    padding: 12px 12px 8px;
+  }
+  .segment-editor-list-scroll {
+    padding: 0 12px 12px;
+  }
+  .segment-editor-footer {
+    padding: 12px;
+  }
+}
+
+
+/* Shared typography floor: small annotations remain readable in all themes. */
+.ant-tag,
+.ant-tooltip-inner,
+.ant-badge-count {
+  font-size: 13px;
+}
+
+.segment-editor {
+  font-size: 15px;
+}
+.segment-editor-heading-content .ant-typography.ant-typography-secondary,
+.segment-editor-footer > .ant-typography,
+.segment-editor-heading .ant-tag {
+  font-size: 13px;
+}
+.segment-editor-list-title > .ant-typography {
+  font-size: 15px;
+}
+.segment-editor-grid-heading .ant-typography {
+  font-size: 14px !important;
+  font-weight: 600;
+}
+.segment-editor-grid {
+  grid-template-columns: 52px minmax(180px, 1fr) 172px 172px 43px;
+}
+.segment-editor-list {
+  min-width: 710px;
+}
+.segment-editor-row .ant-input,
+.segment-editor-row .ant-input-affix-wrapper,
+.segment-editor-import-modal .ant-input {
+  font-size: 15px;
+}
+.segment-editor-row .ant-input-affix-wrapper {
+  min-width: 0;
+  padding-inline: 7px 3px;
+}
+.segment-editor-time-input .ant-input-suffix {
+  margin-inline-start: 2px;
+}
+.segment-editor-time-action {
+  flex-shrink: 0;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.segment-editor-time-action:hover:not(:disabled),
+.segment-editor-time-action:focus-visible {
+  background: color-mix(in srgb, var(--app-primary) 20%, transparent);
+}
+.segment-editor-time-action:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 1px;
+}
+.segment-editor-time-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.segment-editor-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+.segment-editor-import-modal .ant-modal-title {
+  font-size: 16px;
+}
+.segment-editor-import-modal .ant-tag {
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .segment-editor-heading {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 440px) {
+  .segment-editor-heading-import .ant-btn {
+    width: 100%;
+  }
 }

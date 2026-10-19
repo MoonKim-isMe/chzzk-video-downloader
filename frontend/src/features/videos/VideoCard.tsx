@@ -25,9 +25,10 @@ interface VideoCardProps {
   videoDownloadStatus?: DownloadTaskStatus;
   audioDownloadStatus?: DownloadTaskStatus;
   onQueue: (video: Video, downloadType?: DownloadType) => Promise<void>;
+  onOpenSegments: (video: Video) => void;
 }
 
-function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue }: VideoCardProps) {
+function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue, onOpenSegments }: VideoCardProps) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const active = videoDownloadStatus === 'queued' || videoDownloadStatus === 'running';
   const audioActive = audioDownloadStatus === 'queued' || audioDownloadStatus === 'running';
@@ -56,7 +57,7 @@ function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue }:
           />
         ) : (
           <div className="video-thumbnail-placeholder">
-            <Text className="!text-center !text-xs !text-slate-500">
+            <Text className="!text-center !text-[13px] !text-slate-500">
               썸네일이 없거나 불러오지 못했습니다
             </Text>
           </div>
@@ -83,9 +84,9 @@ function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue }:
           </Title>
 
           {video.channel.channelName && (
-            <Text className="block !text-xs !text-slate-400">{video.channel.channelName}</Text>
+            <Text className="block !text-[13px] !text-slate-400">{video.channel.channelName}</Text>
           )}
-          <Text className="mt-1 block !text-xs !text-slate-500">
+          <Text className="mt-1 block !text-[13px] !text-slate-500">
             {video.publishDate || '게시일 정보 없음'}
           </Text>
         </div>
@@ -109,6 +110,7 @@ function VideoCard({ video, videoDownloadStatus, audioDownloadStatus, onQueue }:
             videoStatus={videoDownloadStatus}
             audioStatus={audioDownloadStatus}
             onQueue={(downloadType) => onQueue(video, downloadType)}
+            onOpenSegments={() => onOpenSegments(video)}
           />
         </div>
       </div>

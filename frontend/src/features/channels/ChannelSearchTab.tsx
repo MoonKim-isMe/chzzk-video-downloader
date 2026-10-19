@@ -81,7 +81,7 @@ function ChannelSearchTab({
         {searched && !loading && (
           <div className="channel-result-summary">
             <Text strong>검색 결과</Text>
-            <Text className="app-muted !text-xs">{uniqueChannels.length}개</Text>
+            <Text className="app-muted !text-[13px]">{uniqueChannels.length}개</Text>
           </div>
         )}
       </div>

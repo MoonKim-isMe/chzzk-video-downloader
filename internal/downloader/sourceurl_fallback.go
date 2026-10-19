@@ -229,7 +229,7 @@ func sourceURLFallbackOutputFormat(request DownloadRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if format == "webm" {
+	if format == "webm" && request.Segment == nil {
 		return "", fmt.Errorf("HLS 대체 다운로드는 WebM 무손실 변환을 지원하지 않습니다")
 	}
 	if format == "" {
@@ -238,7 +238,7 @@ func sourceURLFallbackOutputFormat(request DownloadRequest) (string, error) {
 	return format, nil
 }
 
-func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequest, stream sourceURLHLSStream, outputPath string) (CommandSpec, error) {
+func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequest, stream sourceURLHLSStream, outputPath string, videoEncoder ...string) (CommandSpec, error) {
 	if !toolchain.FFmpeg.Available {
 		return CommandSpec{}, fmt.Errorf("FFmpeg를 사용할 수 없습니다")
 	}
@@ -251,11 +251,21 @@ func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequ
 	}
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin", "-n",
+	}
+	if request.Segment != nil {
+		args = append(args, "-ss", ffmpegTimestamp(request.Segment.StartSeconds))
+	}
+	args = append(args,
 		// The input is a local manifest; HTTP-only -headers/-user_agent options
 		// would fail at open time with "Option not found" on the file protocol.
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
 		"-seg_max_retry", "3",
 		"-i", stream.PlaylistPath,
+	)
+	if request.Segment != nil {
+		if end, finite := segmentEndExclusive(request.Segment); finite {
+			args = append(args, "-t", strconv.FormatInt(end-request.Segment.StartSeconds, 10))
+		}
 	}
 	if outputFormat == "mp3" {
 		if !strings.EqualFold(filepath.Ext(outputPath), ".mp3") {
@@ -265,7 +275,18 @@ func buildSourceURLFFmpegCommand(toolchain ToolchainStatus, request DownloadRequ
 		// video-only result. Match yt-dlp's best-quality MP3 setting.
 		args = append(args, "-map", "0:a:0", "-vn", "-codec:a", "libmp3lame", "-q:a", "0")
 	} else {
-		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy")
+		args = append(args, "-map", "0:v:0", "-map", "0:a:0?")
+		// Match the existing full-VOD fallback on the first attempt.
+		// Re-encoding is used only after stream copying fails.
+		if request.Segment != nil && len(videoEncoder) > 0 && videoEncoder[0] != "" {
+			options, encodeErr := segmentVideoEncodingArgs(outputFormat, videoEncoder[0])
+			if encodeErr != nil {
+				return CommandSpec{}, encodeErr
+			}
+			args = append(args, options...)
+		} else {
+			args = append(args, "-c", "copy")
+		}
 	}
 	args = append(args, "-stats_period", "0.5", "-progress", "pipe:1", "-nostats")
 	if outputFormat == "mp4" {
@@ -310,6 +331,9 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	// This folder is independent of .chzzk-temp so the usual failure cleanup
 	// cannot discard segments already downloaded in a previous attempt.
 	cacheDir, err := sourceURLSegmentCacheDirForType(request.OutputDir, source.VideoNo, source.Height, manifestDir, request.DownloadType)
+	if request.Segment != nil && err == nil {
+		cacheDir = filepath.Join(cacheDir, "clips", segmentFileIdentity(request.Segment))
+	}
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{
 			Kind: DownloadFailureSourceURLMissing,
@@ -334,7 +358,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			return "", fmt.Errorf("갱신된 HLS 스트림의 영상 또는 화질이 달라졌습니다")
 		}
 		return fresh.URL, nil
-	}, client, cacheDir, acceleration)
+	}, client, cacheDir, acceleration, request.Segment)
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{
 			Kind: DownloadFailureSourceURLMissing,
@@ -347,7 +371,11 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	if err != nil {
 		return original, CommandSpec{}, err
 	}
-	path := filepath.Join(tempDir, sourceURLFallbackFileName(source.Title, source.VideoNo, format))
+	outputName := sourceURLFallbackFileName(source.Title, source.VideoNo, format)
+	if request.Segment != nil {
+		outputName = request.Segment.FileName + "." + format
+	}
+	path := filepath.Join(tempDir, outputName)
 	spec, err := buildSourceURLFFmpegCommand(toolchain, request, source, path)
 	if err != nil {
 		return original, spec, err
@@ -362,7 +390,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 
 	var mu sync.Mutex
 	var latestPercent float64
-	run := func(runCtx context.Context, spec CommandSpec, progressHandler ProgressHandler, lineHandler LineHandler) (DownloadResult, error) {
+	runOnce := func(runCtx context.Context, spec CommandSpec, progressHandler ProgressHandler, lineHandler LineHandler) (DownloadResult, error) {
 		result := DownloadResult{}
 		var seconds float64
 		var processedBytes int64
@@ -392,8 +420,12 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			}
 			if strings.HasPrefix(line.Text, "progress=") {
 				pct := float64(0)
-				if source.Duration > 0 {
-					pct = seconds / float64(source.Duration) * 100
+				duration := float64(source.Duration)
+				if request.Segment != nil {
+					duration = segmentDuration(request.Segment, source.Duration)
+				}
+				if duration > 0 {
+					pct = seconds / duration * 100
 				}
 				if pct < 0 {
 					pct = 0
@@ -416,7 +448,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return result, err
 			}
-			return result, fmt.Errorf("FFmpeg HLS 대체 다운로드에 실패했습니다")
+			return result, fmt.Errorf("FFmpeg HLS 대체 다운로드에 실패했습니다: %w", sanitizeDownloadError(err))
 		}
 		stat, statErr := os.Stat(path)
 		if statErr != nil || stat.Size() == 0 {
@@ -428,6 +460,40 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 			progressHandler(result.LastProgress)
 		}
 		return result, nil
+	}
+	// Attempt the same lossless stream copy as whole-VOD downloads first.
+	// If FFmpeg cannot remux the selected section, remove its incomplete
+	// output and retry with a supported encoder using the same signed HLS proxy.
+	run := func(runCtx context.Context, copySpec CommandSpec, progressHandler ProgressHandler, lineHandler LineHandler) (DownloadResult, error) {
+		first, firstErr := runOnce(runCtx, copySpec, progressHandler, lineHandler)
+		if firstErr == nil || request.Segment == nil || NormalizeDownloadType(request.DownloadType) != DownloadTypeVideo || runCtx.Err() != nil {
+			return first, firstErr
+		}
+		encoder, probeErr := probeSegmentVideoEncoder(runCtx, toolchain.FFmpeg.Path, format)
+		if probeErr != nil {
+			return first, fmt.Errorf("영상 구간 스트림 복사에 실패했고 재인코딩 인코더도 찾지 못했습니다: %w (복사 오류: %v)", probeErr, firstErr)
+		}
+		retrySpec, commandErr := buildSourceURLFFmpegCommand(toolchain, request, source, path, encoder)
+		if commandErr != nil {
+			return first, fmt.Errorf("영상 구간 스트림 복사 후 재인코딩 준비 실패: %w", commandErr)
+		}
+		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+			return first, fmt.Errorf("구간 재시도를 위한 임시 파일 정리에 실패했습니다: %w", removeErr)
+		}
+		spec = retrySpec
+		retry, retryErr := runOnce(runCtx, retrySpec, progressHandler, lineHandler)
+		diagnostics := appendDiagnosticLine(first.DiagnosticLines, OutputLine{
+			Stream: StreamStderr,
+			Text: "영상 구간 스트림 복사 실패 후 " + encoder + " 인코더로 재시도합니다.",
+		})
+		for _, line := range retry.DiagnosticLines {
+			diagnostics = appendDiagnosticLine(diagnostics, line)
+		}
+		retry.DiagnosticLines = diagnostics
+		if retryErr != nil {
+			return retry, fmt.Errorf("구간 스트림 복사와 재인코딩이 모두 실패했습니다 (복사 오류: %v): %w", firstErr, retryErr)
+		}
+		return retry, nil
 	}
 	result, runErr, reason := runMonitoredHLSFallbackWithStallTimeout(ctx, tempDir, spec, func(p DownloadProgress) {
 		mu.Lock()

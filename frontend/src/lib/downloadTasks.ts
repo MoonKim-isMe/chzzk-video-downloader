@@ -1,6 +1,7 @@
 import type { DownloadTask } from '../types/download';
 
 const statusRank: Record<DownloadTask['status'], number> = {
+  prepared: -1,
   queued: 0,
   running: 1,
   completed: 2,

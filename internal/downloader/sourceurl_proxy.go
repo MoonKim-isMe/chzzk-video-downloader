@@ -66,7 +66,7 @@ func startSourceURLSegmentProxy(ctx context.Context, originalURL, manifestDir st
 	return startSourceURLSegmentProxyWithAcceleration(ctx, originalURL, manifestDir, renew, client, folder, 1)
 }
 
-func startSourceURLSegmentProxyWithAcceleration(ctx context.Context, originalURL, manifestDir string, renew func(context.Context) (string, error), client *http.Client, cacheDir string, acceleration int) (*sourceURLSegmentProxy, error) {
+func startSourceURLSegmentProxyWithAcceleration(ctx context.Context, originalURL, manifestDir string, renew func(context.Context) (string, error), client *http.Client, cacheDir string, acceleration int, segment ...*DownloadSegment) (*sourceURLSegmentProxy, error) {
 	acceleration, err := normalizeConcurrentFragments(acceleration)
 	if err != nil {
 		return nil, err
@@ -115,6 +115,9 @@ func startSourceURLSegmentProxyWithAcceleration(ctx context.Context, originalURL
 	if err := proxy.rewriteManifests(manifestDir); err != nil {
 		listener.Close()
 		return nil, err
+	}
+	if len(segment) > 0 && segment[0] != nil {
+		proxy.restrictPrefetchToSegment(manifestDir, segment[0])
 	}
 	go func() {
 		_ = proxy.server.Serve(listener)

@@ -669,14 +669,55 @@ func (a *App) StartDownload(request downloader.StartDownloadRequest) (downloader
 	if err := request.Validate(); err != nil {
 		return downloader.DownloadTask{}, err
 	}
-	if err := a.preflightDownloadVideoAccess(
-		request.VideoNo,
-		request.Authentication.CookiesFilePath,
-	); err != nil {
-		return downloader.DownloadTask{}, err
+	// One CHZZK preflight request per segment would flood the endpoint when
+	// importing a long chapter list. yt-dlp checks access during execution.
+	if request.Segment == nil {
+		if err := a.preflightDownloadVideoAccess(
+			request.VideoNo,
+			request.Authentication.CookiesFilePath,
+		); err != nil {
+			return downloader.DownloadTask{}, err
+		}
 	}
 
-	return a.ensureDownloadQueue().Enqueue(request)
+	queue := a.ensureDownloadQueue()
+	task, err := queue.Enqueue(request)
+	if err != nil || request.Segment == nil {
+		return task, err
+	}
+	return queue.ActivatePrepared(task.TaskID, request.DownloadRequest())
+}
+
+// StartPreparedSegment starts drafts created by the previous stage and restored
+// from SQLite without silently changing their reserved target directory.
+func (a *App) StartPreparedSegment(taskID string) (downloader.DownloadTask, error) {
+	task, ok := a.findDownloadTask(strings.TrimSpace(taskID))
+	if !ok || task.Status != downloader.TaskStatusPrepared || task.Segment == nil {
+		return downloader.DownloadTask{}, fmt.Errorf("시작할 준비된 구간 작업이 없습니다")
+	}
+	store, err := a.ensureSettingsStore()
+	if err != nil { return downloader.DownloadTask{}, err }
+	request, err := downloader.ApplySettings(downloader.StartDownloadRequest{
+		DownloadType: task.DownloadType,
+		VideoNo: task.VideoNo,
+		VideoTitle: task.VideoTitle,
+		ChannelName: task.ChannelName,
+		ThumbnailImageURL: task.ThumbnailImageURL,
+		URL: task.URL,
+		Segment: task.Segment,
+	}, store.Get())
+	if err != nil { return downloader.DownloadTask{}, err }
+	// Keep the path and filename selected when the draft was registered.
+	request.OutputDir = task.OutputDir
+	authStore, err := a.ensureAuthenticationStore()
+	if err != nil { return downloader.DownloadTask{}, err }
+	request, err = downloader.ApplyAuthenticationSettings(request, authStore.Get())
+	if err != nil { return downloader.DownloadTask{}, err }
+	if err := request.Validate(); err != nil { return downloader.DownloadTask{}, err }
+	if err := a.preflightDownloadVideoAccess(request.VideoNo, request.Authentication.CookiesFilePath); err != nil {
+		return downloader.DownloadTask{}, err
+	}
+	return a.ensureDownloadQueue().ActivatePrepared(task.TaskID, request.DownloadRequest())
 }
 
 func (a *App) preflightDownloadVideoAccess(videoNo int64, cookiesFilePath string) error {
@@ -733,12 +774,19 @@ func (a *App) RecoverDownload(taskID string) (downloader.DownloadTask, error) {
 		return downloader.DownloadTask{}, fmt.Errorf("임시 파일 정리로 복구할 수 있는 오류가 아닙니다")
 	}
 
-	if err := downloader.CleanupTemporaryDownloadType(task.OutputDir, task.VideoNo, task.DownloadType); err != nil {
-		return downloader.DownloadTask{}, err
+	var cleanupErr error
+	if task.Segment != nil {
+		cleanupErr = downloader.CleanupTemporaryDownloadSegment(task.OutputDir, task.VideoNo, task.Segment)
+	} else {
+		cleanupErr = downloader.CleanupTemporaryDownloadType(task.OutputDir, task.VideoNo, task.DownloadType)
+	}
+	if cleanupErr != nil {
+		return downloader.DownloadTask{}, cleanupErr
 	}
 
 	retried, err := a.StartDownload(downloader.StartDownloadRequest{
 		DownloadType:      task.DownloadType,
+		Segment:           task.Segment,
 		VideoNo:           task.VideoNo,
 		VideoTitle:        task.VideoTitle,
 		ChannelName:       task.ChannelName,
@@ -957,6 +1005,11 @@ func (a *App) ensureDownloadQueue() *downloader.Queue {
 			a.emitDownloadState,
 			maxConcurrent,
 		)
+		if database := a.persistenceDatabase(); database != nil {
+			if tasks, err := database.ListDownloadTasks(); err == nil {
+				a.downloadQueue.RestorePreparedTasks(tasks)
+			}
+		}
 	}
 	return a.downloadQueue
 }

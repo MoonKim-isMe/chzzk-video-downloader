@@ -7,6 +7,7 @@ interface DownloadButtonGroupProps {
   videoStatus?: DownloadTaskStatus;
   audioStatus?: DownloadTaskStatus;
   onQueue: (downloadType: DownloadType) => Promise<void>;
+  onOpenSegments: () => void;
   className?: string;
   size?: 'small' | 'middle' | 'large';
 }
@@ -15,6 +16,7 @@ function DownloadButtonGroup({
   videoStatus,
   audioStatus,
   onQueue,
+  onOpenSegments,
   className,
   size = 'middle',
 }: DownloadButtonGroupProps) {
@@ -58,7 +60,8 @@ function DownloadButtonGroup({
       <Dropdown
         trigger={['click']}
         menu={{
-          items: [{ key: 'segment', label: '구간 다운로드 (추후 지원)', disabled: true }],
+          items: [{ key: 'segment', label: '구간 다운로드' }],
+          onClick: ({ key }) => { if (key === 'segment') onOpenSegments(); },
         }}
       >
         <Button size={size} className="download-format-more" aria-label="구간 다운로드 옵션">

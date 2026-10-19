@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 )
@@ -27,6 +28,9 @@ func ApplySettings(request StartDownloadRequest, value appsettings.AppSettings) 
 	}
 
 	request.OutputDir = value.DownloadDir
+	if request.Segment != nil {
+		request.OutputDir = filepath.Join(value.DownloadDir, sanitizeSegmentName(request.VideoTitle))
+	}
 	request.FormatSelector = formatSelector
 	request.OutputFormat = string(value.OutputFormat)
 	if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
