@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   getSettings,
+  openDownloadDirectory,
   selectDownloadDirectory,
   updateSettings,
 } from '../../lib/backend';
@@ -76,6 +77,8 @@ function SettingsDrawer({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
+  const [openingDirectory, setOpeningDirectory] = useState(false);
+  const downloadDirectory = Form.useWatch('downloadDir', form);
   const persistedTheme = useRef<ThemeMode | undefined>(undefined);
 
   useEffect(() => {
@@ -131,6 +134,23 @@ function SettingsDrawer({
       message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSelectingDirectory(false);
+    }
+  };
+
+  const handleOpenDirectory = async () => {
+    const directory = form.getFieldValue('downloadDir')?.trim();
+    if (!directory) {
+      message.error('다운로드 폴더를 선택해 주세요.');
+      return;
+    }
+
+    setOpeningDirectory(true);
+    try {
+      await openDownloadDirectory(directory);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOpeningDirectory(false);
     }
   };
 
@@ -229,14 +249,26 @@ function SettingsDrawer({
                 readOnly
                 placeholder="다운로드 폴더를 선택해 주세요."
                 addonAfter={
-                  <Button
-                    type="text"
-                    size="small"
-                    loading={selectingDirectory}
-                    onClick={() => void handleSelectDirectory()}
-                  >
-                    폴더 선택
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="text"
+                      size="small"
+                      loading={selectingDirectory}
+                      disabled={openingDirectory}
+                      onClick={() => void handleSelectDirectory()}
+                    >
+                      폴더 선택
+                    </Button>
+                    <Button
+                      type="text"
+                      size="small"
+                      loading={openingDirectory}
+                      disabled={!downloadDirectory?.trim() || selectingDirectory}
+                      onClick={() => void handleOpenDirectory()}
+                    >
+                      폴더 열기
+                    </Button>
+                  </div>
                 }
               />
             </Form.Item>

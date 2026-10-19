@@ -811,21 +811,9 @@ func (a *App) OpenDownloadLog(taskID string) error {
 	return nil
 }
 
-func (a *App) OpenDownloadFolder(taskID string) error {
-	taskID = strings.TrimSpace(taskID)
-	if taskID == "" {
-		return fmt.Errorf("다운로드 작업 ID가 필요합니다")
-	}
-
-	task, found := a.findDownloadTask(taskID)
-	if !found {
-		return fmt.Errorf("다운로드 작업을 찾을 수 없습니다")
-	}
-
-	directory := strings.TrimSpace(task.OutputDir)
-	if finalPath := strings.TrimSpace(task.FinalPath); finalPath != "" {
-		directory = filepath.Dir(finalPath)
-	}
+// OpenDownloadDirectory opens the download path shown in settings.
+func (a *App) OpenDownloadDirectory(directory string) error {
+	directory = strings.TrimSpace(directory)
 	if directory == "" || directory == "." {
 		return fmt.Errorf("다운로드 폴더를 확인할 수 없습니다")
 	}
@@ -843,6 +831,24 @@ func (a *App) OpenDownloadFolder(taskID string) error {
 		return fmt.Errorf("다운로드 폴더를 열 수 없습니다: %w", err)
 	}
 	return nil
+}
+
+func (a *App) OpenDownloadFolder(taskID string) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("다운로드 작업 ID가 필요합니다")
+	}
+
+	task, found := a.findDownloadTask(taskID)
+	if !found {
+		return fmt.Errorf("다운로드 작업을 찾을 수 없습니다")
+	}
+
+	directory := strings.TrimSpace(task.OutputDir)
+	if finalPath := strings.TrimSpace(task.FinalPath); finalPath != "" {
+		directory = filepath.Dir(finalPath)
+	}
+	return a.OpenDownloadDirectory(directory)
 }
 
 func (a *App) RevealVideoRepairFile(path string) error {
