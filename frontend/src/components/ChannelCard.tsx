@@ -96,14 +96,14 @@ function ChannelCard({
             {channel.verifiedMark && <Tag color="blue">인증</Tag>}
             {channel.openLive && <Tag color="green">LIVE</Tag>}
           </Space>
-          <Text className="app-muted block !text-xs">
+          <Text className="app-muted block !text-[13px]">
             팔로워 {followerFormatter.format(channel.followerCount)}
           </Text>
         </div>
       </div>
 
       {channel.channelDescription && (
-        <Paragraph ellipsis={{ rows: 1 }} className="app-muted !mb-0 !mt-2 !text-xs">
+        <Paragraph ellipsis={{ rows: 1 }} className="app-muted !mb-0 !mt-2 !text-[13px]">
           {channel.channelDescription}
         </Paragraph>
       )}

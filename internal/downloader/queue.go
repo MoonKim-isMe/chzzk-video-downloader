@@ -63,7 +63,7 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 	}
 	for _, taskID := range q.order {
 		task := q.tasks[taskID]
-		if task.VideoNo == request.VideoNo &&
+		if request.Segment == nil && task.Segment == nil && task.VideoNo == request.VideoNo &&
 			NormalizeDownloadType(task.DownloadType) == NormalizeDownloadType(request.DownloadType) &&
 			(task.Status == TaskStatusQueued || task.Status == TaskStatusRunning) {
 			q.mu.Unlock()
@@ -77,7 +77,21 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 		time.Now().UTC().UnixNano(),
 		q.counter.Add(1),
 	)
+	if request.Segment != nil {
+		// A reserved, collision-free basename belongs to one independent job.
+		segment := *request.Segment
+		segment.FileName = q.reserveSegmentFileName(request.OutputDir, segment)
+		request.Segment = &segment
+		request.OutputTemplate = segment.FileName + ".%(ext)s"
+	}
+	status := TaskStatusQueued
+	if request.Segment != nil {
+		// Stage 2 registers a persistent prepared item. Stage 3 will make it
+		// runnable once real time-range extraction supports every fallback.
+		status = TaskStatusPrepared
+	}
 	task := DownloadTask{
+		Segment:           request.Segment,
 		DownloadType:      NormalizeDownloadType(request.DownloadType),
 		TaskID:            taskID,
 		VideoNo:           request.VideoNo,
@@ -86,13 +100,15 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 		ThumbnailImageURL: request.ThumbnailImageURL,
 		URL:               request.URL,
 		OutputDir:         request.OutputDir,
-		Status:            TaskStatusQueued,
+		Status:            status,
 		QueuedAt:          time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	q.tasks[taskID] = task
 	q.requests[taskID] = request.DownloadRequest()
 	q.order = append(q.order, taskID)
-	q.pending = append(q.pending, taskID)
+	if request.Segment == nil {
+		q.pending = append(q.pending, taskID)
+	}
 	q.mu.Unlock()
 
 	q.emit(task)
@@ -100,6 +116,54 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 
 	current, _ := q.Get(taskID)
 	return current, nil
+}
+
+// RestorePreparedTasks reserves the existing filenames of segment drafts
+// when restarting the application, without scheduling incomplete downloads.
+func (q *Queue) RestorePreparedTasks(tasks []DownloadTask) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, task := range tasks {
+		if task.Status != TaskStatusPrepared || task.Segment == nil || task.TaskID == "" {
+			continue
+		}
+		if _, exists := q.tasks[task.TaskID]; exists {
+			continue
+		}
+		q.tasks[task.TaskID] = task
+		q.order = append(q.order, task.TaskID)
+	}
+}
+
+// ActivatePrepared keeps the previously reserved name and output directory.
+// The caller must have validated the request and access permissions.
+func (q *Queue) ActivatePrepared(taskID string, request DownloadRequest) (DownloadTask, error) {
+	q.mu.Lock()
+	if q.stopped {
+		q.mu.Unlock()
+		return DownloadTask{}, fmt.Errorf("다운로드 Queue가 종료되었습니다")
+	}
+	task, exists := q.tasks[taskID]
+	if !exists || task.Status != TaskStatusPrepared || task.Segment == nil {
+		q.mu.Unlock()
+		return DownloadTask{}, fmt.Errorf("시작할 준비된 구간 작업을 찾을 수 없습니다")
+	}
+	// Never trust caller-controlled output filename, folder or segment bounds
+	// when starting a persisted draft.
+	request.OutputDir = task.OutputDir
+	request.URL = task.URL
+	request.DownloadType = task.DownloadType
+	request.Segment = task.Segment
+	request.OutputTemplate = task.Segment.FileName + ".%(ext)s"
+	task.Status = TaskStatusQueued
+	q.tasks[taskID] = task
+	q.requests[taskID] = request
+	q.pending = append(q.pending, taskID)
+	q.mu.Unlock()
+	q.emit(task)
+	q.startAvailable()
+	started, _ := q.Get(taskID)
+	return started, nil
 }
 
 func (q *Queue) MaxConcurrent() int {
@@ -238,13 +302,40 @@ func (q *Queue) startAvailable() {
 			return
 		}
 
-		taskID := q.pending[0]
-		q.pending = q.pending[1:]
-		task, ok := q.tasks[taskID]
-		if !ok || task.Status != TaskStatusQueued {
-			q.mu.Unlock()
-			continue
+		// Preserve FIFO within each VOD's segment jobs. A clip must wait for
+		// the preceding clip to finish even when the global concurrency limit
+		// permits more workers. Jobs from unrelated VODs can use free slots.
+		nextIndex := -1
+		for i := 0; i < len(q.pending); {
+			candidateID := q.pending[i]
+			candidate, ok := q.tasks[candidateID]
+			if !ok || candidate.Status != TaskStatusQueued {
+				q.pending = append(q.pending[:i], q.pending[i+1:]...)
+				continue
+			}
+			blocked := false
+			if candidate.Segment != nil {
+				for activeID := range q.active {
+					activeTask, exists := q.tasks[activeID]
+					if exists && activeTask.Segment != nil && activeTask.VideoNo == candidate.VideoNo {
+						blocked = true
+						break
+					}
+				}
+			}
+			if !blocked {
+				nextIndex = i
+				break
+			}
+			i++
 		}
+		if nextIndex < 0 {
+			q.mu.Unlock()
+			return
+		}
+		taskID := q.pending[nextIndex]
+		q.pending = append(q.pending[:nextIndex], q.pending[nextIndex+1:]...)
+		task := q.tasks[taskID]
 		request := q.requests[taskID]
 		task.Status = TaskStatusRunning
 		task.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -337,7 +428,7 @@ func (q *Queue) Remove(taskID string) bool {
 		return false
 	}
 	switch task.Status {
-	case TaskStatusCompleted, TaskStatusFailed, TaskStatusCancelled:
+	case TaskStatusPrepared, TaskStatusCompleted, TaskStatusFailed, TaskStatusCancelled:
 	default:
 		return false
 	}

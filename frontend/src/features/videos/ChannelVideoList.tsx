@@ -16,6 +16,7 @@ interface ChannelVideoListProps {
   channel: Channel;
   activeDownloadStatusByVideoNo: Map<string, DownloadTaskStatus>;
   onQueueVideo: (video: Video, downloadType?: DownloadType) => Promise<void>;
+  onOpenSegments: (video: Video) => void;
 }
 
 interface FailedRequest {
@@ -45,6 +46,7 @@ function ChannelVideoList({
   channel,
   activeDownloadStatusByVideoNo,
   onQueueVideo,
+  onOpenSegments,
 }: ChannelVideoListProps) {
   const [result, setResult] = useState<VideoListResult>(emptyResult);
   const [loading, setLoading] = useState(true);
@@ -120,13 +122,13 @@ function ChannelVideoList({
         </div>
 
         <div className="channel-vod-meta">
-          <Text className="app-muted !text-xs">
+          <Text className="app-muted !text-[13px]">
             {loading
               ? '불러오는 중'
               : `전체 ${countFormatter.format(result.totalCount)}개 · ${countFormatter.format(result.videos.length)}개 표시`}
           </Text>
           {!loading && result.totalPages > 0 && (
-            <Text className="app-muted !text-xs">
+            <Text className="app-muted !text-[13px]">
               {result.page + 1} / {result.totalPages} 페이지
             </Text>
           )}
@@ -171,6 +173,7 @@ function ChannelVideoList({
                   videoDownloadStatus={activeDownloadStatusByVideoNo.get(`${video.videoNo}:video`)}
                   audioDownloadStatus={activeDownloadStatusByVideoNo.get(`${video.videoNo}:audio`)}
                   onQueue={onQueueVideo}
+                  onOpenSegments={onOpenSegments}
                 />
               ))}
             </div>

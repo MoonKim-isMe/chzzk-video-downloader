@@ -71,7 +71,45 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 		},
 		m.runner.Run,
 	)
-	if isDownloadFailureKind(err, DownloadFailureSourceURLMissing) && ctx.Err() == nil {
+	// Some CHZZK streams cannot be cut with yt-dlp's video-only
+	// --force-keyframes-at-cuts pipeline, even though MP3 sections work.
+	// Try the signed HLS/FFmpeg path on any yt-dlp video-section failure,
+	// not just sourceURL extraction errors. The fallback re-encodes the
+	// selected section for accurate video boundaries.
+	triedSourceURL := false
+	if shouldFallbackVideoSegment(request, err) && ctx.Err() == nil {
+		triedSourceURL = true
+		originalErr := err
+		fallbackResult, fallbackSpec, fallbackErr := m.executeSourceURLFallback(
+			ctx, request, toolchain, handler, result, err,
+		)
+		result, err = fallbackResult, fallbackErr
+		if fallbackSpec.Path != "" {
+			usedSpec = fallbackSpec
+		}
+		// If the original stream requires discontinuity repair and the
+		// signed sourceURL path also fails, retain the existing full-VOD
+		// recovery + clip extraction as the final safe option.
+		if err != nil && ctx.Err() == nil &&
+			isDownloadFailureKind(originalErr, DownloadFailureHLSInitializationFragmentOrder) {
+			recoveredResult, recoveredErr := m.downloadRecoveredSegment(ctx, request, toolchain, handler)
+			if recoveredErr == nil {
+				result, err = recoveredResult, nil
+			} else {
+				result.DiagnosticLines = appendDiagnosticLine(result.DiagnosticLines, OutputLine{
+					Stream: StreamStderr,
+					Text: "HLS 구간 복구도 실패했습니다: " + redactDiagnosticText(recoveredErr.Error()),
+				})
+			}
+		}
+	}
+	if !triedSourceURL && request.Segment != nil &&
+		isDownloadFailureKind(err, DownloadFailureHLSInitializationFragmentOrder) &&
+		ctx.Err() == nil {
+		fallbackResult, fallbackErr := m.downloadRecoveredSegment(ctx, request, toolchain, handler)
+		result, err = fallbackResult, fallbackErr
+	}
+	if !triedSourceURL && isDownloadFailureKind(err, DownloadFailureSourceURLMissing) && ctx.Err() == nil {
 		fallbackResult, fallbackSpec, fallbackErr := m.executeSourceURLFallback(
 			ctx, request, toolchain, handler, result, err,
 		)
@@ -92,6 +130,32 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 	return result, nil
 }
 
+// shouldFallbackVideoSegment is deliberately restricted to yt-dlp process
+// failures. User cancellation, authorization and unrelated filesystem errors
+// must not trigger a second network download.
+func shouldFallbackVideoSegment(request DownloadRequest, err error) bool {
+	if err == nil || request.Segment == nil || NormalizeDownloadType(request.DownloadType) != DownloadTypeVideo {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if kind, ok := downloadFailureKind(err); ok {
+		if kind == DownloadFailureAuthenticationRequired || kind == DownloadFailurePartialDataConflict ||
+			kind == DownloadFailureInterrupted {
+			return false
+		}
+	}
+	var processErr *ProcessError
+	if errors.As(err, &processErr) {
+		return strings.EqualFold(processErr.Program, "yt-dlp.exe") ||
+			strings.EqualFold(processErr.Program, "yt-dlp")
+	}
+	// The process may exit successfully without emitting a final output
+	// path; still allow the signed HLS path to produce the selected clip.
+	return strings.Contains(err.Error(), "최종 파일 경로를 확인할 수 없습니다")
+}
+
 func executeDownloadWithHLSFallback(
 	ctx context.Context,
 	request DownloadRequest,
@@ -102,6 +166,11 @@ func executeDownloadWithHLSFallback(
 	rawRun rawCommandRunner,
 ) (DownloadResult, CommandSpec, error) {
 	firstResult, firstErr := run(ctx, initialSpec, handler, nil)
+	// Full-media HLS repair is deliberately separate from the direct segment
+	// attempt. Otherwise a repaired whole VOD could be promoted as a clip.
+	if request.Segment != nil {
+		return firstResult, initialSpec, firstErr
+	}
 	if firstErr == nil || !isDownloadFailureKind(firstErr, DownloadFailureHLSInitializationFragmentOrder) {
 		return firstResult, initialSpec, firstErr
 	}

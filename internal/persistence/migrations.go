@@ -154,6 +154,22 @@ var migrations = []migration{
 			`ALTER TABLE download_tasks ADD COLUMN download_type TEXT NOT NULL DEFAULT 'video'`,
 		},
 	},
+	{
+		version: 10,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN segment_title TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE download_tasks ADD COLUMN segment_position INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE download_tasks ADD COLUMN segment_start INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE download_tasks ADD COLUMN segment_end INTEGER NOT NULL DEFAULT -1`,
+			`ALTER TABLE download_tasks ADD COLUMN segment_file_name TEXT NOT NULL DEFAULT ''`,
+		},
+	},
+	{
+		version: 11,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN segment_number_file_name INTEGER NOT NULL DEFAULT 1`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

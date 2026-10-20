@@ -17,7 +17,7 @@ function SavedChannels({ channels, selectedChannelId, onSelect, onRemove }: Save
     <div className="channel-bookmarks-view">
       <div className="channel-sidebar-summary">
         <Text strong>북마크 채널</Text>
-        <Text className="app-muted !text-xs">{channels.length}개</Text>
+        <Text className="app-muted !text-[13px]">{channels.length}개</Text>
       </div>
 
       <div className="channel-sidebar-scroll">
@@ -49,7 +49,7 @@ function SavedChannels({ channels, selectedChannelId, onSelect, onRemove }: Save
                         <Text ellipsis className="block !font-medium">
                           {channel.channelName}
                         </Text>
-                        <Text className="app-muted block !text-xs">
+                        <Text className="app-muted block !text-[13px]">
                           {selected ? '선택된 채널' : 'VOD 보기'}
                         </Text>
                       </span>

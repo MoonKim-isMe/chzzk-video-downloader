@@ -35,6 +35,8 @@ import { onDownloadState } from './lib/runtime';
 import type { AuthenticationSettings } from './types/authentication';
 import type { Channel } from './types/channel';
 import type { DownloadTask, DownloadTaskStatus, DownloadType } from './types/download';
+import { parseSegmentTime } from './features/videos/segmentRanges';
+import type { SegmentRange } from './features/videos/segmentRanges';
 import type { AppSettings, ThemeMode } from './types/settings';
 import type { UpdateInfo } from './types/update';
 import type { Video } from './types/video';
@@ -91,6 +93,7 @@ interface AppContentProps {
 function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContentProps) {
   const { message } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<AppTab>('search');
+  const [segmentRequest, setSegmentRequest] = useState<{ video: Video; sequence: number }>();
   const [channelPanelTab, setChannelPanelTab] = useState<ChannelPanelTab>('search');
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>();
@@ -209,7 +212,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const activeDownloadStatusByVideoNo = useMemo(() => {
     const active = new Map<string, DownloadTaskStatus>();
     downloadTasks.forEach((task) => {
-      if (task.status === 'queued' || task.status === 'running') {
+      if (!task.segment && (task.status === 'queued' || task.status === 'running')) {
         active.set(`${task.videoNo}:${task.downloadType === 'audio' ? 'audio' : 'video'}`, task.status);
       }
     });
@@ -239,6 +242,11 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     }
   };
 
+  const handleOpenSegments = useCallback((video: Video) => {
+    setSegmentRequest((current) => ({ video, sequence: (current?.sequence ?? 0) + 1 }));
+    setActiveTab('url');
+  }, []);
+
   const handleQueueVideo = useCallback(
     async (video: Video, downloadType: DownloadType = 'video') => {
       try {
@@ -262,6 +270,54 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     [message],
   );
 
+  const handleQueueSegments = useCallback(
+    async (video: Video, segments: SegmentRange[], downloadType: DownloadType, numberFileName: boolean) => {
+      const requests = segments.map((segment, index) => {
+        const startSeconds = parseSegmentTime(segment.start);
+        const endSeconds = parseSegmentTime(segment.end);
+        if (startSeconds === null || endSeconds === null) {
+          throw new Error('구간 시간을 확인해 주세요.');
+        }
+        return {
+          downloadType,
+          videoNo: video.videoNo,
+          videoTitle: video.videoTitle,
+          channelName: video.channel.channelName,
+          thumbnailImageUrl: video.thumbnailImageUrl,
+          url: video.videoUrl,
+          outputDir: '',
+          segment: {
+            title: segment.title.trim(),
+            position: index + 1,
+            numberFileName,
+            startSeconds,
+            endSeconds,
+          },
+        };
+      });
+      // Register clips in visible order. Parallel requests can reach the Go
+      // queue out of order and may reserve the wrong numbered filename.
+      let successfulCount = 0;
+      const failures: string[] = [];
+      for (const request of requests) {
+        try {
+          const task = await startDownload(request);
+          successfulCount += 1;
+          setDownloadTasks((current) => upsertDownloadTask(current, task));
+        } catch (cause) {
+          failures.push(cause instanceof Error ? cause.message : String(cause));
+        }
+      }
+      if (failures.length) {
+        throw new Error(
+          `${successfulCount}개 등록, ${failures.length}개 실패: ${failures[0]}`,
+        );
+      }
+      message.success(`${successfulCount}개 구간을 다운로드 목록에 추가했습니다.`);
+    },
+    [message],
+  );
+
   const handleDownloadTaskRemoved = useCallback((taskId: string) => {
     hiddenDownloadTaskIds.current.add(taskId);
     setDownloadTasks((current) => current.filter((task) => task.taskId !== taskId));
@@ -269,10 +325,14 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
 
   const handleDownloadTaskRecovered = useCallback(
     (previousTaskId: string, task: DownloadTask) => {
-      hiddenDownloadTaskIds.current.add(previousTaskId);
+      // Prepared jobs activate under the same taskId; never hide their
+      // progress events. Failure retries use a new ID and hide the old one.
+      if (previousTaskId !== task.taskId) {
+        hiddenDownloadTaskIds.current.add(previousTaskId);
+      }
       setDownloadTasks((current) =>
         upsertDownloadTask(
-          current.filter((item) => item.taskId !== previousTaskId),
+          current.filter((item) => previousTaskId === task.taskId || item.taskId !== previousTaskId),
           task,
         ),
       );
@@ -340,6 +400,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             channel={selectedChannel}
             activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
             onQueueVideo={handleQueueVideo}
+            onOpenSegments={handleOpenSegments}
           />
         ) : (
           <Card bordered={false} className="app-panel channel-vod-empty">
@@ -349,23 +410,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       </div>
     </div>
   );
-
-  const secondaryContent = activeTab === 'url'
-    ? (
-        <VideoUrlTab
-          activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
-          onQueueVideo={handleQueueVideo}
-        />
-      )
-    : activeTab === 'downloads'
-      ? (
-          <DownloadPanel
-            tasks={downloadTasks}
-            onTaskRemoved={handleDownloadTaskRemoved}
-            onTaskRecovered={handleDownloadTaskRecovered}
-          />
-        )
-      : null;
 
   return (
     <Layout className="app-shell" data-theme={themeMode}>
@@ -439,9 +483,24 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
           >
             {searchWorkspace}
           </div>
-          {secondaryContent && (
+          <div
+            className="app-main-tab-view"
+            hidden={activeTab !== 'url'}
+          >
+            <VideoUrlTab
+              activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
+              onQueueVideo={handleQueueVideo}
+              segmentRequest={segmentRequest}
+              onQueueSegments={handleQueueSegments}
+            />
+          </div>
+          {activeTab === 'downloads' && (
             <div className="app-main-tab-view">
-              {secondaryContent}
+              <DownloadPanel
+                tasks={downloadTasks}
+                onTaskRemoved={handleDownloadTaskRemoved}
+                onTaskRecovered={handleDownloadTaskRecovered}
+              />
             </div>
           )}
           <div

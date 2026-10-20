@@ -1,6 +1,6 @@
 export type DownloadType = 'video' | 'audio';
 
-export type DownloadTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type DownloadTaskStatus = 'prepared' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type DownloadErrorCode =
   | 'authentication_required'
   | 'partial_data_conflict'
@@ -37,7 +37,17 @@ export interface DownloadProgress {
   etaSeconds: number;
 }
 
+export interface DownloadSegment {
+  title: string;
+  position: number;
+  numberFileName?: boolean;
+  startSeconds: number;
+  endSeconds?: number;
+  fileName?: string;
+}
+
 export interface StartDownloadRequest {
+  segment?: DownloadSegment;
   downloadType?: DownloadType;
   videoNo: number;
   videoTitle: string;
@@ -50,6 +60,7 @@ export interface StartDownloadRequest {
 }
 
 export interface DownloadTask {
+  segment?: DownloadSegment;
   downloadType?: DownloadType;
   taskId: string;
   videoNo: number;

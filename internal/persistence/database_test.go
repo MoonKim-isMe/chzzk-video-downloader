@@ -34,7 +34,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 9 {
+	if version != 11 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -50,7 +50,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 9 {
+	if version != 11 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -455,4 +455,66 @@ func TestDownloadHistoryStoresMP3AndLegacyVideoType(t *testing.T) {
 		filepath.Ext(tasks[1].FinalPath) != ".mp3" {
 		t.Fatalf("unexpected download types after round trip: %#v", tasks)
 	}
+}
+
+func TestPreparedSegmentsPersistenceAndReopen(t *testing.T) {
+  dbPath := filepath.Join(t.TempDir(), "segments.sqlite3")
+  database, err := Open(dbPath)
+  if err != nil { t.Fatal(err) }
+  end := int64(179)
+  numberFileName := false
+  task := downloader.DownloadTask{
+    TaskID: "segment-prepared-1", VideoNo: 9001, VideoTitle: "시험",
+    URL: "https://chzzk.naver.com/video/9001",
+    OutputDir: filepath.Join(t.TempDir(), "downloads", "시험"),
+    DownloadType: downloader.DownloadTypeAudio,
+    Segment: &downloader.DownloadSegment{
+      Title: "영상 1", Position: 1, StartSeconds: 60, EndSeconds: &end,
+      FileName: "영상 1", NumberFileName: &numberFileName,
+    },
+    Status: downloader.TaskStatusPrepared,
+    QueuedAt: "2026-10-19T00:00:00Z",
+  }
+  if err := database.UpsertDownloadTask(task); err != nil { t.Fatal(err) }
+  if err := database.Close(); err != nil { t.Fatal(err) }
+  database, err = Open(dbPath)
+  if err != nil { t.Fatal(err) }
+  defer database.Close()
+  if err := database.RecoverInterruptedDownloads(); err != nil { t.Fatal(err) }
+  saved, err := database.ListDownloadTasks()
+  if err != nil { t.Fatal(err) }
+  if len(saved) != 1 || saved[0].Segment == nil {
+    t.Fatalf("segment task missing after reopen: %#v", saved)
+  }
+  got := saved[0]
+  if got.Status != downloader.TaskStatusPrepared || got.DownloadType != task.DownloadType ||
+    got.Segment.Title != "영상 1" || got.Segment.FileName != "영상 1" ||
+    got.Segment.NumberFileName == nil || *got.Segment.NumberFileName ||
+    got.Segment.StartSeconds != 60 || got.Segment.EndSeconds == nil || *got.Segment.EndSeconds != 179 {
+    t.Fatalf("segment task changed after persistence round trip: %#v", got)
+  }
+}
+
+
+func TestSegmentFileNumberingLegacyDefault(t *testing.T) {
+  database, err := Open(filepath.Join(t.TempDir(), "segment-default.db"))
+  if err != nil { t.Fatal(err) }
+  defer database.Close()
+  item := downloader.DownloadTask{
+    TaskID: "segment-default", VideoNo: 404, VideoTitle: "비디오",
+    DownloadType: downloader.DownloadTypeVideo,
+    URL: "https://chzzk.naver.com/video/404", OutputDir: t.TempDir(),
+    Segment: &downloader.DownloadSegment{
+      Title: "영상", Position: 1, StartSeconds: 0, FileName: "1. 영상",
+    },
+    Status: downloader.TaskStatusPrepared,
+    QueuedAt: "2026-10-19T00:00:00Z",
+  }
+  if err := database.UpsertDownloadTask(item); err != nil { t.Fatal(err) }
+  items, err := database.ListDownloadTasks()
+  if err != nil { t.Fatal(err) }
+  if len(items) != 1 || items[0].Segment == nil || items[0].Segment.NumberFileName == nil ||
+    !*items[0].Segment.NumberFileName {
+    t.Fatalf("legacy unset numbering should default true: %#v", items)
+  }
 }

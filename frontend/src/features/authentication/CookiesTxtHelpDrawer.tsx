@@ -22,7 +22,7 @@ function CookiesTxtHelpDrawer({ open, onClose }: CookiesTxtHelpDrawerProps) {
       <section className="settings-section">
         <Text className="app-eyebrow">GET COOKIES.TXT LOCALLY</Text>
         <Title level={5} className="!mb-1 !mt-1">CHZZK 쿠키 내보내기</Title>
-        <Paragraph className="app-muted !mb-4 !text-xs">
+        <Paragraph className="app-muted !mb-4 !text-[13px]">
           Chrome 웹 스토어에서 "<Text strong>Get cookies.txt LOCALLY</Text>"를 사용하여 CHZZK 쿠키를
           저장할 수 있습니다.
         </Paragraph>

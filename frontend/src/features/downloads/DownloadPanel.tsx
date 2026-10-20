@@ -20,6 +20,7 @@ import {
   openDownloadLog,
   recoverDownload,
   startDownload,
+  startPreparedSegment,
 } from '../../lib/backend';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
@@ -36,6 +37,7 @@ const statusMeta: Record<
   { label: string; color?: string; progressStatus: 'normal' | 'active' | 'success' | 'exception' }
 > = {
   queued: { label: '대기 중', progressStatus: 'normal' },
+  prepared: { label: '준비됨', progressStatus: 'normal' },
   running: { label: '다운로드 중', color: 'processing', progressStatus: 'active' },
   completed: { label: '완료', color: 'success', progressStatus: 'success' },
   failed: { label: '실패', color: 'error', progressStatus: 'exception' },
@@ -60,6 +62,13 @@ function formatBytes(bytes: number) {
 function formatSpeed(bytesPerSecond: number) {
   const value = formatBytes(bytesPerSecond);
   return value === '-' ? '-' : `${value}/s`;
+}
+
+function formatSegmentSeconds(value: number) {
+  const h = Math.floor(value / 3600);
+  const m = Math.floor((value % 3600) / 60);
+  const s = String(value % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
 function formatETA(seconds: number) {
@@ -90,7 +99,7 @@ function DownloadCapability({ status }: { status: ToolchainStatus }) {
         <Text strong className="block">
           {ready ? '영상 다운로드 준비 완료' : '영상 다운로드 기능을 사용할 수 없습니다'}
         </Text>
-        <Text className="app-muted block !text-xs">
+        <Text className="app-muted block !text-[13px]">
           {ready
             ? '영상 다운로드와 파일 저장 기능을 사용할 수 있습니다.'
             : '다운로드 실행 환경을 확인한 뒤 앱을 다시 실행해 주세요.'}
@@ -119,7 +128,7 @@ function DownloadThumbnail({ task }: { task: DownloadTask }) {
         />
       ) : (
         <div className="download-task-thumbnail-placeholder">
-          <Text className="!text-center !text-xs !text-slate-500">
+          <Text className="!text-center !text-[13px] !text-slate-500">
             썸네일이 없거나 불러오지 못했습니다
           </Text>
         </div>
@@ -194,6 +203,20 @@ function DownloadTaskRow({
     }
   };
 
+  const handlePrepared = async () => {
+    if (task.status !== 'prepared' || working) return;
+    setWorking(true);
+    try {
+      const started = await startPreparedSegment(task.taskId);
+      onTaskRecovered(task.taskId, started);
+      message.success('구간 다운로드를 시작했습니다.');
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const handleResume = async () => {
     if (!canResume || working) {
       return;
@@ -203,6 +226,7 @@ function DownloadTaskRow({
     try {
       const resumed = await startDownload({
         downloadType: task.downloadType,
+        segment: task.segment,
         videoNo: task.videoNo,
         videoTitle: task.videoTitle,
         channelName: task.channelName,
@@ -286,11 +310,17 @@ function DownloadTaskRow({
                 </Tooltip>
               )}
               {queuePosition !== undefined && <Tag>대기 {queuePosition}번째</Tag>}
-              <Text className="app-muted !text-xs">{task.channelName}</Text>
+              {task.segment && <Tag color="blue">구간 {task.segment.position}</Tag>}
+              <Text className="app-muted !text-[13px]">{task.channelName}</Text>
             </div>
             <Title level={5} ellipsis={{ rows: 1 }} className="download-task-title !mb-0 !mt-1">
-              {task.videoTitle}
+              {task.segment ? task.segment.title : task.videoTitle}
             </Title>
+            {task.segment && (
+              <Text className="app-muted !text-[13px]">
+                {task.videoTitle} · {formatSegmentSeconds(task.segment.startSeconds)} ~ {task.segment.endSeconds === undefined ? '끝까지' : formatSegmentSeconds(task.segment.endSeconds)}
+              </Text>
+            )}
           </div>
 
           <div className="download-task-actions">
@@ -298,6 +328,16 @@ function DownloadTaskRow({
               <Button danger size="small" loading={working} onClick={() => void handleCancel()}>
                 취소
               </Button>
+            )}
+            {task.status === 'prepared' && (
+              <>
+                <Button size="small" type="primary" loading={working} onClick={() => void handlePrepared()}>
+                  다운로드 시작
+                </Button>
+                <Button size="small" disabled={working} onClick={() => void handleDelete()}>
+                  목록에서 삭제
+                </Button>
+              </>
             )}
             {task.status === 'completed' && (
               <>
@@ -334,7 +374,11 @@ function DownloadTaskRow({
           </div>
         </div>
 
-        {task.status === 'queued' ? (
+        {task.status === 'prepared' ? (
+          <div className="download-task-queued">
+            저장 예정 파일: {task.segment?.fileName} · 시작 버튼을 누르면 다운로드합니다.
+          </div>
+        ) : task.status === 'queued' ? (
           <div className="download-task-queued">
             앞선 작업이 끝나면 자동으로 다운로드를 시작합니다.
           </div>
@@ -478,6 +522,10 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
     [tasks],
   );
 
+  const preparedTasks = useMemo(
+    () => visibleTasks.filter((task) => task.status === 'prepared').slice().reverse(),
+    [visibleTasks],
+  );
   const activeTasks = useMemo(
     () => visibleTasks.filter((task) => task.status === 'queued' || task.status === 'running'),
     [visibleTasks],
@@ -505,6 +553,7 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
 
   const counts = {
     active: activeTasks.length,
+    prepared: preparedTasks.length,
     completed: completedTasks.length,
     failed: failedTasks.length,
   };
@@ -552,6 +601,7 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
         </div>
 
         <div className="download-summary">
+          <span><strong>{counts.prepared}</strong> 준비됨</span>
           <span><strong>{counts.active}</strong> 진행/대기</span>
           <span><strong>{counts.completed}</strong> 완료</span>
           <span><strong>{counts.failed}</strong> 실패</span>
@@ -568,7 +618,7 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
             <span className="download-capability-icon">!</span>
             <div>
               <Text strong className="block">영상 다운로드 상태를 확인할 수 없습니다</Text>
-              <Text className="app-muted block !text-xs">앱을 다시 실행해 주세요.</Text>
+              <Text className="app-muted block !text-[13px]">앱을 다시 실행해 주세요.</Text>
             </div>
           </div>
         )}
@@ -581,6 +631,14 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
           </div>
         ) : (
           <div className="download-sections">
+            <DownloadSection
+              title="준비된 구간"
+              count={preparedTasks.length}
+              tasks={preparedTasks}
+              queuePositions={queuePositions}
+              onTaskRemoved={onTaskRemoved}
+              onTaskRecovered={onTaskRecovered}
+            />
             <DownloadSection
               title="진행 중"
               count={activeTasks.length}

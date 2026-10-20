@@ -723,3 +723,21 @@ func TestQueueAllowsVideoAndMP3ButRejectsSameTypeDuplicate(t *testing.T) {
 	executor.release(audio.URL)
 	waitForTaskStatus(t, queue, audio.TaskID, TaskStatusCompleted)
 }
+
+func TestPreparedSegmentsDoNotStartWholeVOD(t *testing.T) {
+  executor := newControlledExecutor()
+  queue := NewQueue(context.Background(), executor, nil, 2)
+  request := queueRequest(8888)
+  request.Segment = &DownloadSegment{Title: "첫 구간", Position: 1, StartSeconds: 5}
+  first, err := queue.Enqueue(request)
+  if err != nil { t.Fatal(err) }
+  second, err := queue.Enqueue(request)
+  if err != nil { t.Fatal(err) }
+  if first.TaskID == second.TaskID || first.Status != TaskStatusPrepared || second.Status != TaskStatusPrepared {
+    t.Fatalf("prepared jobs were not registered independently: %#v %#v", first, second)
+  }
+  if executor.startedCount() != 0 {
+    t.Fatal("prepared jobs unexpectedly launched executor")
+  }
+  queue.Stop()
+}
