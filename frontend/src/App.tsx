@@ -537,6 +537,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       />
 
       <Modal
+        className="app-update-modal"
         title="새 버전이 있습니다"
         width={620}
         open={updateModalOpen && Boolean(availableUpdate?.updateAvailable)}
