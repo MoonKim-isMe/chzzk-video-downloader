@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  getRemainingDownloadCount,
+  isResumableDownloadTask,
+  isStartupDownloadRequest,
   mergeDownloadTaskSnapshot,
   pickFresherDownloadTask,
   upsertDownloadTask,
@@ -43,4 +46,27 @@ test('terminal task precedence and newer running progress remain unchanged', () 
   const running = task('running', { progress: { ...progress, percent: 60, downloadedBytes: 2048 } });
   const staleRunning = task('running', { progress: { ...progress, percent: 40, downloadedBytes: 1024 } });
   assert.equal(pickFresherDownloadTask(running, staleRunning), running);
+});
+
+
+test('download tab counts only actionable remaining jobs', () => {
+  const tasks = [
+    task('prepared', { taskId: 'prepared' }),
+    task('queued', { taskId: 'queued' }),
+    task('running', { taskId: 'running' }),
+    task('failed', { taskId: 'retry-1', errorCode: 'source_url_missing' }),
+    task('failed', { taskId: 'retry-2', errorCode: 'hls_download_stalled' }),
+    task('failed', { taskId: 'retry-3', errorCode: 'interrupted' }),
+    task('failed', { taskId: 'not-retryable', errorCode: 'authentication_required' }),
+    task('completed', { taskId: 'completed' }),
+    task('cancelled', { taskId: 'cancelled' }),
+  ];
+  assert.equal(getRemainingDownloadCount(tasks), 6);
+  assert.equal(isResumableDownloadTask(tasks[3]), true);
+  assert.equal(isResumableDownloadTask(tasks[6]), false);
+  assert.equal(isStartupDownloadRequest(tasks[0]), true);
+  assert.equal(isStartupDownloadRequest(tasks[3]), true);
+  assert.equal(isStartupDownloadRequest(tasks[1]), false);
+  assert.equal(isStartupDownloadRequest(tasks[7]), false);
+  assert.equal(getRemainingDownloadCount(tasks.filter((item) => item.taskId !== 'retry-2')), 5);
 });

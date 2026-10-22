@@ -22,6 +22,7 @@ import {
   startDownload,
   startPreparedSegment,
 } from '../../lib/backend';
+import { isResumableDownloadTask } from '../../lib/downloadTasks';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
 const { Text, Title } = Typography;
@@ -30,6 +31,8 @@ interface DownloadPanelProps {
   tasks: DownloadTask[];
   onTaskRemoved: (taskId: string) => void;
   onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
+  completedRequestCount: number;
+  totalRequestCount: number;
 }
 
 const statusMeta: Record<
@@ -157,11 +160,7 @@ function DownloadTaskRow({
   const fallbackPreparing = task.progress.status === 'fallback_preparing';
   const fallbackDownloading = task.progress.status === 'fallback_downloading';
   const fallbackActive = task.status === 'running' && (fallbackPreparing || fallbackDownloading);
-  const canResume = task.status === 'failed' && (
-    task.errorCode === 'source_url_missing' ||
-    task.errorCode === 'hls_download_stalled' ||
-    task.errorCode === 'interrupted'
-  );
+  const canResume = isResumableDownloadTask(task);
   const total = task.progress.totalBytes > 0
     ? `${task.progress.totalBytesEstimated ? '약 ' : ''}${formatBytes(task.progress.totalBytes)}`
     : '-';
@@ -485,7 +484,13 @@ function DownloadSection({
   );
 }
 
-function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelProps) {
+function DownloadPanel({
+  tasks,
+  onTaskRemoved,
+  onTaskRecovered,
+  completedRequestCount,
+  totalRequestCount,
+}: DownloadPanelProps) {
   const { message } = AntdApp.useApp();
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
   const [preparing, setPreparing] = useState(true);
@@ -601,6 +606,7 @@ function DownloadPanel({ tasks, onTaskRemoved, onTaskRecovered }: DownloadPanelP
         </div>
 
         <div className="download-summary">
+          <span className="download-session-counter"><strong>{completedRequestCount}/{totalRequestCount}</strong> 요청 완료</span>
           <span><strong>{counts.prepared}</strong> 준비됨</span>
           <span><strong>{counts.active}</strong> 진행/대기</span>
           <span><strong>{counts.completed}</strong> 완료</span>
