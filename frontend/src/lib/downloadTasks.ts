@@ -48,6 +48,28 @@ export function upsertDownloadTask(tasks: DownloadTask[], incoming: DownloadTask
   return next;
 }
 
+// Match the criteria of the "이어받기" button in the download list.
+export function isResumableDownloadTask(task: DownloadTask) {
+  return task.status === 'failed' && (
+    task.errorCode === 'source_url_missing' ||
+    task.errorCode === 'hls_download_stalled' ||
+    task.errorCode === 'interrupted'
+  );
+}
+
+export function getRemainingDownloadCount(tasks: DownloadTask[]) {
+  return tasks.filter((task) =>
+    task.status === 'prepared' ||
+    task.status === 'queued' ||
+    task.status === 'running' ||
+    isResumableDownloadTask(task),
+  ).length;
+}
+
+export function isStartupDownloadRequest(task: DownloadTask) {
+  return task.status === 'prepared' || isResumableDownloadTask(task);
+}
+
 export function mergeDownloadTaskSnapshot(current: DownloadTask[], snapshot: DownloadTask[]) {
   const currentById = new Map(current.map((task) => [task.taskId, task]));
   const snapshotIds = new Set(snapshot.map((task) => task.taskId));
