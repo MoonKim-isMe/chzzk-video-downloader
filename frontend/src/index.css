@@ -2271,3 +2271,139 @@ select {
     width: 100%;
   }
 }
+
+/* Update modal: scroll release notes independently of modal actions. */
+.app-update-version-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 20px;
+}
+.app-update-version-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--app-surface-soft);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+}
+.app-update-version-details span {
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+.app-update-version-details strong {
+  color: var(--app-text);
+  font-size: 16px;
+}
+.app-update-notes-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.app-update-release-notes {
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.app-update-release-notes h3,
+.app-update-release-notes h4 {
+  margin: 12px 0 6px;
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.app-update-release-notes > :first-child { margin-top: 0; }
+.app-update-release-notes > :last-child { margin-bottom: 0; }
+.app-update-release-notes p { margin: 0 0 10px; }
+.app-update-release-notes ul,
+.app-update-release-notes ol { margin: 0 0 10px; padding-left: 22px; }
+.app-update-release-notes ul { list-style: disc; }
+.app-update-release-notes ol { list-style: decimal; }
+.app-update-release-notes li { margin: 3px 0; }
+.app-update-release-notes a { color: var(--app-primary); text-decoration: underline; }
+.app-update-release-notes code,
+.app-update-release-notes pre { font-family: Consolas, 'Courier New', monospace; }
+.app-update-release-notes pre {
+  white-space: pre-wrap;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--app-bg-elevated);
+}
+.app-update-release-notes blockquote { border-left: 3px solid var(--app-primary); padding-left: 12px; }
+.app-update-release-notes hr { border: 0; border-top: 1px solid var(--app-border); margin: 10px 0; }
+@media (max-width: 480px) {
+  .app-update-version-details { grid-template-columns: 1fr; }
+}
+
+
+/* Use the app's shared dark palette for the update dialog; light mode is untouched. */
+:root[data-theme="dark"] .app-update-modal .ant-modal-content {
+  background: var(--app-surface-strong);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow);
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-header {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-title,
+:root[data-theme="dark"] .app-update-modal .app-update-notes-title {
+  color: var(--app-text);
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-body {
+  color: var(--app-text-secondary);
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-close {
+  color: var(--app-text-muted);
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-close:hover {
+  color: var(--app-text);
+  background: var(--app-border-soft);
+}
+
+:root[data-theme="dark"] .app-update-modal .app-update-version-details > div,
+:root[data-theme="dark"] .app-update-modal .app-update-release-notes {
+  background: var(--app-surface-soft);
+  border-color: var(--app-border);
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-footer .ant-btn-default {
+  background: var(--app-surface-soft);
+  border-color: var(--app-border);
+  color: var(--app-text-secondary);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .app-update-modal .ant-modal-footer .ant-btn-default:hover {
+  background: var(--app-surface);
+  border-color: color-mix(in srgb, var(--app-primary) 45%, var(--app-border));
+  color: var(--app-text);
+}
+
+:root[data-theme="dark"] .app-update-modal .app-update-release-notes {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-muted) 45%, transparent) transparent;
+}
+
+:root[data-theme="dark"] .app-update-modal .app-update-release-notes::-webkit-scrollbar {
+  width: 8px;
+}
+
+:root[data-theme="dark"] .app-update-modal .app-update-release-notes::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 48%, transparent);
+  background-clip: padding-box;
+}

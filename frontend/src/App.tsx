@@ -11,6 +11,7 @@ import {
 } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import ReleaseNotes from './components/ReleaseNotes';
 import SavedChannels from './components/SavedChannels';
 import AuthenticationDrawer from './features/authentication/AuthenticationDrawer';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
@@ -31,6 +32,7 @@ import {
   startDownload,
 } from './lib/backend';
 import { mergeDownloadTaskSnapshot, upsertDownloadTask } from './lib/downloadTasks';
+import { getPostponedUpdateVersion, postponeUpdateVersion, shouldOpenUpdateModal } from './lib/updateNotifications';
 import { onDownloadState } from './lib/runtime';
 import type { AuthenticationSettings } from './types/authentication';
 import type { Channel } from './types/channel';
@@ -115,7 +117,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
         if (result.updateAvailable) {
           setSettingsOpen(false);
           setAvailableUpdate(result);
-          setUpdateModalOpen(true);
+          setUpdateModalOpen(shouldOpenUpdateModal(result.latestVersion, getPostponedUpdateVersion(), notifyWhenCurrent));
         } else {
           setAvailableUpdate(undefined);
           if (notifyWhenCurrent) {
@@ -132,6 +134,13 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     },
     [message],
   );
+
+  const handlePostponeUpdate = useCallback(() => {
+    if (availableUpdate?.updateAvailable) {
+      postponeUpdateVersion(availableUpdate.latestVersion);
+    }
+    setUpdateModalOpen(false);
+  }, [availableUpdate]);
 
   useEffect(() => {
     if (startupUpdateCheckStarted.current) {
@@ -421,7 +430,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             <button
               type="button"
               className="app-update-tag"
-              title="GitHub Release 페이지 열기"
+              title="업데이트 다운로드 페이지 열기"
               onClick={() => {
                 void openReleasePage(availableUpdate.releaseUrl).catch((cause) => {
                   message.error(cause instanceof Error ? cause.message : String(cause));
@@ -528,15 +537,17 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       />
 
       <Modal
+        className="app-update-modal"
         title="새 버전이 있습니다"
+        width={620}
         open={updateModalOpen && Boolean(availableUpdate?.updateAvailable)}
-        onCancel={() => setUpdateModalOpen(false)}
+        onCancel={handlePostponeUpdate}
         footer={[
-          <Button key="close" onClick={() => setUpdateModalOpen(false)}>
-            닫기
+          <Button key="later" onClick={handlePostponeUpdate}>
+            나중에
           </Button>,
           <Button
-            key="release"
+            key="download"
             type="primary"
             onClick={() => {
               if (!availableUpdate?.releaseUrl) {
@@ -549,17 +560,17 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
                 });
             }}
           >
-            릴리즈 페이지 열기
+            다운로드 페이지 열기
           </Button>,
         ]}
       >
-        <p>새 버전을 사용할 수 있습니다. GitHub Releases에서 변경사항과 다운로드 파일을 확인할 수 있습니다.</p>
-        <p>
-          <strong>현재 버전</strong> v{availableUpdate?.currentVersion}
-        </p>
-        <p>
-          <strong>최신 버전</strong> v{availableUpdate?.latestVersion}
-        </p>
+        <p>새 버전을 사용할 수 있습니다. 업데이트 내용을 확인해 주세요.</p>
+        <div className="app-update-version-details">
+          <div><span>현재 버전</span><strong>v{availableUpdate?.currentVersion}</strong></div>
+          <div><span>최신 버전</span><strong>v{availableUpdate?.latestVersion}</strong></div>
+        </div>
+        <h3 className="app-update-notes-title">업데이트 내용</h3>
+        <ReleaseNotes body={availableUpdate?.releaseNotes ?? ''} />
       </Modal>
     </Layout>
   );

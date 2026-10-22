@@ -31,6 +31,7 @@ func TestCheckerReportsNewerRelease(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(githubRelease{
 			TagName: "release-v0.1.5",
 			Name:    "release-v0.1.5",
+			Body:    "## 주요 변경사항\n- 다운로드 기능 개선",
 			HTMLURL: "https://github.com/MoonKim-isMe/chzzk-video-downloader/releases/tag/release-v0.1.5",
 		})
 	}))
@@ -44,6 +45,9 @@ func TestCheckerReportsNewerRelease(t *testing.T) {
 	}
 	if !result.UpdateAvailable || result.LatestVersion != "0.1.5" || result.CurrentVersion != "0.1.4" {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+	if result.ReleaseNotes != "## 주요 변경사항\n- 다운로드 기능 개선" {
+		t.Fatalf("unexpected release notes: %q", result.ReleaseNotes)
 	}
 }
 
@@ -65,6 +69,9 @@ func TestCheckerDoesNotReportSameOrOlderRelease(t *testing.T) {
 		}
 		if result.UpdateAvailable {
 			t.Fatalf("current %s should not report an update: %+v", current, result)
+		}
+		if result.ReleaseNotes != "" {
+			t.Fatalf("empty GitHub release body should stay empty: %q", result.ReleaseNotes)
 		}
 	}
 }
