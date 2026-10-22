@@ -18,6 +18,7 @@ type Result struct {
 	CurrentVersion  string `json:"currentVersion"`
 	LatestVersion   string `json:"latestVersion"`
 	ReleaseName     string `json:"releaseName"`
+	ReleaseNotes    string `json:"releaseNotes"`
 	ReleaseURL      string `json:"releaseUrl"`
 }
 
@@ -29,6 +30,7 @@ type Checker struct {
 type githubRelease struct {
 	TagName string `json:"tag_name"`
 	Name    string `json:"name"`
+	Body    string `json:"body"`
 	HTMLURL string `json:"html_url"`
 }
 
@@ -91,6 +93,7 @@ func (c *Checker) Check(ctx context.Context, currentVersion string) (Result, err
 		CurrentVersion:  current.String(),
 		LatestVersion:   latest.String(),
 		ReleaseName:     strings.TrimSpace(release.Name),
+		ReleaseNotes:    strings.TrimSpace(release.Body),
 		ReleaseURL:      strings.TrimSpace(release.HTMLURL),
 	}, nil
 }

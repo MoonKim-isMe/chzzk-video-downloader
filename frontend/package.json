@@ -14,6 +14,7 @@
     "test:segments": "node --experimental-strip-types --test tests/segmentRanges.test.mjs",
     "test:download-tasks": "node --experimental-strip-types --test tests/downloadTasks.test.mjs",
     "test:url-tab": "node --test tests/urlTabPersistence.test.mjs",
+    "test:updates": "node --experimental-strip-types --test tests/updateNotifications.test.mjs",
     "test:segment-order": "node --test tests/segmentQueueOrder.test.mjs",
     "preview": "vite preview"
   },
