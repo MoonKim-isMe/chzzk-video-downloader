@@ -321,8 +321,8 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
       </div>
       <LiveBroadcastPreview live={broadcast} showStreamingTime={Boolean(currentLive)} />
       <SavedBroadcastRange session={session} />
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      {session.status !== 'recording' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {canRecordAgain && (
             <Button
               type="primary"
@@ -333,9 +333,9 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
               추가 녹화
             </Button>
           )}
+          <RecordingFolderButton directory={session.directory} />
         </div>
-        <RecordingFolderButton directory={session.directory} />
-      </div>
+      )}
       {(session.recordingEndedAt || session.finishedAt) && (
         <Text type="secondary" className="mt-3 block text-xs">
           녹화 종료 · {formatLocalDateTime(session.recordingEndedAt || session.finishedAt)}
