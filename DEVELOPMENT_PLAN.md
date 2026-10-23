@@ -532,3 +532,14 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `frontend/src/features/live/LiveRecordingPanel.tsx`: `RecordingSessionOverview` 하단의 저장 구간 다음 줄에 `추가 녹화` / `폴더 열기` 작업 버튼을 배치합니다. 방송 상태 조회가 완료되기 전이거나 해당 작업의 라이브 ID와 현재 방송 ID가 다르면 `추가 녹화`는 표시하지 않습니다.
 - 같은 채널의 활성 녹화/파일 생성은 기존 `activeSessions`로 확인하여 중복 추가 녹화를 막습니다. 백엔드의 중복 녹화·동시 녹화 제한 검증은 유지합니다.
 - `formatLocalDateTime` 및 기존 폴더 열기 API를 재사용합니다. 전체 Yarn 빌드 및 Windows 실방송 검증은 추가 수행 전까지 완료로 처리하지 않습니다.
+
+### 라이브 구간 추출 내역 폴더 열기 추가 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-42. `녹화 구간 추출` 카드 내 `추출 내역` 제목 오른쪽에 `폴더 열기` 버튼 추가. 추출 MP4는 해당 녹화 세션의 `session.directory`에 저장되므로 기존 `OpenDownloadDirectory` API를 통해 동일 폴더를 엽니다. Windows 실제 추출 파일/폴더 열기 검증 필요
+- [ ] LIVE-43. `저장된 방송 구간` 하단의 기존 `폴더 열기` 버튼 유지. 두 버튼 모두 같은 `RecordingFolderButton` 컴포넌트에서 경로 검증, 로딩 상태, 실행 실패 메시지를 공유. 프론트엔드 TypeScript 검사 및 라이트/다크 실화면 검증 필요
+
+### 영향 범위와 검증
+
+- `frontend/src/features/live/LiveRecordingPanel.tsx`와 개발 계획만 변경합니다. 백엔드 저장 경로/추출 작업, 자동 녹화 정책, 다운로드 탭 로직에는 변경이 없습니다.
+- 추출 내역이 비어 있어도 해당 녹화 폴더를 열 수 있으며, 폴더가 생성되지 않았거나 접근 실패한 경우 기존 백엔드 오류를 사용자에게 표시합니다.
+- 전체 빌드·실제 Windows 탐색기 실행 검증 완료 전에는 위 항목을 완료로 표시하지 않습니다.

@@ -257,6 +257,34 @@ function SavedBroadcastRange({ session }: { session: LiveSession }) {
   );
 }
 
+function RecordingFolderButton({ directory, compact = false }: { directory: string; compact?: boolean }) {
+  const { message } = AntdApp.useApp();
+  const [opening, setOpening] = useState(false);
+
+  const openFolder = async () => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      await openDownloadDirectory(directory);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <Button
+      size={compact ? 'small' : undefined}
+      loading={opening}
+      disabled={!directory}
+      onClick={() => void openFolder()}
+    >
+      폴더 열기
+    </Button>
+  );
+}
+
 function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, onRecord }: {
   session: LiveSession;
   busy: boolean;
@@ -264,8 +292,6 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
   onStop: () => void;
   onRecord: () => void;
 }) {
-  const { message } = AntdApp.useApp();
-  const [openingFolder, setOpeningFolder] = useState(false);
   const snapshot = useChannelBroadcastStatus(session.channelId);
   const currentLive = snapshot?.live?.liveId === session.liveId ? snapshot.live : undefined;
   const canRecordAgain = Boolean(currentLive) && (
@@ -282,18 +308,6 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
     thumbnailUrl: session.thumbnailUrl || currentLive?.thumbnailUrl,
     tags: session.tags?.length ? session.tags : (currentLive?.tags ?? []),
     liveCategoryValue: session.liveCategoryValue || currentLive?.liveCategoryValue,
-  };
-
-  const openFolder = async () => {
-    if (openingFolder) return;
-    setOpeningFolder(true);
-    try {
-      await openDownloadDirectory(session.directory);
-    } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setOpeningFolder(false);
-    }
   };
 
   return (
@@ -320,9 +334,7 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
             </Button>
           )}
         </div>
-        <Button loading={openingFolder} onClick={() => void openFolder()}>
-          폴더 열기
-        </Button>
+        <RecordingFolderButton directory={session.directory} />
       </div>
       {(session.recordingEndedAt || session.finishedAt) && (
         <Text type="secondary" className="mt-3 block text-xs">
@@ -669,7 +681,14 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                 <Title level={5} className="!mb-4">녹화 구간 추출</Title>
                 <ClipEditor key={selectedSession.id} session={selectedSession} onUpdated={() => void refresh()} />
                 <div className="mt-5 border-t border-solid border-slate-500/20 pt-4">
-                  <Text strong className="mb-3 block">추출 내역</Text>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <Text strong>추출 내역</Text>
+                    <RecordingFolderButton
+                      key={selectedSession.id}
+                      directory={selectedSession.directory}
+                      compact
+                    />
+                  </div>
                 {selectedSessionClips.length === 0 ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="추출한 구간이 없습니다." />
                 ) : (
