@@ -631,3 +631,13 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `frontend/src/lib/liveRecordingTime.ts`, `frontend/tests/liveRecordingTime.test.mjs`: 원본 방송 시작 대비 녹화 시작 경과 시간을 계산하고 입력 시간을 영상 파일 기준으로 변환하는 순수 함수 및 회귀 테스트.
 - `frontend/src/features/live/LiveRecordingPanel.tsx`: 시간 기준 전환 UI, 선택 시간 유지 및 추출 가능 범위 표시. `추출 내역`은 백엔드가 저장한 영상 시간임을 명시. 라이브 녹화 백엔드/파일 저장 방식, `availableSeconds` 기준 검증 및 기존 API는 변경하지 않음.
 - 검증 수행 전 항목 완료 체크 금지. 실제 방송 수신이 끊긴 구간에서는 영상 길이 합산 기준 변환과 실제 방송 타임라인에 차이가 날 수 있음.
+
+
+### 라이브 '녹화 중' 태그 색상 채도 조정 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-60. 다크모드의 `녹화 중` 태그만 이전 밝은 파랑에서 채도를 낮춘 청회색 글씨·은은한 배경·약한 테두리로 재조정. 글자 대비는 유지하면서 강조를 줄이고, `방송 중` 태그 및 다른 상태 표시/라이트 테마는 그대로 유지. Windows 다크/라이트 실화면 확인 필요
+
+### 영향 범위 및 검증
+
+- `frontend/src/index.css`의 `live-recording-active-tag` 전용 다크 테마 스타일만 조정. `frontend/src/features/live/LiveRecordingPanel.tsx`의 상태/표시 로직과 백엔드 녹화 기능은 변경하지 않습니다.
+- 변경된 CSS 범위와 영향 분리를 정적 검사하고 실제 실화면 검증 전까지 미완료로 유지합니다.
