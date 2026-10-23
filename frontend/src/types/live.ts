@@ -1,3 +1,11 @@
+export interface LiveStatus {
+ channelId: string;
+ channelName: string;
+ liveId: number;
+ liveTitle: string;
+ openDate: string;
+ isLive: boolean;
+}
 export interface LiveSubscription {
  channelId: string;
  channelName: string;

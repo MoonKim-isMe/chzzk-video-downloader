@@ -11,6 +11,14 @@ import (
  "github.com/MoonKim-isMe/chzzk-video-downloader/internal/persistence"
 )
 
+// GetChannelLiveStatus reads the live broadcast without entering the VOD queue.
+func (a *App) GetChannelLiveStatus(channelID string) (chzzk.LiveStatus, error) {
+	cookies, err := a.activeAuthenticationCookiesFile()
+	if err != nil {
+		return chzzk.LiveStatus{}, err
+	}
+	return a.chzzkClient.GetLiveStatusWithCookiesFile(a.appContext(), channelID, cookies)
+}
 func (a *App) startLiveRecordingService() error {
  a.liveMu.Lock()
  defer a.liveMu.Unlock()

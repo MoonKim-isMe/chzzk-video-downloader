@@ -2443,3 +2443,127 @@ select {
   background: color-mix(in srgb, var(--app-text-muted) 48%, transparent);
   background-clip: padding-box;
 }
+
+
+/* Live recording uses the same two-column workspace language as channel search. */
+.live-recording-workspace {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.live-recording-sidebar,
+.live-recording-detail {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.live-recording-sidebar > .ant-card-body,
+.live-recording-detail > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.live-recording-sidebar-heading,
+.live-recording-detail-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 76px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--app-border-soft);
+}
+
+.live-recording-sidebar-heading {
+  display: block;
+}
+
+.live-recording-sidebar-scroll,
+.live-recording-detail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px;
+}
+
+.live-recording-summary {
+  padding: 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+}
+
+.live-recording-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 22px 0 10px;
+}
+
+.live-recording-list-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 60px;
+  padding: 11px 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 10px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.live-recording-list-item:hover,
+.live-recording-list-item.is-selected {
+  border-color: var(--app-primary, #00c471);
+  background: color-mix(in srgb, var(--app-primary, #00c471) 8%, var(--app-surface-soft));
+}
+
+.live-recording-list-item:focus-visible {
+  outline: 2px solid var(--app-primary, #00c471);
+  outline-offset: 2px;
+}
+
+.live-video-card {
+  border: 1px solid color-mix(in srgb, #ed4d58 46%, var(--app-border)) !important;
+  background: var(--app-surface) !important;
+}
+
+.live-video-thumbnail {
+  min-height: 152px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, #ed4d58 17%, var(--app-surface-soft)),
+    var(--app-surface-soft));
+}
+
+@media (max-width: 1100px) {
+  .live-recording-workspace {
+    grid-template-columns: 290px minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .live-recording-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(230px, 40%) minmax(0, 60%);
+    gap: 10px;
+  }
+}

@@ -568,7 +568,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             />
           </div>
           {activeTab === 'live' && (
-            <div className="app-main-tab-view"><LiveRecordingPanel savedChannels={savedChannels} /></div>
+            <div className="app-main-tab-view"><LiveRecordingPanel /></div>
           )}
           {activeTab === 'downloads' && (
             <div className="app-main-tab-view">

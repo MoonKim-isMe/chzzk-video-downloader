@@ -1,6 +1,6 @@
 import type { AuthenticationSettings } from '../types/authentication';
 import type { Channel, ChannelSearchResult } from '../types/channel';
-import type { LiveClip, LiveSession, LiveState } from '../types/live';
+import type { LiveClip, LiveSession, LiveState, LiveStatus } from '../types/live';
 import type {
   DownloadTask,
   StartDownloadRequest,
@@ -19,6 +19,7 @@ import type { Video, VideoListResult } from '../types/video';
 
 interface BackendApp {
   SearchChannels(keyword: string, offset: number, size: number): Promise<ChannelSearchResult>;
+  GetChannelLiveStatus(channelId: string): Promise<LiveStatus>;
   GetLiveRecordingState(): Promise<LiveState>;
   ConfigureLiveRecording(pollSeconds: number, maxConcurrent: number): Promise<LiveState>;
   SetLiveAutoRecording(channelId: string, channelName: string, enabled: boolean): Promise<LiveState>;
@@ -77,6 +78,7 @@ function app(): BackendApp {
   return backend;
 }
 
+export const getChannelLiveStatus = (channelId: string) => app().GetChannelLiveStatus(channelId);
 export const getLiveRecordingState = () => app().GetLiveRecordingState();
 export const configureLiveRecording = (pollSeconds: number, maxConcurrent: number) => app().ConfigureLiveRecording(pollSeconds, maxConcurrent);
 export const setLiveAutoRecording = (channelId: string, channelName: string, enabled: boolean) => app().SetLiveAutoRecording(channelId, channelName, enabled);
