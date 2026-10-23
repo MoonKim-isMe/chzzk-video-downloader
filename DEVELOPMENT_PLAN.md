@@ -578,3 +578,12 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 
 - `frontend/src/features/live/LiveRecordingPanel.tsx`의 녹화 기록 항목 렌더링과 `frontend/src/index.css`의 전용 카드 CSS만 수정합니다. 파일/목록 삭제 API, 진행 중 목록, 전체 삭제와 구간 추출 로직은 그대로 둡니다.
 - 변경된 카드 내 독립 버튼·상태·배치에 대한 정적 검증 후 PR에 반영합니다. 프로젝트 전체 TypeScript/Yarn 빌드와 Windows UI 검증은 별도 확인 전 완료로 표시하지 않습니다.
+
+### 진행 중 녹화/즐겨찾기 제목과 개수 태그 정렬 통일 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-51. `진행 중인 녹화`와 `즐겨찾기 목록` 제목 행이 서로 다른 flex/태그 여백을 사용해 우측 개수 태그의 기준선이 어긋나는 문제 수정. 두 행에 동일한 `live-recording-list-heading` 구조를 적용하고 Ant Design Tag의 기본 오른쪽 여백을 둘 다 0으로 통일. 폭 100%, 최소 높이, 공통 간격 적용. 첫 행은 위쪽 여백만 예외 처리. Windows 라이트/다크 및 다양한 목록 개수 실화면 검증 필요
+
+### 변경 파일 및 검증
+
+- `frontend/src/features/live/LiveRecordingPanel.tsx`와 `frontend/src/index.css`의 해당 제목 행만 수정하며 진행 중 작업·즐겨찾기 로직과 녹화 상태 표시는 변경하지 않습니다.
+- 프로젝트 전체 TypeScript/Yarn 빌드 및 Windows UI 검증은 별도 확인 전 완료로 표시하지 않습니다.

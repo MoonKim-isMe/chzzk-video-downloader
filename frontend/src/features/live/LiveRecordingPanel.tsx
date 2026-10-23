@@ -629,7 +629,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
         <div className="live-recording-sidebar-scroll">
           {sidebarTab === 'channels' ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="live-recording-list-heading live-recording-list-heading-first">
                 <Text strong>진행 중인 녹화</Text>
                 <Tag className="!m-0">{activeSessions.length}개</Tag>
               </div>
@@ -665,7 +665,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
 
               <div className="live-recording-list-heading">
                 <Text strong>즐겨찾기 목록</Text>
-                <Tag>{savedChannels.length}개</Tag>
+                <Tag className="!m-0">{savedChannels.length}개</Tag>
               </div>
               {savedChannels.length === 0 ? (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="저장된 즐겨찾기 채널이 없습니다." />

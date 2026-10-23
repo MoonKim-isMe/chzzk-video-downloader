@@ -2502,8 +2502,14 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  min-height: 28px;
   gap: 10px;
   margin: 22px 0 10px;
+}
+
+.live-recording-list-heading-first {
+  margin-top: 0;
 }
 
 .live-recording-list-item {
