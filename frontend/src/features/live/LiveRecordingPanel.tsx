@@ -1,7 +1,7 @@
-import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Switch, Tag, Typography } from 'antd';
+import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Segmented, Space, Switch, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, openDownloadDirectory, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
+import { clearLiveRecordingHistory, deleteLiveRecordingHistory, extractLiveClip, getChannelLiveStatus, getLiveRecordingState, openDownloadDirectory, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState, LiveStatus } from '../../types/live';
 import type { Channel } from '../../types/channel';
 import { formatBroadcastOffset, formatLocalDateTime, getSavedBroadcastPositions } from '../../lib/liveRecordingTime';
@@ -446,6 +446,10 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const [state, setState] = useState<LiveState>(initialState);
   const [error, setError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string>();
+  const [sidebarTab, setSidebarTab] = useState<'channels' | 'history'>('channels');
+  const sidebarTabRef = useRef<'channels' | 'history'>('channels');
+  const [deletingId, setDeletingId] = useState<string>();
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reservationBusy, setReservationBusy] = useState(false);
   const [reservationReady, setReservationReady] = useState(false);
@@ -473,7 +477,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
             (previousIds === null || !previousIds.has(session.id)),
           );
           seenSessionIds.current = new Set(next.sessions.map((session) => session.id));
-          if (newRecording) {
+          if (newRecording && sidebarTabRef.current === 'channels') {
             setSelectedKey((current) => current ?? 'session:' + newRecording.id);
           }
           setState(next);
@@ -506,6 +510,10 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const recording = state.sessions.filter((session) => session.status === 'recording');
   const finalizing = state.sessions.filter((session) => session.status === 'finalizing');
   const activeSessions = [...recording, ...finalizing];
+  const historySessions = state.sessions.filter((session) =>
+    session.status !== 'recording' && session.status !== 'finalizing',
+  );
+  const historyBusy = Boolean(deletingId) || clearingHistory;
   const subscriptions = new Map(state.subscriptions.map((subscription) => [subscription.channelId, subscription]));
 
   const requestedSession = selectedKey?.startsWith('session:')
@@ -525,10 +533,58 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const selectedSessionClips = state.clips.filter((clip) => clip.sessionId === selectedSession?.id);
 
   const selectSession = (id: string) => setSelectedKey('session:' + id);
+  const changeSidebarTab = (next: 'channels' | 'history') => {
+    sidebarTabRef.current = next;
+    setSidebarTab(next);
+    const first = next === 'history'
+      ? historySessions[0] ? 'session:' + historySessions[0].id : undefined
+      : activeSessions[0] ? 'session:' + activeSessions[0].id
+        : savedChannels[0] ? 'channel:' + savedChannels[0].channelId : undefined;
+    setSelectedKey(first);
+  };
   const recordChannel = (id: string) => void perform(async () => {
     const session = await startLiveRecording(id);
+    sidebarTabRef.current = 'channels';
+    setSidebarTab('channels');
     selectSession(session.id);
   }, '라이브 동영상 녹화를 시작했습니다.');
+
+  const removeHistory = async (id: string) => {
+    if (historyBusy) return;
+    setDeletingId(id);
+    try {
+      const next = await deleteLiveRecordingHistory(id);
+      setState(next);
+      const remaining = next.sessions.find((session) =>
+        session.status !== 'recording' && session.status !== 'finalizing',
+      );
+      setSelectedKey((current) => current === 'session:' + id
+        ? remaining ? 'session:' + remaining.id : undefined
+        : current);
+      message.success('녹화 기록을 목록에서 삭제했습니다. 저장된 파일은 유지됩니다.');
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDeletingId(undefined);
+    }
+  };
+  const clearHistory = async () => {
+    if (historyBusy || historySessions.length === 0) return;
+    setClearingHistory(true);
+    try {
+      const next = await clearLiveRecordingHistory();
+      setState(next);
+      setSelectedKey((current) => {
+        const id = current?.startsWith('session:') ? current.slice('session:'.length) : undefined;
+        return id && !next.sessions.some((session) => session.id === id) ? undefined : current;
+      });
+      message.success('녹화 기록을 일괄 삭제했습니다. 저장된 파일은 유지됩니다.');
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setClearingHistory(false);
+    }
+  };
 
   const updateReservation = async (channel: Channel, enabled: boolean) => {
     if (reservationBusy || !reservationReady) return;
@@ -548,94 +604,161 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
     <div className="live-recording-workspace">
       <Card bordered={false} className="app-panel live-recording-sidebar">
         <div className="live-recording-sidebar-heading">
-          <Title level={5} className="!mb-2">채널 목록</Title>
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <Text type="secondary" className="text-xs">방송 확인 간격</Text>
-            <Text strong className="text-xs">{state.pollSeconds}초</Text>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <Text type="secondary" className="text-xs">라이브 동시 녹화</Text>
-            <Text strong className="text-xs">{activeSessions.length} / {state.maxConcurrent}개</Text>
-          </div>
+          <Segmented
+            block
+            value={sidebarTab}
+            onChange={(value) => changeSidebarTab(value === 'history' ? 'history' : 'channels')}
+            options={[
+              { label: '채널 목록', value: 'channels' },
+              { label: `녹화 기록 (${historySessions.length})`, value: 'history' },
+            ]}
+          />
+          {sidebarTab === 'channels' && (
+            <div className="mt-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <Text type="secondary" className="text-xs">방송 확인 간격</Text>
+                <Text strong className="text-xs">{state.pollSeconds}초</Text>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <Text type="secondary" className="text-xs">라이브 동시 녹화</Text>
+                <Text strong className="text-xs">{activeSessions.length} / {state.maxConcurrent}개</Text>
+              </div>
+            </div>
+          )}
         </div>
         <div className="live-recording-sidebar-scroll">
-          {state.sessions.length > 0 && (
-            <div role="tablist" aria-label="라이브 녹화 작업" className="flex flex-col gap-2">
-              {state.sessions.slice(0, 100).map((session) => {
-                const selected = selectedSession?.id === session.id && selectedKey === 'session:' + session.id;
-                const label = session.status === 'recording'
-                  ? '녹화 중'
-                  : session.status === 'finalizing'
-                    ? '저장 중'
-                    : '종료';
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    className={'live-recording-list-item live-recording-task-tab' + (selected ? ' is-selected' : '')}
-                    onClick={() => selectSession(session.id)}
-                  >
-                    <span className="min-w-0 flex-1 text-left">
-                      <Text strong ellipsis className="block">{session.title || session.channelName || '라이브 방송'}</Text>
-                      <Text type="secondary" className="block truncate text-xs">
-                        {session.channelName || session.channelId}
-                      </Text>
-                    </span>
-                    <Tag
-                      color={session.status === 'recording' ? 'processing' : session.status === 'finalizing' ? 'warning' : undefined}
-                      className="!mr-0 shrink-0"
-                    >
-                      {label}
-                    </Tag>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div className="live-recording-list-heading">
-            <Text strong>즐겨찾기 목록</Text>
-            <Tag>{savedChannels.length}개</Tag>
-          </div>
-          {savedChannels.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="저장된 즐겨찾기 채널이 없습니다." />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {savedChannels.map((channel) => {
-                const selected = selectedKey === 'channel:' + channel.channelId;
-                const activeSession = activeSessions.find((session) => session.channelId === channel.channelId);
-                const subscription = subscriptions.get(channel.channelId);
-                return (
-                  <button
-                    key={channel.channelId}
-                    type="button"
-                    aria-pressed={selected}
-                    className={'live-recording-list-item' + (selected ? ' is-selected' : '')}
-                    onClick={() => setSelectedKey('channel:' + channel.channelId)}
-                  >
-                    <Avatar size={36} src={channel.channelImageUrl || undefined}>
-                      {channel.channelName.slice(0, 1)}
-                    </Avatar>
-                    <span className="min-w-0 flex-1 text-left">
-                      <Text strong ellipsis className="block">{channel.channelName}</Text>
-                      <Text type="secondary" className="block truncate text-xs">
-                        {activeSession
-                          ? activeSession.status === 'finalizing' ? '파일 생성 중' : '현재 녹화 중'
-                          : subscription?.enabled ? '라이브 예약 중' : '라이브 녹화 가능'}
-                      </Text>
-                    </span>
-                    {activeSession ? (
-                      <Tag color="processing" className="!mr-0">녹화 중</Tag>
-                    ) : subscription?.enabled ? (
-                      <Tag className="!mr-0">예약</Tag>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {sidebarTab === 'channels' ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <Text strong>진행 중인 녹화</Text>
+                <Tag className="!m-0">{activeSessions.length}개</Tag>
+              </div>
+              {activeSessions.length === 0 ? (
+                <Text type="secondary" className="block text-xs">현재 진행 중인 녹화가 없습니다.</Text>
+              ) : (
+                <div role="tablist" aria-label="진행 중인 라이브 녹화" className="flex flex-col gap-2">
+                  {activeSessions.map((session) => {
+                    const selected = selectedKey === 'session:' + session.id;
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        className={'live-recording-list-item live-recording-task-tab' + (selected ? ' is-selected' : '')}
+                        onClick={() => selectSession(session.id)}
+                      >
+                        <span className="min-w-0 flex-1 text-left">
+                          <Text strong ellipsis className="block">{session.title || session.channelName || '라이브 방송'}</Text>
+                          <Text type="secondary" className="block truncate text-xs">
+                            {session.channelName || session.channelId}
+                          </Text>
+                        </span>
+                        <Tag color={session.status === 'recording' ? 'processing' : 'warning'} className="!mr-0 shrink-0">
+                          {session.status === 'recording' ? '녹화 중' : '저장 중'}
+                        </Tag>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
+              <div className="live-recording-list-heading">
+                <Text strong>즐겨찾기 목록</Text>
+                <Tag>{savedChannels.length}개</Tag>
+              </div>
+              {savedChannels.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="저장된 즐겨찾기 채널이 없습니다." />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {savedChannels.map((channel) => {
+                    const selected = selectedKey === 'channel:' + channel.channelId;
+                    const activeSession = activeSessions.find((session) => session.channelId === channel.channelId);
+                    const subscription = subscriptions.get(channel.channelId);
+                    return (
+                      <button
+                        key={channel.channelId}
+                        type="button"
+                        aria-pressed={selected}
+                        className={'live-recording-list-item' + (selected ? ' is-selected' : '')}
+                        onClick={() => setSelectedKey('channel:' + channel.channelId)}
+                      >
+                        <Avatar size={36} src={channel.channelImageUrl || undefined}>
+                          {channel.channelName.slice(0, 1)}
+                        </Avatar>
+                        <span className="min-w-0 flex-1 text-left">
+                          <Text strong ellipsis className="block">{channel.channelName}</Text>
+                          <Text type="secondary" className="block truncate text-xs">
+                            {activeSession
+                              ? activeSession.status === 'finalizing' ? '파일 생성 중' : '현재 녹화 중'
+                              : subscription?.enabled ? '라이브 예약 중' : '라이브 녹화 가능'}
+                          </Text>
+                        </span>
+                        {activeSession ? (
+                          <Tag color="processing" className="!mr-0">녹화 중</Tag>
+                        ) : subscription?.enabled ? (
+                          <Tag className="!mr-0">예약</Tag>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <Text strong>녹화 기록</Text>
+                <Button
+                  size="small"
+                  disabled={historySessions.length === 0 || historyBusy}
+                  loading={clearingHistory}
+                  onClick={() => void clearHistory()}
+                >
+                  일괄 삭제
+                </Button>
+              </div>
+              <Text type="secondary" className="mb-4 block text-xs">
+                목록에서만 삭제됩니다. 저장된 영상 파일은 유지됩니다.
+              </Text>
+              {historySessions.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="녹화 기록이 없습니다." />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {historySessions.map((session) => {
+                    const selected = selectedKey === 'session:' + session.id;
+                    return (
+                      <div key={session.id} className={'live-recording-list-item live-recording-history-row' + (selected ? ' is-selected' : '')}>
+                        <button
+                          type="button"
+                          className="live-recording-history-select"
+                          aria-pressed={selected}
+                          onClick={() => selectSession(session.id)}
+                        >
+                          <span className="min-w-0 flex-1 text-left">
+                            <Text strong ellipsis className="block">{session.title || session.channelName || '라이브 방송'}</Text>
+                            <Text type="secondary" className="block truncate text-xs">
+                              {session.channelName || session.channelId}
+                            </Text>
+                          </span>
+                          <Tag className="!mr-0 shrink-0">{statusLabel(session.status)}</Tag>
+                        </button>
+                        <Button
+                          size="small"
+                          className="!shrink-0"
+                          loading={deletingId === session.id}
+                          disabled={historyBusy}
+                          onClick={() => void removeHistory(session.id)}
+                        >
+                          목록 삭제
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </Card>
 
@@ -663,7 +786,9 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
               onRecord={() => recordChannel(selectedChannel.channelId)}
             />
           ) : !selectedSession ? (
-            <Empty description="현재 녹화 중인 작업이 없습니다. 왼쪽 즐겨찾기에서 채널을 선택해 녹화를 시작할 수 있습니다." />
+            <Empty description={sidebarTab === 'history'
+              ? '선택된 녹화 기록이 없습니다. 왼쪽 목록에서 녹화 기록을 선택해 주세요.'
+              : '현재 녹화 중인 작업이 없습니다. 왼쪽 즐겨찾기에서 채널을 선택해 녹화를 시작할 수 있습니다.'} />
           ) : (
             <div className="flex flex-col gap-4">
               <RecordingSessionOverview

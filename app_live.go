@@ -75,6 +75,14 @@ func(a *App) StartLiveRecording(channelID string)(liverecording.Session,error){
  s,err:=a.liveService();if err!=nil{return liverecording.Session{},err}
  return s.RecordNow(channelID)
 }
+func(a *App) DeleteLiveRecordingHistory(sessionID string)(liverecording.State,error){
+ s,err:=a.liveService();if err!=nil{return liverecording.State{},err}
+ return s.DeleteHistory(sessionID)
+}
+func(a *App) ClearLiveRecordingHistory()(liverecording.State,error){
+ s,err:=a.liveService();if err!=nil{return liverecording.State{},err}
+ return s.ClearHistory()
+}
 func(a *App) StopLiveRecording(sessionID string)(bool,error){
  s,err:=a.liveService();if err!=nil{return false,err}
  return s.StopRecording(sessionID),nil

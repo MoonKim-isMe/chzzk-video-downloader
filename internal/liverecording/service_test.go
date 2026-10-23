@@ -134,3 +134,89 @@ func TestRecordNowRestartsFinishedBroadcastWithIndependentSession(t *testing.T) 
   t.Fatal("automatic watcher should not restart the same finished live")
  }
 }
+
+func TestDeleteRecordingHistoryPreservesFilesAndAutoDedup(t *testing.T){
+ s:=fakeService(t)
+ folder:=filepath.Join(t.TempDir(),"recording")
+ if err:=os.MkdirAll(folder,0755);err!=nil{t.Fatal(err)}
+ videoPath:=filepath.Join(folder,"전체 녹화.mp4")
+ if err:=os.WriteFile(videoPath,[]byte("file contents"),0600);err!=nil{t.Fatal(err)}
+ s.state.Sessions=[]Session{
+  {ID:"done",ChannelID:sampleChannel,LiveID:123,Directory:folder,Status:"completed"},
+  {ID:"ongoing",ChannelID:sampleChannel,LiveID:124,Status:"recording"},
+ }
+ s.state.Clips=[]Clip{{ID:"clip1",SessionID:"done",Status:"completed"},{ID:"clip2",SessionID:"ongoing",Status:"queued"}}
+ if err:=s.saveLocked();err!=nil{t.Fatal(err)}
+ if _,err:=s.DeleteHistory("ongoing");err==nil{t.Fatal("ongoing recording deleted")}
+ state,err:=s.DeleteHistory("done");if err!=nil{t.Fatal(err)}
+ if len(state.Sessions)!=1||state.Sessions[0].ID!="ongoing"{t.Fatalf("wrong history: %+v",state.Sessions)}
+ if len(state.Clips)!=1||state.Clips[0].ID!="clip2"{t.Fatalf("wrong clip history: %+v",state.Clips)}
+ if _,err=os.Stat(videoPath);err!=nil{t.Fatalf("recorded video was removed: %v",err)}
+ live:=chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:123}
+ if !recordedBroadcastBlocked(state.RecordedBroadcasts,live){t.Fatal("removed history restarted in auto watch")}
+ restored,err:=New(s.path,s.status,s.tools,s.options);if err!=nil{t.Fatal(err)}
+ if len(restored.Snapshot().Sessions)!=1 || !recordedBroadcastBlocked(restored.Snapshot().RecordedBroadcasts,live){t.Fatal("deletion or dedupe was not persisted")}
+ if _,err=restored.DeleteHistory("done");err==nil{t.Fatal("missing history accepted")}
+}
+
+func TestClearRecordingHistoryKeepsActiveSessions(t *testing.T){
+ s:=fakeService(t)
+ s.state.Sessions=[]Session{
+  {ID:"done1",ChannelID:sampleChannel,LiveID:200,Status:"completed"},
+  {ID:"done2",ChannelID:sampleChannel,LiveID:200,Status:"failed"},
+  {ID:"interrupted",ChannelID:sampleChannel,LiveID:201,Status:"interrupted"},
+  {ID:"recording",ChannelID:sampleChannel,LiveID:202,Status:"recording"},
+  {ID:"finalizing",ChannelID:sampleChannel,LiveID:203,Status:"finalizing"},
+ }
+ s.state.Clips=[]Clip{
+  {ID:"clip1",SessionID:"done1",Status:"completed"},
+  {ID:"clip2",SessionID:"recording",Status:"queued"},
+ }
+ state,err:=s.ClearHistory();if err!=nil{t.Fatal(err)}
+ if len(state.Sessions)!=2 || state.Sessions[0].ID!="recording" || state.Sessions[1].ID!="finalizing"{t.Fatalf("active sessions removed: %+v",state.Sessions)}
+ if len(state.Clips)!=1 || state.Clips[0].ID!="clip2"{t.Fatalf("active clip removed: %+v",state.Clips)}
+ if len(state.RecordedBroadcasts)!=1 || state.RecordedBroadcasts[0].LiveID!=200{t.Fatalf("dedupe markers: %+v",state.RecordedBroadcasts)}
+ if recordedBroadcastBlocked(state.RecordedBroadcasts,chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:201}){t.Fatal("interrupted auto restart blocked")}
+ if _,err=s.ClearHistory();err!=nil{t.Fatalf("empty cleanup failed: %v",err)}
+}
+
+func TestHistoryDeletionRejectsActiveClipAndRollsBackOnSaveError(t *testing.T){
+ s:=fakeService(t)
+ s.state.Sessions=[]Session{{ID:"done",ChannelID:sampleChannel,LiveID:200,Status:"completed"}}
+ s.state.Clips=[]Clip{{ID:"clip",SessionID:"done",Status:"running"}}
+ if _,err:=s.DeleteHistory("done");err==nil{t.Fatal("active clip deletion accepted")}
+ if _,err:=s.ClearHistory();err==nil{t.Fatal("bulk clear accepted while extracting")}
+ s.state.Clips[0].Status="completed"
+ original:=s.path
+ folder:=t.TempDir()
+ if err:=os.WriteFile(filepath.Join(folder,"keep.txt"),[]byte("do not remove"),0600);err!=nil{t.Fatal(err)}
+ s.path=folder // replacing a non-empty directory must fail
+ if _,err:=s.DeleteHistory("done");err==nil{t.Fatal("save failure not returned")}
+ s.path=original
+ if len(s.Snapshot().Sessions)!=1 || len(s.Snapshot().Clips)!=1 || len(s.Snapshot().RecordedBroadcasts)!=0{
+  t.Fatal("failed save modified in-memory state")
+ }
+}
+
+func TestRemovedHistoryDoesNotRestartAutoButAllowsManualRecording(t *testing.T){
+ s:=fakeService(t)
+ live:=chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:55,IsLive:true}
+ s.state.Sessions=[]Session{{ID:"old",ChannelID:sampleChannel,LiveID:55,Status:"completed"}}
+ if _,err:=s.DeleteHistory("old");err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithCancel(context.Background())
+ cancel()
+ s.ctx=ctx
+ opts:=Options{Directory:t.TempDir()}
+ s.mu.Lock()
+ if _,ok:=s.startLocked(live,opts,false);ok {
+  s.mu.Unlock()
+  t.Fatal("automatic recording ignored deleted-history dedupe marker")
+ }
+ if _,ok:=s.startLocked(live,opts,true);!ok {
+  s.mu.Unlock()
+  t.Fatal("manual recording was blocked after deleting history")
+ }
+ s.mu.Unlock()
+ s.wg.Wait()
+ if len(s.Snapshot().Sessions)!=1{t.Fatal("manual restart not recorded")}
+}

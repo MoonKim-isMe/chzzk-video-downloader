@@ -2647,3 +2647,31 @@ select {
     background: linear-gradient(to bottom, var(--app-primary), var(--app-border));
   }
 }
+
+/* History is a separate sidebar view: the select surface and remove action
+   are sibling controls, rather than nested interactive elements. */
+.live-recording-history-row {
+  cursor: default;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.live-recording-history-select {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.live-recording-history-select:focus-visible {
+  outline: 2px solid var(--app-primary, #00c471);
+  outline-offset: 3px;
+  border-radius: 4px;
+}

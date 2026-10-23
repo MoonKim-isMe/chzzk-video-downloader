@@ -63,12 +63,19 @@ type Clip struct {
  FilePath string `json:"filePath,omitempty"`
  Error string `json:"error,omitempty"`
 }
+// RecordedBroadcast records completed/failed live IDs whose visible history was
+// removed. Auto recording still must not restart a previously recorded stream.
+type RecordedBroadcast struct {
+ ChannelID string `json:"channelId"`
+ LiveID int64 `json:"liveId"`
+}
 type State struct {
  PollSeconds int `json:"pollSeconds"`
  MaxConcurrent int `json:"maxConcurrent"`
  Subscriptions []Subscription `json:"subscriptions"`
  Sessions []Session `json:"sessions"`
  Clips []Clip `json:"clips"`
+ RecordedBroadcasts []RecordedBroadcast `json:"recordedBroadcasts,omitempty"`
 }
 type Service struct {
  mu sync.Mutex
@@ -256,8 +263,14 @@ func duplicateBroadcastBlocked(sessions []Session,live chzzk.LiveStatus,manual b
  }
  return false
 }
+func recordedBroadcastBlocked(history []RecordedBroadcast,live chzzk.LiveStatus)bool{
+ for _,recorded:=range history{
+  if recorded.ChannelID==live.ChannelID && recorded.LiveID==live.LiveID{return true}
+ }
+ return false
+}
 func(s *Service) startLocked(live chzzk.LiveStatus,opts Options,manual bool)(Session,bool){
- if live.LiveID<=0 || duplicateBroadcastBlocked(s.state.Sessions,live,manual){return Session{},false}
+ if live.LiveID<=0 || duplicateBroadcastBlocked(s.state.Sessions,live,manual) || (!manual && recordedBroadcastBlocked(s.state.RecordedBroadcasts,live)){return Session{},false}
  stamp:=time.Now().Format("20060102_150405.000")
  folder:=filepath.Join(opts.Directory,"라이브",safeName(live.ChannelName),"live_"+strconv.FormatInt(live.LiveID,10)+"_"+stamp)
  session:=Session{ID:fmt.Sprintf("%s-%d-%d",live.ChannelID,live.LiveID,time.Now().UnixNano()),ChannelID:live.ChannelID,ChannelName:live.ChannelName,LiveID:live.LiveID,Title:live.LiveTitle,ThumbnailURL:live.ThumbnailURL,BroadcastStartedAt:live.OpenDate,Tags:append([]string{},live.Tags...),LiveCategoryValue:live.LiveCategoryValue,Directory:folder,Status:"recording",StartedAt:time.Now().Format(time.RFC3339)}
@@ -275,6 +288,77 @@ func safeName(name string)string{
 }
 func(s *Service) findSessionLocked(id string)*Session{
  for i:=range s.state.Sessions {if s.state.Sessions[i].ID==id{return &s.state.Sessions[i]}}
+ return nil
+}
+// DeleteHistory removes one finished recording from the UI history only.
+// Recorded files are never removed, and the watcher keeps its dedupe marker.
+func(s *Service) DeleteHistory(sessionID string)(State,error){
+ sessionID=strings.TrimSpace(sessionID)
+ if sessionID=="" {return State{},errors.New("삭제할 녹화 기록을 선택해 주세요")}
+ s.mu.Lock()
+ session:=s.findSessionLocked(sessionID)
+ if session==nil{s.mu.Unlock();return State{},errors.New("녹화 기록을 찾을 수 없습니다")}
+ if session.Status=="recording" || session.Status=="finalizing" {
+  s.mu.Unlock();return State{},errors.New("녹화 중이거나 파일 생성 중인 기록은 삭제할 수 없습니다")
+ }
+ if s.hasActiveClipsLocked(sessionID){
+  s.mu.Unlock();return State{},errors.New("구간 추출이 끝난 뒤 목록에서 삭제할 수 있습니다")
+ }
+ err:=s.deleteHistoryLocked(map[string]bool{sessionID:true})
+ s.mu.Unlock()
+ if err!=nil{return State{},err}
+ return s.Snapshot(),nil
+}
+
+// ClearHistory removes all completed/failed/interrupted records atomically.
+// Currently recording/finalizing sessions remain available in the main list.
+func(s *Service) ClearHistory()(State,error){
+ s.mu.Lock()
+ ids:=make(map[string]bool)
+ for _,session:=range s.state.Sessions{
+  if session.Status=="recording" || session.Status=="finalizing"{continue}
+  if s.hasActiveClipsLocked(session.ID){
+   s.mu.Unlock();return State{},errors.New("구간 추출이 진행 중입니다. 완료된 후 일괄 삭제해 주세요")
+  }
+  ids[session.ID]=true
+ }
+ err:=s.deleteHistoryLocked(ids)
+ s.mu.Unlock()
+ if err!=nil{return State{},err}
+ return s.Snapshot(),nil
+}
+
+func(s *Service) hasActiveClipsLocked(sessionID string)bool{
+ for _,clip:=range s.state.Clips{
+  if clip.SessionID==sessionID && (clip.Status=="queued" || clip.Status=="running"){return true}
+ }
+ return false
+}
+
+// deleteHistoryLocked must be called with s.mu held. On disk-write failure
+// the in-memory state is restored without losing session or clip references.
+func(s *Service) deleteHistoryLocked(ids map[string]bool)error{
+ if len(ids)==0{return nil}
+ old:=s.state
+ sessions:=make([]Session,0,len(old.Sessions))
+ clips:=make([]Clip,0,len(old.Clips))
+ recorded:=append([]RecordedBroadcast{},old.RecordedBroadcasts...)
+ for _,session:=range old.Sessions{
+  if !ids[session.ID]{sessions=append(sessions,session);continue}
+  if session.Status!="interrupted" && session.LiveID>0 {
+   live:=chzzk.LiveStatus{ChannelID:session.ChannelID,LiveID:session.LiveID}
+   if !recordedBroadcastBlocked(recorded,live){
+    recorded=append(recorded,RecordedBroadcast{ChannelID:session.ChannelID,LiveID:session.LiveID})
+   }
+  }
+ }
+ for _,clip:=range old.Clips{
+  if !ids[clip.SessionID]{clips=append(clips,clip)}
+ }
+ s.state.Sessions=sessions
+ s.state.Clips=clips
+ s.state.RecordedBroadcasts=recorded
+ if err:=s.saveLocked();err!=nil{s.state=old;return err}
  return nil
 }
 func(s *Service) StopRecording(sessionID string)bool{

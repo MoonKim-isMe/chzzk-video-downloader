@@ -26,6 +26,8 @@ interface BackendApp {
   RemoveLiveAutoRecording(channelId: string): Promise<LiveState>;
   StartLiveRecording(channelId: string): Promise<LiveSession>;
   StopLiveRecording(sessionId: string): Promise<boolean>;
+  DeleteLiveRecordingHistory(sessionId: string): Promise<LiveState>;
+  ClearLiveRecordingHistory(): Promise<LiveState>;
   ExtractLiveClip(sessionId: string, title: string, startSeconds: number, endSeconds: number, exact: boolean): Promise<LiveClip>;
   ResolveVideoURL(rawURL: string): Promise<Video>;
   GetSavedChannels(): Promise<Channel[]>;
@@ -85,6 +87,8 @@ export const setLiveAutoRecording = (channelId: string, channelName: string, ena
 export const removeLiveAutoRecording = (channelId: string) => app().RemoveLiveAutoRecording(channelId);
 export const startLiveRecording = (channelId: string) => app().StartLiveRecording(channelId);
 export const stopLiveRecording = (sessionId: string) => app().StopLiveRecording(sessionId);
+export const deleteLiveRecordingHistory = (sessionId: string) => app().DeleteLiveRecordingHistory(sessionId);
+export const clearLiveRecordingHistory = () => app().ClearLiveRecordingHistory();
 export const extractLiveClip = (sessionId: string, title: string, startSeconds: number, endSeconds: number, exact: boolean) => app().ExtractLiveClip(sessionId, title, startSeconds, endSeconds, exact);
 
 export const searchChannels = (keyword: string, offset = 0, size = 20) =>
