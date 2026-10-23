@@ -2716,3 +2716,59 @@ select {
   border-color: rgba(154, 169, 188, 0.28) !important;
   font-weight: 600;
 }
+
+
+/* Compact, theme-aware time basis control in the live clip editor. */
+.live-clip-time-basis.ant-segmented {
+  padding: 4px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+  box-shadow: none;
+}
+
+.live-clip-time-basis .ant-segmented-group {
+  gap: 3px;
+}
+
+.live-clip-time-basis .ant-segmented-item {
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.live-clip-time-basis .ant-segmented-item-label {
+  min-height: 32px;
+  padding: 5px 12px;
+  line-height: 22px;
+}
+
+.live-clip-time-basis .ant-segmented-thumb,
+.live-clip-time-basis .ant-segmented-item-selected {
+  border-radius: 8px;
+  background: var(--app-surface-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px var(--app-border-soft);
+}
+
+.live-clip-time-basis .ant-segmented-item-selected {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.live-clip-time-basis .ant-segmented-item:not(.ant-segmented-item-selected, .ant-segmented-item-disabled):hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.live-clip-time-basis .ant-segmented-item-disabled {
+  color: var(--app-text-muted);
+  opacity: 0.55;
+}
+
+.live-clip-time-basis .ant-segmented-item:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}

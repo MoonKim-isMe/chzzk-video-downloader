@@ -443,7 +443,8 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Title level={5} className="!m-0">녹화 구간 추출</Title>
         <Segmented
-          size="small"
+          size="middle"
+          className="live-clip-time-basis"
           aria-label="추출 시간 기준"
           value={timeBasis}
           onChange={(value) => changeTimeBasis(value === 'broadcast' ? 'broadcast' : 'video')}
@@ -453,12 +454,16 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
           ]}
         />
       </div>
-      <Text type="secondary" className="mb-4 block text-xs">
-        {timeBasis === 'broadcast'
-          ? '방송 시작 후 경과 시간으로 입력합니다. 수신이 끊긴 구간이 있으면 실제 방송 시각과 차이가 날 수 있습니다.'
-          : '녹화된 영상의 시작을 00:00:00으로 계산합니다.'}
-        {' '}저장 완료된 구간만 추출할 수 있으며 녹화는 중단되지 않습니다.
-      </Text>
+      <div className="mb-4 flex flex-col gap-1">
+        <Text type="secondary" className="block text-xs">
+          {timeBasis === 'broadcast'
+            ? '방송 시작 후 경과 시간으로 입력합니다. 수신이 끊긴 구간이 있으면 실제 방송 시각과 차이가 날 수 있습니다.'
+            : '녹화된 영상의 시작을 00:00:00으로 계산합니다.'}
+        </Text>
+        <Text type="secondary" className="block text-xs">
+          저장 완료된 구간만 추출할 수 있으며 녹화는 중단되지 않습니다.
+        </Text>
+      </div>
       {broadcastOffset === undefined && (
         <Text type="secondary" className="mb-3 block text-xs">
           방송 시작 시각을 확인할 수 없어 방송 시간 기준을 사용할 수 없습니다.

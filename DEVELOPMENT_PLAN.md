@@ -641,3 +641,14 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 
 - `frontend/src/index.css`의 `live-recording-active-tag` 전용 다크 테마 스타일만 조정. `frontend/src/features/live/LiveRecordingPanel.tsx`의 상태/표시 로직과 백엔드 녹화 기능은 변경하지 않습니다.
 - 변경된 CSS 범위와 영향 분리를 정적 검사하고 실제 실화면 검증 전까지 미완료로 유지합니다.
+
+
+### 라이브 구간 추출 시간 기준 토글 디자인 및 안내 문구 개행 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-61. `녹화 구간 추출` 제목 우측 `방송 시간 기준` / `영상 시간 기준` Segmented 컨트롤을 기존 라이트/다크 테마 변수 기반의 둥근 보더·표면 색·선택 배경·상태별 글자 대비로 개선. 기본값/선택 시 입력시간 변환/방송 기준 비활성화 로직은 그대로 유지. Windows 테마별 실화면 검증 필요
+- [ ] LIVE-62. 시간 기준 안내 아래 `저장 완료된 구간만 추출할 수 있으며 녹화는 중단되지 않습니다.` 문장을 반드시 **새 줄**에 표시. 좁은 화면에서도 두 문장이 같은 행으로 합쳐지지 않도록 별도의 블록으로 분리. 프론트엔드 빌드·실화면 검증 필요
+
+### 영향 및 검증
+
+- `frontend/src/features/live/LiveRecordingPanel.tsx`·`frontend/src/index.css`에 시간 기준 토글의 외관과 설명 줄바꿈만 적용합니다. 기존 `ExtractLiveClip` API, 시간 변환/검증 및 녹화 로직은 변경하지 않습니다.
+- 전체 Yarn/TypeScript 빌드와 Windows 라이트/다크 실화면 검증 전에는 완료 처리하지 않습니다.
