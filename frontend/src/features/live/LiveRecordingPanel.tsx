@@ -1,7 +1,7 @@
 import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { extractLiveClip, getLiveRecordingState, startLiveRecording, stopLiveRecording } from '../../lib/backend';
+import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState } from '../../types/live';
 import type { Channel } from '../../types/channel';
 import { formatBroadcastOffset, formatChzzkDateTime } from '../../lib/liveRecordingTime';
@@ -36,6 +36,59 @@ function statusLabel(status: LiveSession['status']) {
     failed: '실패',
     interrupted: '녹화 중단',
   })[status];
+}
+
+type BroadcastState = 'checking' | 'live' | 'offline' | 'unavailable';
+
+function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
+  const [snapshot, setSnapshot] = useState<{ channelId: string; status: BroadcastState }>({
+    channelId,
+    status: 'checking',
+  });
+
+  useEffect(() => {
+    let active = true;
+    let latestRequest = 0;
+    setSnapshot({ channelId, status: 'checking' });
+
+    const check = async () => {
+      const request = ++latestRequest;
+      try {
+        const live = await getChannelLiveStatus(channelId);
+        if (active && request === latestRequest) {
+          setSnapshot({ channelId, status: live.isLive ? 'live' : 'offline' });
+        }
+      } catch {
+        if (active && request === latestRequest) {
+          setSnapshot({ channelId, status: 'unavailable' });
+        }
+      }
+    };
+
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [channelId]);
+
+  const status = snapshot.channelId === channelId ? snapshot.status : 'checking';
+  const labels: Record<BroadcastState, string> = {
+    checking: '확인 중',
+    live: '방송 중',
+    offline: '방송 중 아님',
+    unavailable: '상태 확인 실패',
+  };
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2" aria-live="polite">
+      <Text type="secondary" className="text-xs">현재 방송 상태</Text>
+      <Tag color={status === 'live' ? 'green' : undefined} className="!m-0">
+        {labels[status]}
+      </Tag>
+    </div>
+  );
 }
 
 function RecordingThumbnail({ url, title }: { url?: string; title: string }) {
@@ -315,7 +368,8 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
 
           {!selectedSession && selectedChannel ? (
             <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-              <Title level={5} className="!mb-1">{selectedChannel.channelName || selectedChannel.channelId}</Title>
+              <Title level={5} className="!mb-2">{selectedChannel.channelName || selectedChannel.channelId}</Title>
+              <ChannelBroadcastStatus channelId={selectedChannel.channelId} />
               <Text type="secondary" className="mb-4 block text-sm">
                 {selectedSubscription?.enabled
                   ? '자동 녹화 감시 중입니다. 방송 시작이 감지되면 녹화가 시작됩니다.'
@@ -343,6 +397,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                     <Title level={5} className="!mb-3 !mt-3">
                       {selectedSession.title || '라이브 방송'}
                     </Title>
+                    <ChannelBroadcastStatus channelId={selectedSession.channelId} />
                     {selectedSession.broadcastStartedAt && (
                       <Text className="mb-1 block text-xs">
                         <Text type="secondary">치지직 방송 시작</Text> · {formatChzzkDateTime(selectedSession.broadcastStartedAt)}

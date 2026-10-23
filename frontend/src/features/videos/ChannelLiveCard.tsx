@@ -34,10 +34,10 @@ export default function ChannelLiveCard({ channel, live, onRecord }: ChannelLive
           <Avatar size={64} src={channel.channelImageUrl || undefined}>
             {channel.channelName.slice(0, 1)}
           </Avatar>
-          <Tag color="red" className="!m-0">LIVE · 방송 중</Tag>
+          <Tag color="green" className="!m-0">LIVE · 방송 중</Tag>
         </div>
         <div className="mt-3 min-w-0">
-          <Tag color="red">라이브</Tag>
+          <Tag color="green">라이브</Tag>
           <Title level={5} ellipsis={{ rows: 2 }} className="video-card-title !mb-1 !mt-2">
             {live.liveTitle || channel.channelName + ' 라이브 방송'}
           </Title>
