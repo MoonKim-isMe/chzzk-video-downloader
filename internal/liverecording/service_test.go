@@ -2,7 +2,9 @@ package liverecording
 
 import (
  "context"
+ "fmt"
  "os"
+ "os/exec"
  "path/filepath"
  "strings"
  "testing"
@@ -219,4 +221,69 @@ func TestRemovedHistoryDoesNotRestartAutoButAllowsManualRecording(t *testing.T){
  s.mu.Unlock()
  s.wg.Wait()
  if len(s.Snapshot().Sessions)!=1{t.Fatal("manual restart not recorded")}
+}
+
+func TestParseFFmpegProgressLine(t *testing.T){
+ cases:=[]struct{line string;want float64;valid bool}{
+  {"out_time_us=12500000",12.5,true},
+  {"out_time_ms=1534000",1.534,true}, // historical name is still microseconds
+  {"out_time_us=0",0,true},
+  {"out_time_us=-1",0,false},
+  {"out_time_us=N/A",0,false},
+  {"progress=continue",0,false},
+  {"out_time=00:00:01.25",0,false},
+  {"out_time_us=999999999999999999999999",0,false},
+ }
+ for _,tc:=range cases{
+  got,ok:=parseFFmpegProgressLine(tc.line)
+  if got!=tc.want || ok!=tc.valid{t.Errorf("%s => %v %v, want %v %v",tc.line,got,ok,tc.want,tc.valid)}
+ }
+}
+
+func TestRecorderProgressIsMonotonicAndDoesNotIncreaseClipAvailability(t *testing.T){
+ s:=fakeService(t)
+ folder:=t.TempDir()
+ s.state.Sessions=[]Session{{ID:"recording",ChannelID:sampleChannel,LiveID:123,Directory:folder,Status:"recording"}}
+ s.updateRecorderProgress("recording",0,4.4)
+ s.updateRecorderProgress("recording",0,3.0) // FFmpeg duplicate/out-of-order update
+ got:=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds!=4.4||got.AvailableSeconds!=0{
+  t.Fatalf("FFmpeg progress leaked into extractable duration: %+v",got)
+ }
+ s.updateRecorderProgress("recording",4.4,2.2) // a reconnect resets FFmpeg out_time
+ got=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds<6.59 || got.RecordedSeconds>6.61{
+  t.Fatalf("progress did not accumulate across reconnect: %v",got.RecordedSeconds)
+ }
+ s.updateRecorderProgress("missing",0,100)
+ if s.Snapshot().Sessions[0].RecordedSeconds>6.61{t.Fatal("progress changed for missing session")}
+ s.state.Sessions[0].Status="completed"
+ s.state.Sessions[0].AvailableSeconds=6
+ delete(s.progress,"recording")
+ got=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds!=0||got.AvailableSeconds!=6{t.Fatalf("finished recording did not use final segment duration: %+v",got)}
+}
+
+func TestRecorderProgressHelperProcess(t *testing.T){
+ if os.Getenv("CHZZK_FFMPEG_PROGRESS_HELPER")!="1"{return}
+ fmt.Println("frame=30")
+ fmt.Println("out_time_us=1500000")
+ fmt.Println("progress=continue")
+ fmt.Println("out_time_us=2500000")
+ fmt.Println("progress=end")
+ os.Exit(0)
+}
+
+func TestFFmpegProgressStdoutReader(t *testing.T){
+ s:=fakeService(t)
+ s.state.Sessions=[]Session{{ID:"recording",ChannelID:sampleChannel,LiveID:123,Directory:t.TempDir(),Status:"recording"}}
+ ctx,cancel:=context.WithTimeout(context.Background(),5*time.Second)
+ defer cancel()
+ cmd:=exec.CommandContext(ctx,os.Args[0],"-test.run=^TestRecorderProgressHelperProcess$")
+ cmd.Env=append(os.Environ(),"CHZZK_FFMPEG_PROGRESS_HELPER=1")
+ if err:=s.runRecorderWithProgress(cmd,"recording",30);err!=nil{t.Fatal(err)}
+ got:=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds!=32.5 || got.AvailableSeconds!=0{
+  t.Fatalf("FFmpeg stdout updates not combined with previous segments: %+v",got)
+ }
 }

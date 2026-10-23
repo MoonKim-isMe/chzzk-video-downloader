@@ -596,3 +596,15 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 
 - `frontend/src/index.css`에서 **라이브 좌측 목록 전용 스크롤 컨테이너**의 오른쪽 패딩과 스크롤바 폭만 보정합니다. 우측 상세·다른 탭의 스크롤/기존 카드·태그·녹화 로직은 변경하지 않습니다.
 - 개발 계획은 검증 전 미완료로 유지합니다.
+
+### 녹화 중 실시간 영상 처리 길이 표시 개선 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-53. FFmpeg 30초 TS 분할 저장은 유지하면서 `-progress pipe:1 -stats_period 1`의 `out_time_us`를 읽어 현재 영상 처리 시간 반영. `recordedSeconds`는 스냅샷 전용이며 영속성/구간 추출 유효 범위에는 포함하지 않음. Windows FFmpeg 실방송 검증 필요
+- [ ] LIVE-54. 라이브 녹화 중 저장 구간 카드의 녹화 길이와 마지막 위치는 실제 FFmpeg 진행값으로 갱신. 녹화 중 1초 간격 상태 조회, 그 외 3초 간격 유지. 스트림 수신 중단 시 값 정지, 재연결 후 이전 저장 조각을 기준으로 이어 표시. 완료/중단 상태에서는 저장 완료된 조각 길이로 확정. 실사용 검증 필요
+- [ ] LIVE-55. FFmpeg 진행 라인 파싱, 중복/역행 데이터 무시, 재연결 누적/진행 중지, 종료 시 최종 길이 확인과 TypeScript/Go 회귀 검사 수행
+
+### 구현과 영향 범위
+
+- `internal/liverecording/service.go`: FFmpeg 표준 출력의 진행 정보를 읽고 세션별 **메모리 전용** 진행 시간을 기록합니다. 재생 주소가 노출될 수 있는 FFmpeg stderr는 로깅/저장하지 않습니다. 실제 추출 가능 길이(`availableSeconds`)는 기존 완료 파일 기준을 유지합니다.
+- `frontend/src/types/live.ts`, `frontend/src/features/live/LiveRecordingPanel.tsx`: 녹화 중 진행 시간은 별도로 표시하며 녹화 중지 후에는 완료 영상의 길이를 사용합니다. 분할 주기, 인코딩, 구간 추출 API와 다운로드 탭은 변경하지 않습니다.
+- 실제 Windows 앱 빌드·네트워크 중단/FFmpeg 재연결 실방송 테스트 전에는 미완료로 기록합니다.

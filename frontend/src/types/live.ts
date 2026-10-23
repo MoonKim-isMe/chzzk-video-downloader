@@ -33,6 +33,8 @@ export interface LiveSession {
  finalPath?: string;
  error?: string;
  availableSeconds: number;
+ /** FFmpeg media progress, including the segment currently being written. */
+ recordedSeconds?: number;
 }
 export interface LiveClip {
  id: string;

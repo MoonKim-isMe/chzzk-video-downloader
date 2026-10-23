@@ -52,6 +52,8 @@ type Session struct {
  FinalPath string `json:"finalPath,omitempty"`
  Error string `json:"error,omitempty"`
  AvailableSeconds float64 `json:"availableSeconds"`
+ // FFmpeg-verified processed media time for Snapshot only, not clip boundaries.
+ RecordedSeconds float64 `json:"recordedSeconds,omitempty"`
 }
 type Clip struct {
  ID string `json:"id"`
@@ -77,6 +79,8 @@ type State struct {
  Clips []Clip `json:"clips"`
  RecordedBroadcasts []RecordedBroadcast `json:"recordedBroadcasts,omitempty"`
 }
+type recordingProgress struct { seconds float64 }
+
 type Service struct {
  mu sync.Mutex
  state State
@@ -90,6 +94,7 @@ type Service struct {
  active map[string]context.CancelFunc
  clipSlots chan struct{}
  closedCounts map[string]int
+ progress map[string]recordingProgress
  wg sync.WaitGroup
 }
 var channelPattern=regexp.MustCompile(`^[a-f0-9]{32}$`)
@@ -101,6 +106,7 @@ func New(path string, status StatusFunc, tools ToolsFunc, options OptionsFunc) (
   path:path,status:status,tools:tools,options:options,
   state:State{PollSeconds:30,MaxConcurrent:2,Subscriptions:[]Subscription{},Sessions:[]Session{},Clips:[]Clip{}},
   active:make(map[string]context.CancelFunc),closedCounts:make(map[string]int),
+  progress:make(map[string]recordingProgress),
   wake:make(chan struct{},1),clipSlots:make(chan struct{},2),
  }
  data,err:=os.ReadFile(path)
@@ -151,6 +157,10 @@ func (s *Service) Snapshot() State {
  for i:=range result.Sessions{
   if result.Sessions[i].Status=="recording" {
    result.Sessions[i].AvailableSeconds=availableDuration(result.Sessions[i].Directory,true)
+   result.Sessions[i].RecordedSeconds=result.Sessions[i].AvailableSeconds
+   if progress,ok:=s.progress[result.Sessions[i].ID];ok && progress.seconds>result.Sessions[i].RecordedSeconds{
+    result.Sessions[i].RecordedSeconds=progress.seconds
+   }
   }
  }
  return result
@@ -384,12 +394,16 @@ func(s *Service) record(ctx context.Context,id string,opts Options){
    if !sleep(ctx,5*time.Second){break}
    continue
   }
+  // The next invocation starts counting at zero. Completed segments supply
+  // the cumulative offset while the current segment continues being written.
+  baseSeconds:=availableDuration(folder,false)
   startNumber:=nextSegmentNumber(folder)
   playlist:=filepath.Join(folder,fmt.Sprintf("index_%06d.csv",startNumber))
-  args:=[]string{"-hide_banner","-loglevel","error","-nostdin","-i",url,"-map","0:v:0","-map","0:a?","-c","copy","-f","segment","-segment_time","30","-segment_format","mpegts","-segment_list_type","csv","-segment_list",playlist,"-segment_start_number",strconv.Itoa(startNumber),filepath.Join(folder,"segment_%06d.ts")}
+  args:=[]string{"-hide_banner","-loglevel","error","-nostdin","-nostats","-stats_period","1","-progress","pipe:1","-i",url,"-map","0:v:0","-map","0:a?","-c","copy","-f","segment","-segment_time","30","-segment_format","mpegts","-segment_list_type","csv","-segment_list",playlist,"-segment_start_number",strconv.Itoa(startNumber),filepath.Join(folder,"segment_%06d.ts")}
   cmd:=exec.CommandContext(ctx,tools.FFmpeg,args...);hideWindow(cmd)
-  // Signed playback URLs may occur in ffmpeg stderr; never store raw output.
-  err=cmd.Run()
+  // Parse only machine-readable stdout: signed playback URLs must not appear
+  // in progress, persisted state, errors or application logs.
+  err=s.runRecorderWithProgress(cmd,id,baseSeconds)
   if ctx.Err()!=nil {break}
   statusCtx,cancel:=context.WithTimeout(ctx,12*time.Second)
   current,statusErr:=s.status(statusCtx,channelID,opts.CookiesFile);cancel()
@@ -421,10 +435,49 @@ func(s *Service) record(ctx context.Context,id string,opts Options){
   if failure!=nil{current.Status="failed";current.Error=failure.Error()} else{current.Status="completed"}
   current.AvailableSeconds=availableDuration(folder,false)
  }
- delete(s.active,channelID);delete(s.closedCounts,channelID)
+ delete(s.active,channelID);delete(s.closedCounts,channelID);delete(s.progress,id)
  _=s.saveLocked();s.mu.Unlock()
  s.notify()
 }
+// FFmpeg progress out_time_us and the historical out_time_ms use MICROSECONDS.
+func parseFFmpegProgressLine(line string)(float64,bool){
+ key,value,ok:=strings.Cut(strings.TrimSpace(line),"=")
+ if !ok || (key!="out_time_us" && key!="out_time_ms"){return 0,false}
+ micros,err:=strconv.ParseInt(value,10,64)
+ if err!=nil || micros<0{return 0,false}
+ return float64(micros)/1_000_000,true
+}
+
+func(s *Service) updateRecorderProgress(id string,baseSeconds,elapsedSeconds float64){
+ s.mu.Lock()
+ defer s.mu.Unlock()
+ session:=s.findSessionLocked(id)
+ if session==nil || session.Status!="recording"{return}
+ value:=baseSeconds+elapsedSeconds
+ previous:=s.progress[id]
+ if value>previous.seconds {s.progress[id]=recordingProgress{seconds:value}}
+}
+
+// Drain stdout before Wait as required by exec.Cmd.StdoutPipe.
+// Progress stops changing on stalled streams: no wall-clock extrapolation.
+func(s *Service) runRecorderWithProgress(cmd *exec.Cmd,id string,baseSeconds float64)error{
+ stdout,err:=cmd.StdoutPipe()
+ if err!=nil{return err}
+ if err=cmd.Start();err!=nil{return err}
+ scanner:=bufio.NewScanner(stdout)
+ for scanner.Scan(){
+  if seconds,ok:=parseFFmpegProgressLine(scanner.Text());ok{
+   s.updateRecorderProgress(id,baseSeconds,seconds)
+  }
+ }
+ if scanner.Err()!=nil{
+  _=cmd.Process.Kill()
+  _=cmd.Wait()
+  return errors.New("라이브 녹화 진행 시간을 읽지 못했습니다")
+ }
+ return cmd.Wait()
+}
+
 func sleep(ctx context.Context,d time.Duration)bool{
  t:=time.NewTimer(d);defer t.Stop()
  select{case <-ctx.Done():return false;case <-t.C:return true}

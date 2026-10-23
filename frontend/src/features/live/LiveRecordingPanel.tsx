@@ -224,16 +224,21 @@ function LiveBroadcastPreview({
  * when the recorder has gaps in reception.
  */
 function SavedBroadcastRange({ session }: { session: LiveSession }) {
-  const positions = getSavedBroadcastPositions(session.startedAt, session.broadcastStartedAt, session.availableSeconds);
+  const isRecording = session.status === 'recording';
+  // FFmpeg progress includes the open segment. Clip extraction deliberately
+  // continues to use session.availableSeconds (completed media only).
+  const shownSeconds = Math.max(0, Math.floor(isRecording
+    ? Math.max(session.availableSeconds, session.recordedSeconds ?? 0)
+    : session.availableSeconds));
+  const positions = getSavedBroadcastPositions(session.startedAt, session.broadcastStartedAt, shownSeconds);
   const start = positions?.start;
   const lastSaved = positions?.last;
-  const savedSeconds = Math.max(0, Math.floor(session.availableSeconds));
 
   return (
     <div className="live-recording-saved-range mt-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Text strong>저장된 방송 구간</Text>
-        <Tag color="green" className="!m-0">저장 길이 {formatTime(savedSeconds)}</Tag>
+        <Tag color="green" className="!m-0">{isRecording ? '녹화 길이' : '저장 길이'} {formatTime(shownSeconds)}</Tag>
       </div>
       <div className="live-recording-range-points">
         <div className="live-recording-range-point">
@@ -244,13 +249,15 @@ function SavedBroadcastRange({ session }: { session: LiveSession }) {
         <div className="live-recording-range-point">
           <Text type="secondary" className="block text-xs">마지막 저장 · 방송 기준</Text>
           <Text strong className="block tabular-nums text-lg">
-            {lastSaved ?? (savedSeconds <= 0 ? '저장 대기' : '시간 정보 없음')}
+            {lastSaved ?? (shownSeconds <= 0 ? '저장 대기' : '시간 정보 없음')}
           </Text>
         </div>
       </div>
-      {start && savedSeconds > 0 && (
+      {start && shownSeconds > 0 && (
         <Text type="secondary" className="mt-3 block text-xs">
-          저장된 영상 길이를 기준으로 계산한 위치입니다. 방송 수신이 끊긴 경우 실제 방송 시각과 차이가 날 수 있습니다.
+          {isRecording
+            ? '실제 녹화 진행 기준 추정 위치입니다. 구간 추출은 저장 완료된 영상까지만 가능합니다.'
+            : '저장된 영상 길이를 기준으로 계산한 위치입니다. 방송 수신이 끊긴 경우 실제 방송 시각과 차이가 날 수 있습니다.'}
         </Text>
       )}
     </div>
@@ -464,7 +471,9 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
 
   useEffect(() => {
     let active = true;
+    let timer: number | undefined;
     const read = async () => {
+      let interval = 3000;
       try {
         const next = await getLiveRecordingState();
         if (active) {
@@ -483,14 +492,19 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
           setState(next);
           setReservationReady(true);
           setError('');
+          if (next.sessions.some((session) => session.status === 'recording')) interval = 1000;
         }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        if (active) timer = window.setTimeout(() => { void read(); }, interval);
       }
     };
     void read();
-    const timer = window.setInterval(() => { void read(); }, 3000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, []);
 
   const perform = async (action: () => Promise<unknown>, successMessage?: string) => {
