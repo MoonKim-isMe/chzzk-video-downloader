@@ -217,7 +217,7 @@ func(s *Service) check(){
    if !live.IsLive {s.closedCounts[sub.ChannelID]++} else {s.closedCounts[sub.ChannelID]=0}
    if s.closedCounts[sub.ChannelID]>=2 {s.active[sub.ChannelID]()}
   } else if live.IsLive && len(s.active)<s.state.MaxConcurrent {
-   s.startLocked(live,options)
+   s.startLocked(live,options,false)
   }
   _=s.saveLocked()
   s.mu.Unlock()
@@ -239,18 +239,23 @@ func(s *Service) RecordNow(channelID string)(Session,error){
  s.mu.Lock();defer s.mu.Unlock()
  if _,ok:=s.active[channelID];ok{return Session{},errors.New("이미 녹화 중인 방송입니다")}
  if len(s.active)>=s.state.MaxConcurrent{return Session{},errors.New("동시 라이브 녹화 한도에 도달했습니다")}
- session,ok:=s.startLocked(live,options)
- if !ok{return Session{},errors.New("이미 녹화를 종료한 방송입니다. 다음 방송부터 다시 녹화할 수 있습니다")}
+ session,ok:=s.startLocked(live,options,true)
+ if !ok{return Session{},errors.New("라이브 녹화를 시작할 수 없습니다")}
  if err:=s.saveLocked();err!=nil{return Session{},err}
  return session,nil
 }
-func(s *Service) startLocked(live chzzk.LiveStatus,opts Options)(Session,bool){
- if live.LiveID<=0 {return Session{},false}
- for _,session:=range s.state.Sessions {
-  // A crash-interrupted session may resume in a new recording folder,
-  // while manually stopped, finished, failed and running sessions are deduplicated.
-  if session.ChannelID==live.ChannelID && session.LiveID==live.LiveID && session.Status!="interrupted" {return Session{},false}
+// A repeated session requires an explicit user action. Auto watching must
+// never restart an already finished recording of this broadcast.
+func duplicateBroadcastBlocked(sessions []Session,live chzzk.LiveStatus,manual bool)bool{
+ if manual{return false}
+ for _,session:=range sessions{
+  // Crash-interrupted broadcasts retain the existing automatic resume policy.
+  if session.ChannelID==live.ChannelID && session.LiveID==live.LiveID && session.Status!="interrupted"{return true}
  }
+ return false
+}
+func(s *Service) startLocked(live chzzk.LiveStatus,opts Options,manual bool)(Session,bool){
+ if live.LiveID<=0 || duplicateBroadcastBlocked(s.state.Sessions,live,manual){return Session{},false}
  stamp:=time.Now().Format("20060102_150405.000")
  folder:=filepath.Join(opts.Directory,"라이브",safeName(live.ChannelName),"live_"+strconv.FormatInt(live.LiveID,10)+"_"+stamp)
  session:=Session{ID:fmt.Sprintf("%s-%d-%d",live.ChannelID,live.LiveID,time.Now().UnixNano()),ChannelID:live.ChannelID,ChannelName:live.ChannelName,LiveID:live.LiveID,Title:live.LiveTitle,ThumbnailURL:live.ThumbnailURL,BroadcastStartedAt:live.OpenDate,Directory:folder,Status:"recording",StartedAt:time.Now().Format(time.RFC3339)}

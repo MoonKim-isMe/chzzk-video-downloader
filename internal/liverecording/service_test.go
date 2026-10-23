@@ -82,3 +82,55 @@ func TestSessionBroadcastMetadataPersistence(t *testing.T) {
   t.Fatalf("session metadata was not persisted: %+v",got)
  }
 }
+
+func TestManualRestartSameLiveAfterFinishedSession(t *testing.T) {
+ live:=chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:123,IsLive:true}
+ for _,status:=range []string{"completed","failed","interrupted"} {
+  t.Run(status,func(t *testing.T){
+   history:=[]Session{{ChannelID:sampleChannel,LiveID:live.LiveID,Status:status}}
+   if duplicateBroadcastBlocked(history,live,true){t.Fatal("explicit manual restart was blocked")}
+   if status!="interrupted" && !duplicateBroadcastBlocked(history,live,false){t.Fatal("finished broadcast was restarted automatically")}
+   if status=="interrupted" && duplicateBroadcastBlocked(history,live,false){t.Fatal("automatic recovery of interrupted broadcast was blocked")}
+  })
+ }
+}
+
+func TestAutomaticRecordingIgnoresOldBroadcastButPreventsRepeatedLiveID(t *testing.T) {
+ live:=chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:123,IsLive:true}
+ history:=[]Session{
+  {ChannelID:sampleChannel,LiveID:live.LiveID,Status:"completed"},
+  {ChannelID:sampleChannel,LiveID:live.LiveID,Status:"failed"},
+ }
+ if !duplicateBroadcastBlocked(history,live,false){t.Fatal("automatic recording repeated same broadcast")}
+ if duplicateBroadcastBlocked(history,chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:124},false){t.Fatal("new broadcast ID blocked")}
+ if duplicateBroadcastBlocked(history,chzzk.LiveStatus{ChannelID:"11111111111111111111111111111111",LiveID:live.LiveID},false){t.Fatal("other channel blocked")}
+ if duplicateBroadcastBlocked(nil,live,false){t.Fatal("first-time broadcast blocked")}
+}
+
+func TestRecordNowRestartsFinishedBroadcastWithIndependentSession(t *testing.T) {
+ s:=fakeService(t)
+ s.status=func(context.Context,string,string)(chzzk.LiveStatus,error){
+  return chzzk.LiveStatus{ChannelID:sampleChannel,ChannelName:"테스트",LiveID:123,IsLive:true},nil
+ }
+ // The canceled recorder context makes both jobs finalize immediately, without
+ // external FFmpeg/yt-dlp processes, while RecordNow still verifies live status.
+ ctx,cancel:=context.WithCancel(context.Background())
+ cancel()
+ s.ctx=ctx
+ first,err:=s.RecordNow(sampleChannel)
+ if err!=nil{t.Fatalf("first manual recording failed: %v",err)}
+ s.wg.Wait()
+ second,err:=s.RecordNow(sampleChannel)
+ if err!=nil{t.Fatalf("manual restart in same live failed: %v",err)}
+ s.wg.Wait()
+ if first.ID==second.ID || first.Directory==second.Directory {
+  t.Fatal("restarted recording reused the previous session identity or directory")
+ }
+ state:=s.Snapshot()
+ if len(state.Sessions)!=2 || state.Sessions[0].ID!=second.ID || state.Sessions[1].ID!=first.ID {
+  t.Fatalf("recording history not preserved: %+v",state.Sessions)
+ }
+ if !duplicateBroadcastBlocked(state.Sessions,chzzk.LiveStatus{ChannelID:sampleChannel,LiveID:123},false){
+  t.Fatal("automatic watcher should not restart the same finished live")
+ }
+}

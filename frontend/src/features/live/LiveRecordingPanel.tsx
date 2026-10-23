@@ -93,9 +93,31 @@ function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) 
   );
 }
 
-function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
-  const snapshot = useChannelBroadcastStatus(channelId);
-  return <BroadcastStatusTag status={snapshot?.status} />;
+function SessionBroadcastStatus({
+  session,
+  hasActiveRecording,
+  busy,
+  onRestart,
+}: {
+  session: LiveSession;
+  hasActiveRecording: boolean;
+  busy: boolean;
+  onRestart: () => void;
+}) {
+  const snapshot = useChannelBroadcastStatus(session.channelId);
+  const finished = session.status === 'completed' || session.status === 'failed' || session.status === 'interrupted';
+  if (!snapshot) return null;
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <BroadcastStatusTag status={snapshot.status} />
+      {finished && snapshot.status === 'live' && (
+        <Button type="primary" size="small" loading={busy} disabled={busy || hasActiveRecording} onClick={onRestart}>
+          다시 녹화
+        </Button>
+      )}
+    </div>
+  );
 }
 
 interface ChannelRecordingSetupProps {
@@ -537,7 +559,12 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                     <Title level={5} className="!mb-3 !mt-3">
                       {selectedSession.title || '라이브 방송'}
                     </Title>
-                    <ChannelBroadcastStatus channelId={selectedSession.channelId} />
+                    <SessionBroadcastStatus
+                      session={selectedSession}
+                      hasActiveRecording={activeSessions.some((session) => session.channelId === selectedSession.channelId)}
+                      busy={busy}
+                      onRestart={() => recordChannel(selectedSession.channelId)}
+                    />
                     {selectedSession.broadcastStartedAt && (
                       <Text className="mb-1 block text-xs">
                         <Text type="secondary">치지직 방송 시작</Text> · {formatChzzkDateTime(selectedSession.broadcastStartedAt)}
