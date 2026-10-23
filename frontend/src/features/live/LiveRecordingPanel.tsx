@@ -93,31 +93,9 @@ function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) 
   );
 }
 
-function SessionBroadcastStatus({
-  session,
-  hasActiveRecording,
-  busy,
-  onRestart,
-}: {
-  session: LiveSession;
-  hasActiveRecording: boolean;
-  busy: boolean;
-  onRestart: () => void;
-}) {
-  const snapshot = useChannelBroadcastStatus(session.channelId);
-  const finished = session.status === 'completed' || session.status === 'failed' || session.status === 'interrupted';
-  if (!snapshot) return null;
-
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <BroadcastStatusTag status={snapshot.status} />
-      {finished && snapshot.status === 'live' && (
-        <Button type="primary" size="small" loading={busy} disabled={busy || hasActiveRecording} onClick={onRestart}>
-          다시 녹화
-        </Button>
-      )}
-    </div>
-  );
+function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
+  const snapshot = useChannelBroadcastStatus(channelId);
+  return <BroadcastStatusTag status={snapshot?.status} />;
 }
 
 interface ChannelRecordingSetupProps {
@@ -145,9 +123,21 @@ function ChannelRecordingSetup({
   const status = snapshot?.status;
   return (
     <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Title level={5} className="!m-0">{channel.channelName || channel.channelId}</Title>
-        <BroadcastStatusTag status={status} />
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Title level={5} className="!m-0">{channel.channelName || channel.channelId}</Title>
+          <BroadcastStatusTag status={status} />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Text className="text-sm">라이브 예약</Text>
+          <Switch
+            aria-label="라이브 예약"
+            checked={reserved}
+            loading={reservationBusy}
+            disabled={!reservationReady || reservationBusy}
+            onChange={onReservationChange}
+          />
+        </div>
       </div>
       {status === 'live' && snapshot?.live && (
         <>
@@ -168,21 +158,9 @@ function ChannelRecordingSetup({
         </Text>
       )}
       {subscriptionError && <Alert type="warning" showIcon message={subscriptionError} className="!mb-3" />}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Button type="primary" loading={recordingBusy} disabled={status !== 'live'} onClick={onRecord}>
-          지금 동영상 녹화
-        </Button>
-        <div className="flex items-center gap-2">
-          <Text>라이브 예약</Text>
-          <Switch
-            aria-label="라이브 예약"
-            checked={reserved}
-            loading={reservationBusy}
-            disabled={!reservationReady || reservationBusy}
-            onChange={onReservationChange}
-          />
-        </div>
-      </div>
+      <Button type="primary" loading={recordingBusy} disabled={status !== 'live'} onClick={onRecord}>
+        지금 동영상 녹화
+      </Button>
       {reserved && (
         <Text type="secondary" className="mt-3 block text-xs">
           예약 중입니다. 방송 시작을 감지하면 자동으로 녹화합니다.
@@ -502,13 +480,13 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                       <Text type="secondary" className="block truncate text-xs">
                         {activeSession
                           ? activeSession.status === 'finalizing' ? '파일 생성 중' : '현재 녹화 중'
-                          : subscription?.enabled ? '자동 녹화 감시 중' : '라이브 녹화 가능'}
+                          : subscription?.enabled ? '라이브 예약 중' : '라이브 녹화 가능'}
                       </Text>
                     </span>
                     {activeSession ? (
                       <Tag color="processing" className="!mr-0">녹화 중</Tag>
                     ) : subscription?.enabled ? (
-                      <Tag className="!mr-0">자동</Tag>
+                      <Tag className="!mr-0">예약</Tag>
                     ) : null}
                   </button>
                 );
@@ -559,12 +537,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                     <Title level={5} className="!mb-3 !mt-3">
                       {selectedSession.title || '라이브 방송'}
                     </Title>
-                    <SessionBroadcastStatus
-                      session={selectedSession}
-                      hasActiveRecording={activeSessions.some((session) => session.channelId === selectedSession.channelId)}
-                      busy={busy}
-                      onRestart={() => recordChannel(selectedSession.channelId)}
-                    />
+                    <ChannelBroadcastStatus channelId={selectedSession.channelId} />
                     {selectedSession.broadcastStartedAt && (
                       <Text className="mb-1 block text-xs">
                         <Text type="secondary">치지직 방송 시작</Text> · {formatChzzkDateTime(selectedSession.broadcastStartedAt)}
