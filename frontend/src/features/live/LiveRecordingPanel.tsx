@@ -257,15 +257,20 @@ function SavedBroadcastRange({ session }: { session: LiveSession }) {
   );
 }
 
-function RecordingSessionOverview({ session, busy, onStop }: {
+function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, onRecord }: {
   session: LiveSession;
   busy: boolean;
+  hasActiveRecording: boolean;
   onStop: () => void;
+  onRecord: () => void;
 }) {
   const { message } = AntdApp.useApp();
   const [openingFolder, setOpeningFolder] = useState(false);
   const snapshot = useChannelBroadcastStatus(session.channelId);
   const currentLive = snapshot?.live?.liveId === session.liveId ? snapshot.live : undefined;
+  const canRecordAgain = Boolean(currentLive) && (
+    session.status === 'completed' || session.status === 'failed' || session.status === 'interrupted'
+  );
 
   const broadcast: LiveStatus = {
     channelId: session.channelId,
@@ -293,30 +298,37 @@ function RecordingSessionOverview({ session, busy, onStop }: {
 
   return (
     <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Title level={5} className="!m-0">{session.channelName || session.channelId}</Title>
-          <Tag color={session.status === 'recording' ? 'processing' : undefined} className="!m-0">
-            {statusLabel(session.status)}
-          </Tag>
-          <BroadcastStatusTag status={snapshot?.status} />
-        </div>
-        <Button size="small" loading={openingFolder} onClick={() => void openFolder()}>
-          폴더 열기
-        </Button>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Title level={5} className="!m-0">{session.channelName || session.channelId}</Title>
+        <Tag color={session.status === 'recording' ? 'processing' : undefined} className="!m-0">
+          {statusLabel(session.status)}
+        </Tag>
+        <BroadcastStatusTag status={snapshot?.status} />
       </div>
       <LiveBroadcastPreview live={broadcast} showStreamingTime={Boolean(currentLive)} />
       <SavedBroadcastRange session={session} />
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Text type="secondary" className="text-xs">
-          녹화 시작 · {formatLocalDateTime(session.startedAt)}
-        </Text>
-        {session.recordingEndedAt || session.finishedAt ? (
-          <Text type="secondary" className="text-xs">
-            녹화 종료 · {formatLocalDateTime(session.recordingEndedAt || session.finishedAt)}
-          </Text>
-        ) : null}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {canRecordAgain && (
+            <Button
+              type="primary"
+              loading={busy}
+              disabled={busy || hasActiveRecording}
+              onClick={onRecord}
+            >
+              추가 녹화
+            </Button>
+          )}
+        </div>
+        <Button loading={openingFolder} onClick={() => void openFolder()}>
+          폴더 열기
+        </Button>
       </div>
+      {(session.recordingEndedAt || session.finishedAt) && (
+        <Text type="secondary" className="mt-3 block text-xs">
+          녹화 종료 · {formatLocalDateTime(session.recordingEndedAt || session.finishedAt)}
+        </Text>
+      )}
       {session.status === 'recording' && (
         <Button
           danger
@@ -646,10 +658,12 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                 key={selectedSession.id}
                 session={selectedSession}
                 busy={busy}
+                hasActiveRecording={activeSessions.some((session) => session.channelId === selectedSession.channelId)}
                 onStop={() => void perform(
                   () => stopLiveRecording(selectedSession.id),
                   '녹화 중지를 요청했습니다.',
                 )}
+                onRecord={() => recordChannel(selectedSession.channelId)}
               />
               <section className="rounded-xl border border-solid border-slate-500/25 p-5">
                 <Title level={5} className="!mb-4">녹화 구간 추출</Title>
