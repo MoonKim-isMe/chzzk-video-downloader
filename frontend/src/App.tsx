@@ -16,6 +16,7 @@ import SavedChannels from './components/SavedChannels';
 import AuthenticationDrawer from './features/authentication/AuthenticationDrawer';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
+import LiveRecordingPanel from './features/live/LiveRecordingPanel';
 import VideoRepairPanel from './features/repair/VideoRepairPanel';
 import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
@@ -50,13 +51,14 @@ import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
 
-type AppTab = 'search' | 'url' | 'downloads' | 'repair';
+type AppTab = 'search' | 'url' | 'downloads' | 'live' | 'repair';
 type ChannelPanelTab = 'search' | 'bookmarks';
 
 const navigationItems: Array<{ key: AppTab; label: string }> = [
   { key: 'search', label: '채널 검색' },
   { key: 'url', label: 'URL 직접 입력' },
   { key: 'downloads', label: '다운로드' },
+  { key: 'live', label: '라이브 녹화' },
   { key: 'repair', label: '동영상 복구' },
 ];
 
@@ -565,6 +567,9 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               onQueueSegments={handleQueueSegments}
             />
           </div>
+          {activeTab === 'live' && (
+            <div className="app-main-tab-view"><LiveRecordingPanel savedChannels={savedChannels} /></div>
+          )}
           {activeTab === 'downloads' && (
             <div className="app-main-tab-view">
               <DownloadPanel

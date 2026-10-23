@@ -14,6 +14,7 @@ import (
 
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/chzzk"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/downloader"
+	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/liverecording"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/persistence"
 	appsettings "github.com/MoonKim-isMe/chzzk-video-downloader/internal/settings"
 	"github.com/MoonKim-isMe/chzzk-video-downloader/internal/videorepair"
@@ -44,6 +45,9 @@ type App struct {
 
 	queueMu       sync.Mutex
 	downloadQueue *downloader.Queue
+
+	liveMu       sync.Mutex
+	liveRecorder *liverecording.Service
 
 	settingsMu      sync.Mutex
 	settingsApplyMu sync.Mutex
@@ -100,12 +104,19 @@ func (a *App) startup(ctx context.Context) {
 		runtime.LogErrorf(ctx, "Persistence 초기화에 실패했습니다: %v", err)
 	}
 	a.ensureDownloadQueue()
+	if err := a.startLiveRecordingService(); err != nil {
+		runtime.LogErrorf(ctx, "라이브 자동 녹화 초기화에 실패했습니다: %v", err)
+	}
 }
 
 func (a *App) shutdown(context.Context) {
 	a.shuttingDown.Store(true)
 	a.CancelVideoInspection()
 	a.CancelVideoRepair()
+	a.liveMu.Lock()
+	live := a.liveRecorder
+	a.liveMu.Unlock()
+	if live != nil { live.Stop() }
 	a.queueMu.Lock()
 	queue := a.downloadQueue
 	a.queueMu.Unlock()

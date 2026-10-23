@@ -1,5 +1,6 @@
 import type { AuthenticationSettings } from '../types/authentication';
 import type { Channel, ChannelSearchResult } from '../types/channel';
+import type { LiveClip, LiveSession, LiveState } from '../types/live';
 import type {
   DownloadTask,
   StartDownloadRequest,
@@ -18,6 +19,13 @@ import type { Video, VideoListResult } from '../types/video';
 
 interface BackendApp {
   SearchChannels(keyword: string, offset: number, size: number): Promise<ChannelSearchResult>;
+  GetLiveRecordingState(): Promise<LiveState>;
+  ConfigureLiveRecording(pollSeconds: number, maxConcurrent: number): Promise<LiveState>;
+  SetLiveAutoRecording(channelId: string, channelName: string, enabled: boolean): Promise<LiveState>;
+  RemoveLiveAutoRecording(channelId: string): Promise<LiveState>;
+  StartLiveRecording(channelId: string): Promise<LiveSession>;
+  StopLiveRecording(sessionId: string): Promise<boolean>;
+  ExtractLiveClip(sessionId: string, title: string, startSeconds: number, endSeconds: number, exact: boolean): Promise<LiveClip>;
   ResolveVideoURL(rawURL: string): Promise<Video>;
   GetSavedChannels(): Promise<Channel[]>;
   SaveChannel(channel: Channel): Promise<Channel[]>;
@@ -68,6 +76,14 @@ function app(): BackendApp {
   }
   return backend;
 }
+
+export const getLiveRecordingState = () => app().GetLiveRecordingState();
+export const configureLiveRecording = (pollSeconds: number, maxConcurrent: number) => app().ConfigureLiveRecording(pollSeconds, maxConcurrent);
+export const setLiveAutoRecording = (channelId: string, channelName: string, enabled: boolean) => app().SetLiveAutoRecording(channelId, channelName, enabled);
+export const removeLiveAutoRecording = (channelId: string) => app().RemoveLiveAutoRecording(channelId);
+export const startLiveRecording = (channelId: string) => app().StartLiveRecording(channelId);
+export const stopLiveRecording = (sessionId: string) => app().StopLiveRecording(sessionId);
+export const extractLiveClip = (sessionId: string, title: string, startSeconds: number, endSeconds: number, exact: boolean) => app().ExtractLiveClip(sessionId, title, startSeconds, endSeconds, exact);
 
 export const searchChannels = (keyword: string, offset = 0, size = 20) =>
   app().SearchChannels(keyword, offset, size);
