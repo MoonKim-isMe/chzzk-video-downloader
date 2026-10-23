@@ -5,6 +5,8 @@ export interface LiveStatus {
  liveTitle: string;
  openDate: string;
  thumbnailUrl?: string;
+ tags: string[];
+ liveCategoryValue?: string;
  isLive: boolean;
 }
 export interface LiveSubscription {

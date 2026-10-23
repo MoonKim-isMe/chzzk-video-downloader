@@ -2,7 +2,7 @@ import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Sp
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
-import type { LiveSession, LiveState } from '../../types/live';
+import type { LiveSession, LiveState, LiveStatus } from '../../types/live';
 import type { Channel } from '../../types/channel';
 import { formatBroadcastOffset, formatChzzkDateTime } from '../../lib/liveRecordingTime';
 
@@ -40,8 +40,14 @@ function statusLabel(status: LiveSession['status']) {
 
 type BroadcastState = 'live' | 'offline' | 'unavailable';
 
-function useChannelBroadcastStatus(channelId: string): BroadcastState | undefined {
-  const [snapshot, setSnapshot] = useState<{ channelId: string; status: BroadcastState }>();
+interface BroadcastSnapshot {
+  channelId: string;
+  status: BroadcastState;
+  live?: LiveStatus;
+}
+
+function useChannelBroadcastStatus(channelId: string): BroadcastSnapshot | undefined {
+  const [snapshot, setSnapshot] = useState<BroadcastSnapshot>();
 
   useEffect(() => {
     let active = true;
@@ -53,7 +59,7 @@ function useChannelBroadcastStatus(channelId: string): BroadcastState | undefine
       try {
         const live = await getChannelLiveStatus(channelId);
         if (active && request === latestRequest) {
-          setSnapshot({ channelId, status: live.isLive ? 'live' : 'offline' });
+          setSnapshot({ channelId, status: live.isLive ? 'live' : 'offline', live: live.isLive ? live : undefined });
         }
       } catch {
         if (active && request === latestRequest) {
@@ -88,8 +94,8 @@ function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) 
 }
 
 function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
-  const status = useChannelBroadcastStatus(channelId);
-  return <BroadcastStatusTag status={status} />;
+  const snapshot = useChannelBroadcastStatus(channelId);
+  return <BroadcastStatusTag status={snapshot?.status} />;
 }
 
 interface ChannelRecordingSetupProps {
@@ -113,17 +119,21 @@ function ChannelRecordingSetup({
   onReservationChange,
   onRecord,
 }: ChannelRecordingSetupProps) {
-  const status = useChannelBroadcastStatus(channel.channelId);
+  const snapshot = useChannelBroadcastStatus(channel.channelId);
+  const status = snapshot?.status;
   return (
     <div className="rounded-xl border border-solid border-slate-500/25 p-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Title level={5} className="!m-0">{channel.channelName || channel.channelId}</Title>
         <BroadcastStatusTag status={status} />
       </div>
-      {status === 'live' && (
-        <Text type="secondary" className="mb-4 block text-sm">
-          방송 중입니다. 지금 녹화를 시작할 수 있습니다.
-        </Text>
+      {status === 'live' && snapshot?.live && (
+        <>
+          <LiveBroadcastPreview live={snapshot.live} />
+          <Text type="secondary" className="mb-4 block text-sm">
+            방송 중입니다. 지금 녹화를 시작할 수 있습니다.
+          </Text>
+        </>
       )}
       {status === 'offline' && (
         <Text type="secondary" className="mb-4 block text-sm">
@@ -156,6 +166,51 @@ function ChannelRecordingSetup({
           예약 중입니다. 방송 시작을 감지하면 자동으로 녹화합니다.
         </Text>
       )}
+    </div>
+  );
+}
+
+function LiveBroadcastPreview({ live }: { live: LiveStatus }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [live.liveId, live.openDate]);
+
+  const streamingTime = formatBroadcastOffset(new Date(now).toISOString(), live.openDate);
+  const tags = [...new Set(live.tags ?? [])].map((tag) => tag.trim()).filter(Boolean);
+
+  return (
+    <div className="live-recording-session-header mb-4">
+      <RecordingThumbnail url={live.thumbnailUrl} title={live.liveTitle || '라이브'} />
+      <div className="min-w-0">
+        <Text type="secondary" className="mb-1 block text-xs">방송 제목</Text>
+        <Title level={5} className="!mb-3 !mt-0 break-words">
+          {live.liveTitle || '제목 없는 방송'}
+        </Title>
+        <div className="mb-2">
+          <Text type="secondary" className="mr-2 text-xs">방송 시작 시간</Text>
+          <Text className="text-sm">{formatChzzkDateTime(live.openDate)}</Text>
+        </div>
+        <div className="mb-3">
+          <Text type="secondary" className="mr-2 text-xs">스트리밍 시간</Text>
+          <Text className="text-sm tabular-nums" strong>{streamingTime ?? '시간 정보 없음'}</Text>
+        </div>
+        <Text type="secondary" className="mb-2 block text-xs">태그</Text>
+        <div className="flex flex-wrap gap-1.5">
+          {live.liveCategoryValue && (
+            <Tag color="green" className="!m-0">{live.liveCategoryValue}</Tag>
+          )}
+          {tags.map((tag) => (
+            <Tag key={tag} className="!m-0">#{tag.replace(/^#/, '')}</Tag>
+          ))}
+          {!live.liveCategoryValue && tags.length === 0 && (
+            <Text type="secondary" className="text-xs">등록된 태그가 없습니다.</Text>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

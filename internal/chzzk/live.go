@@ -15,6 +15,8 @@ type LiveStatus struct {
  LiveTitle string `json:"liveTitle"`
  OpenDate string `json:"openDate"`
  ThumbnailURL string `json:"thumbnailUrl"`
+ Tags []string `json:"tags"`
+ LiveCategoryValue string `json:"liveCategoryValue"`
  IsLive bool `json:"isLive"`
 }
 
@@ -28,6 +30,8 @@ func (c *Client) GetLiveStatusWithCookiesFile(ctx context.Context, channelID, co
    OpenDate string `json:"openDate"`
    LiveImageURL string `json:"liveImageUrl"`
    DefaultThumbnailImageURL string `json:"defaultThumbnailImageUrl"`
+   Tags []string `json:"tags"`
+   LiveCategoryValue string `json:"liveCategoryValue"`
    Channel struct { ChannelName string `json:"channelName"` } `json:"channel"`
  }]
  if err := c.getWithCookiesFile(ctx, "/service/v3/channels/"+channelID+"/live-detail", &response, cookiesFilePath); err != nil { return LiveStatus{}, err }
@@ -35,5 +39,5 @@ func (c *Client) GetLiveStatusWithCookiesFile(ctx context.Context, channelID, co
  thumbnail:=v.LiveImageURL
  if thumbnail!="" {thumbnail=strings.ReplaceAll(thumbnail,"{type}","480")}
  if thumbnail=="" {thumbnail=v.DefaultThumbnailImageURL}
- return LiveStatus{ChannelID:channelID,ChannelName:v.Channel.ChannelName,LiveID:v.LiveID,LiveTitle:v.LiveTitle,OpenDate:v.OpenDate,ThumbnailURL:thumbnail,IsLive:strings.EqualFold(v.Status,"OPEN") && v.LiveID>0},nil
+ return LiveStatus{ChannelID:channelID,ChannelName:v.Channel.ChannelName,LiveID:v.LiveID,LiveTitle:v.LiveTitle,OpenDate:v.OpenDate,ThumbnailURL:thumbnail,Tags:append([]string{},v.Tags...),LiveCategoryValue:v.LiveCategoryValue,IsLive:strings.EqualFold(v.Status,"OPEN") && v.LiveID>0},nil
 }
