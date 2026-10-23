@@ -587,3 +587,12 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 
 - `frontend/src/features/live/LiveRecordingPanel.tsx`와 `frontend/src/index.css`의 해당 제목 행만 수정하며 진행 중 작업·즐겨찾기 로직과 녹화 상태 표시는 변경하지 않습니다.
 - 프로젝트 전체 TypeScript/Yarn 빌드 및 Windows UI 검증은 별도 확인 전 완료로 표시하지 않습니다.
+
+### 라이브 좌측 목록 카드 및 태그의 좌우 여백 대칭 보정 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-52. `live-recording-sidebar-scroll`의 기존 `padding: 16px`와 `scrollbar-gutter: stable`이 오른쪽에서 중첩되어 제목·개수 태그 및 즐겨찾기 카드가 왼쪽보다 더 안쪽에 배치되는 문제 수정. 왼쪽 16px 유지, 오른쪽 패딩 8px와 8px 스크롤바를 조합해 양쪽 여백을 비슷하게 통일. Windows 실제 스크롤 유무·라이트/다크 실화면 검증 필요
+
+### 영향 범위
+
+- `frontend/src/index.css`에서 **라이브 좌측 목록 전용 스크롤 컨테이너**의 오른쪽 패딩과 스크롤바 폭만 보정합니다. 우측 상세·다른 탭의 스크롤/기존 카드·태그·녹화 로직은 변경하지 않습니다.
+- 개발 계획은 검증 전 미완료로 유지합니다.

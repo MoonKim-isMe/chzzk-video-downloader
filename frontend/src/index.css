@@ -2498,6 +2498,23 @@ select {
   padding: 16px;
 }
 
+/* The reserved scrollbar gutter otherwise doubles the sidebar's right inset.
+   Keep ~16px total on both sides: 16px left / 8px right + 8px scrollbar. */
+.live-recording-sidebar-scroll {
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-muted) 45%, transparent) transparent;
+}
+
+.live-recording-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.live-recording-sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 45%, transparent);
+}
+
 .live-recording-list-heading {
   display: flex;
   align-items: center;
