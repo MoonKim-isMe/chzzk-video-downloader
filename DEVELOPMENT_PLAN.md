@@ -608,3 +608,13 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `internal/liverecording/service.go`: FFmpeg 표준 출력의 진행 정보를 읽고 세션별 **메모리 전용** 진행 시간을 기록합니다. 재생 주소가 노출될 수 있는 FFmpeg stderr는 로깅/저장하지 않습니다. 실제 추출 가능 길이(`availableSeconds`)는 기존 완료 파일 기준을 유지합니다.
 - `frontend/src/types/live.ts`, `frontend/src/features/live/LiveRecordingPanel.tsx`: 녹화 중 진행 시간은 별도로 표시하며 녹화 중지 후에는 완료 영상의 길이를 사용합니다. 분할 주기, 인코딩, 구간 추출 API와 다운로드 탭은 변경하지 않습니다.
 - 실제 Windows 앱 빌드·네트워크 중단/FFmpeg 재연결 실방송 테스트 전에는 미완료로 기록합니다.
+ 
+
+### 라이브 녹화 중 상태 태그 다크모드 대비 개선 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-56. 다크모드에서 라이브 녹화 상세 헤더, 진행 중 녹화 목록, 즐겨찾기 목록의 `녹화 중` 태그가 기존 Ant Design 기본 파랑 색상으로 가시성이 낮은 문제 개선. 해당 상태에만 `live-recording-active-tag` 클래스를 부여해 다크모드에서 밝은 글자·선명한 테두리·충분한 배경 대비·굵은 글자 적용. 라이트모드 기본 스타일과 방송 중/저장 중/종료 상태는 유지. Windows 라이트/다크 실화면 검사 필요
+
+### 영향 범위 및 검증
+
+- `frontend/src/features/live/LiveRecordingPanel.tsx`, `frontend/src/index.css`의 상태 태그 표시와 `DEVELOPMENT_PLAN.md`만 변경. 녹화 상태 값·실제 녹화 동작·색상 테마의 다른 태그에는 영향 없음.
+- 정적 검사 후 PR에 반영하며 실제 프론트엔드 빌드 및 Windows 실화면 확인 전에는 미완료로 표시합니다.

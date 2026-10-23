@@ -321,7 +321,10 @@ function RecordingSessionOverview({ session, busy, hasActiveRecording, onStop, o
     <div className="rounded-xl border border-solid border-slate-500/25 p-5">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Title level={5} className="!m-0">{session.channelName || session.channelId}</Title>
-        <Tag color={session.status === 'recording' ? 'processing' : undefined} className="!m-0">
+        <Tag
+          color={session.status === 'recording' ? 'processing' : undefined}
+          className={session.status === 'recording' ? '!m-0 live-recording-active-tag' : '!m-0'}
+        >
           {statusLabel(session.status)}
         </Tag>
         <BroadcastStatusTag status={snapshot?.status} />
@@ -668,7 +671,10 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                             {session.channelName || session.channelId}
                           </Text>
                         </span>
-                        <Tag color={session.status === 'recording' ? 'processing' : 'warning'} className="!mr-0 shrink-0">
+                        <Tag
+                          color={session.status === 'recording' ? 'processing' : 'warning'}
+                          className={'!mr-0 shrink-0' + (session.status === 'recording' ? ' live-recording-active-tag' : '')}
+                        >
                           {session.status === 'recording' ? '녹화 중' : '저장 중'}
                         </Tag>
                       </button>
@@ -709,7 +715,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                           </Text>
                         </span>
                         {activeSession ? (
-                          <Tag color="processing" className="!mr-0">녹화 중</Tag>
+                          <Tag color="processing" className="!mr-0 live-recording-active-tag">녹화 중</Tag>
                         ) : subscription?.enabled ? (
                           <Tag className="!mr-0">예약</Tag>
                         ) : null}
