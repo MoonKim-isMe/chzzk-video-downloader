@@ -1,7 +1,7 @@
-import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Tag, Typography } from 'antd';
+import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Switch, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, startLiveRecording, stopLiveRecording } from '../../lib/backend';
+import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState } from '../../types/live';
 import type { Channel } from '../../types/channel';
 import { formatBroadcastOffset, formatChzzkDateTime } from '../../lib/liveRecordingTime';
@@ -38,18 +38,15 @@ function statusLabel(status: LiveSession['status']) {
   })[status];
 }
 
-type BroadcastState = 'checking' | 'live' | 'offline' | 'unavailable';
+type BroadcastState = 'live' | 'offline' | 'unavailable';
 
-function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
-  const [snapshot, setSnapshot] = useState<{ channelId: string; status: BroadcastState }>({
-    channelId,
-    status: 'checking',
-  });
+function useChannelBroadcastStatus(channelId: string): BroadcastState | undefined {
+  const [snapshot, setSnapshot] = useState<{ channelId: string; status: BroadcastState }>();
 
   useEffect(() => {
     let active = true;
     let latestRequest = 0;
-    setSnapshot({ channelId, status: 'checking' });
+    setSnapshot(undefined);
 
     const check = async () => {
       const request = ++latestRequest;
@@ -73,20 +70,92 @@ function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
     };
   }, [channelId]);
 
-  const status = snapshot.channelId === channelId ? snapshot.status : 'checking';
+  return snapshot?.channelId === channelId ? snapshot.status : undefined;
+}
+
+function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) {
+  if (!status) return null;
   const labels: Record<BroadcastState, string> = {
-    checking: '확인 중',
     live: '방송 중',
     offline: '방송 중 아님',
     unavailable: '상태 확인 실패',
   };
-
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2" aria-live="polite">
-      <Text type="secondary" className="text-xs">현재 방송 상태</Text>
-      <Tag color={status === 'live' ? 'green' : undefined} className="!m-0">
-        {labels[status]}
-      </Tag>
+    <Tag color={status === 'live' ? 'green' : undefined} className="!m-0">
+      {labels[status]}
+    </Tag>
+  );
+}
+
+function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
+  const status = useChannelBroadcastStatus(channelId);
+  return <BroadcastStatusTag status={status} />;
+}
+
+interface ChannelRecordingSetupProps {
+  channel: Channel;
+  reserved: boolean;
+  subscriptionError?: string;
+  reservationReady: boolean;
+  reservationBusy: boolean;
+  recordingBusy: boolean;
+  onReservationChange: (enabled: boolean) => void;
+  onRecord: () => void;
+}
+
+function ChannelRecordingSetup({
+  channel,
+  reserved,
+  subscriptionError,
+  reservationReady,
+  reservationBusy,
+  recordingBusy,
+  onReservationChange,
+  onRecord,
+}: ChannelRecordingSetupProps) {
+  const status = useChannelBroadcastStatus(channel.channelId);
+  return (
+    <div className="rounded-xl border border-solid border-slate-500/25 p-5">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Title level={5} className="!m-0">{channel.channelName || channel.channelId}</Title>
+        <BroadcastStatusTag status={status} />
+      </div>
+      {status === 'live' && (
+        <Text type="secondary" className="mb-4 block text-sm">
+          방송 중입니다. 지금 녹화를 시작할 수 있습니다.
+        </Text>
+      )}
+      {status === 'offline' && (
+        <Text type="secondary" className="mb-4 block text-sm">
+          방송중이 아닙니다. 방송 중일때 다시 시도해주세요.
+        </Text>
+      )}
+      {status === 'unavailable' && (
+        <Text type="secondary" className="mb-4 block text-sm">
+          방송 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
+        </Text>
+      )}
+      {subscriptionError && <Alert type="warning" showIcon message={subscriptionError} className="!mb-3" />}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <Button type="primary" loading={recordingBusy} disabled={status !== 'live'} onClick={onRecord}>
+          지금 동영상 녹화
+        </Button>
+        <div className="flex items-center gap-2">
+          <Text>라이브 예약</Text>
+          <Switch
+            aria-label="라이브 예약"
+            checked={reserved}
+            loading={reservationBusy}
+            disabled={!reservationReady || reservationBusy}
+            onChange={onReservationChange}
+          />
+        </div>
+      </div>
+      {reserved && (
+        <Text type="secondary" className="mt-3 block text-xs">
+          예약 중입니다. 방송 시작을 감지하면 자동으로 녹화합니다.
+        </Text>
+      )}
     </div>
   );
 }
@@ -181,11 +250,14 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const [error, setError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [reservationBusy, setReservationBusy] = useState(false);
+  const [reservationReady, setReservationReady] = useState(false);
   const seenSessionIds = useRef<Set<string> | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await getLiveRecordingState();
     setState(next);
+    setReservationReady(true);
     setError('');
   }, []);
 
@@ -208,6 +280,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
             setSelectedKey((current) => current ?? 'session:' + newRecording.id);
           }
           setState(next);
+          setReservationReady(true);
           setError('');
         }
       } catch (cause) {
@@ -259,6 +332,20 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
     const session = await startLiveRecording(id);
     selectSession(session.id);
   }, '라이브 동영상 녹화를 시작했습니다.');
+
+  const updateReservation = async (channel: Channel, enabled: boolean) => {
+    if (reservationBusy || !reservationReady) return;
+    setReservationBusy(true);
+    try {
+      const next = await setLiveAutoRecording(channel.channelId, channel.channelName, enabled);
+      setState(next);
+      message.success(enabled ? '라이브 예약을 설정했습니다.' : '라이브 예약을 해제했습니다.');
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setReservationBusy(false);
+    }
+  };
 
   return (
     <div className="live-recording-workspace">
@@ -367,19 +454,17 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
           {error && <Alert type="warning" showIcon message="라이브 녹화 상태를 불러올 수 없습니다." description={error} className="!mb-4" />}
 
           {!selectedSession && selectedChannel ? (
-            <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-              <Title level={5} className="!mb-2">{selectedChannel.channelName || selectedChannel.channelId}</Title>
-              <ChannelBroadcastStatus channelId={selectedChannel.channelId} />
-              <Text type="secondary" className="mb-4 block text-sm">
-                {selectedSubscription?.enabled
-                  ? '자동 녹화 감시 중입니다. 방송 시작이 감지되면 녹화가 시작됩니다.'
-                  : '즐겨찾기한 채널입니다. 방송 중이라면 지금 녹화를 시작할 수 있습니다.'}
-              </Text>
-              {selectedSubscription?.lastError && <Alert type="warning" showIcon message={selectedSubscription.lastError} className="!mb-3" />}
-              <Button type="primary" loading={busy} onClick={() => recordChannel(selectedChannel.channelId)}>
-                지금 동영상 녹화
-              </Button>
-            </div>
+            <ChannelRecordingSetup
+              key={selectedChannel.channelId}
+              channel={selectedChannel}
+              reserved={Boolean(selectedSubscription?.enabled)}
+              subscriptionError={selectedSubscription?.lastError}
+              reservationReady={reservationReady}
+              reservationBusy={reservationBusy}
+              recordingBusy={busy}
+              onReservationChange={(enabled) => void updateReservation(selectedChannel, enabled)}
+              onRecord={() => recordChannel(selectedChannel.channelId)}
+            />
           ) : !selectedSession ? (
             <Empty description="현재 녹화 중인 작업이 없습니다. 왼쪽 즐겨찾기에서 채널을 선택해 녹화를 시작할 수 있습니다." />
           ) : (
