@@ -1,9 +1,10 @@
-import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Select, Space, Tag, Typography } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Tag, Typography } from 'antd';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { extractLiveClip, getLiveRecordingState, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState } from '../../types/live';
 import type { Channel } from '../../types/channel';
+import { formatBroadcastOffset, formatChzzkDateTime } from '../../lib/liveRecordingTime';
 
 const { Text, Title } = Typography;
 
@@ -35,6 +36,28 @@ function statusLabel(status: LiveSession['status']) {
     failed: '실패',
     interrupted: '녹화 중단',
   })[status];
+}
+
+function RecordingThumbnail({ url, title }: { url?: string; title: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  return (
+    <div className="live-recording-session-thumbnail">
+      {url && !failed ? (
+        <img
+          src={url}
+          alt={title + ' 썸네일'}
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <Text type="secondary" className="text-xs">썸네일 없음</Text>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: () => void }) {
@@ -105,6 +128,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const [error, setError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const seenSessionIds = useRef<Set<string> | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await getLiveRecordingState();
@@ -118,6 +142,18 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
       try {
         const next = await getLiveRecordingState();
         if (active) {
+          // Never open an old completed session just because it is stored in history.
+          // Automatically focus an active session on first load, or a newly started
+          // recording when no channel/session has been selected by the user.
+          const previousIds = seenSessionIds.current;
+          const newRecording = next.sessions.find((session) =>
+            session.status === 'recording' &&
+            (previousIds === null || !previousIds.has(session.id)),
+          );
+          seenSessionIds.current = new Set(next.sessions.map((session) => session.id));
+          if (newRecording) {
+            setSelectedKey((current) => current ?? 'session:' + newRecording.id);
+          }
           setState(next);
           setError('');
         }
@@ -158,7 +194,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
   const channelSession = requestedChannelId
     ? activeSessions.find((session) => session.channelId === requestedChannelId)
     : undefined;
-  const selectedSession = requestedSession ?? channelSession ?? (!selectedKey ? activeSessions[0] ?? state.sessions[0] : undefined);
+  const selectedSession = requestedSession ?? channelSession;
   const selectedChannel = requestedChannelId
     ? savedChannels.find((channel) => channel.channelId === requestedChannelId)
     : undefined;
@@ -175,53 +211,47 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
     <div className="live-recording-workspace">
       <Card bordered={false} className="app-panel live-recording-sidebar">
         <div className="live-recording-sidebar-heading">
-          <Title level={5} className="!mb-1">라이브 채널</Title>
-          <Text type="secondary" className="text-xs">현재 녹화와 즐겨찾기 채널</Text>
+          <Title level={5} className="!mb-2">채널 목록</Title>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <Text type="secondary" className="text-xs">방송 확인 간격</Text>
+            <Text strong className="text-xs">{state.pollSeconds}초</Text>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <Text type="secondary" className="text-xs">라이브 동시 녹화</Text>
+            <Text strong className="text-xs">{activeSessions.length} / {state.maxConcurrent}개</Text>
+          </div>
         </div>
         <div className="live-recording-sidebar-scroll">
-          <div className="live-recording-summary">
-            <div className="flex items-center justify-between">
-              <Text strong>현재 설정</Text>
-              <Tag color="green">VOD와 별도</Tag>
-            </div>
-            <div className="mt-2 flex justify-between gap-2">
-              <Text type="secondary" className="text-xs">방송 확인 간격</Text>
-              <Text strong>{state.pollSeconds}초</Text>
-            </div>
-            <div className="mt-1 flex justify-between gap-2">
-              <Text type="secondary" className="text-xs">라이브 동시 녹화</Text>
-              <Text strong>{recording.length} / {state.maxConcurrent}개</Text>
-            </div>
-            <Text type="secondary" className="mt-2 block text-xs">
-              설정 변경은 우측 상단 설정에서 가능합니다.
-            </Text>
-          </div>
-
-          <div className="live-recording-list-heading">
-            <Text strong>현재 녹화 중</Text>
-            <Tag color={activeSessions.length ? 'green' : undefined}>{activeSessions.length}개</Tag>
-          </div>
-          {activeSessions.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="현재 녹화 중인 채널이 없습니다." />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {activeSessions.map((session) => {
-                const selected = selectedKey === 'session:' + session.id || (!selectedKey && selectedSession?.id === session.id);
+          {state.sessions.length > 0 && (
+            <div role="tablist" aria-label="라이브 녹화 작업" className="flex flex-col gap-2">
+              {state.sessions.slice(0, 100).map((session) => {
+                const selected = selectedSession?.id === session.id && selectedKey === 'session:' + session.id;
+                const label = session.status === 'recording'
+                  ? '녹화 중'
+                  : session.status === 'finalizing'
+                    ? '저장 중'
+                    : '종료';
                 return (
                   <button
                     key={session.id}
                     type="button"
-                    aria-pressed={selected}
-                    className={'live-recording-list-item' + (selected ? ' is-selected' : '')}
+                    role="tab"
+                    aria-selected={selected}
+                    className={'live-recording-list-item live-recording-task-tab' + (selected ? ' is-selected' : '')}
                     onClick={() => selectSession(session.id)}
                   >
                     <span className="min-w-0 flex-1 text-left">
-                      <Text strong ellipsis className="block">{session.channelName || session.channelId}</Text>
+                      <Text strong ellipsis className="block">{session.title || session.channelName || '라이브 방송'}</Text>
                       <Text type="secondary" className="block truncate text-xs">
-                        {session.title || '라이브 방송'} · {formatTime(session.availableSeconds)}
+                        {session.channelName || session.channelId}
                       </Text>
                     </span>
-                    <Tag color="processing" className="!mr-0">{session.status === 'finalizing' ? '저장 중' : '녹화 중'}</Tag>
+                    <Tag
+                      color={session.status === 'recording' ? 'processing' : session.status === 'finalizing' ? 'warning' : undefined}
+                      className="!mr-0 shrink-0"
+                    >
+                      {label}
+                    </Tag>
                   </button>
                 );
               })}
@@ -282,24 +312,6 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
         </div>
         <div className="live-recording-detail-scroll">
           {error && <Alert type="warning" showIcon message="라이브 녹화 상태를 불러올 수 없습니다." description={error} className="!mb-4" />}
-          {state.sessions.length > 0 && (
-            <div className="mb-4">
-              <Text type="secondary" className="mb-2 block text-xs">녹화 기록 선택</Text>
-              <Select
-                aria-label="녹화 기록 선택"
-                className="w-full"
-                value={selectedSession?.id}
-                placeholder="녹화 기록을 선택하세요"
-                showSearch
-                optionFilterProp="label"
-                onChange={selectSession}
-                options={state.sessions.slice(0, 100).map((session) => ({
-                  value: session.id,
-                  label: (session.channelName || session.channelId) + ' · ' + (session.title || '라이브') + ' (' + statusLabel(session.status) + ')',
-                }))}
-              />
-            </div>
-          )}
 
           {!selectedSession && selectedChannel ? (
             <div className="rounded-xl border border-solid border-slate-500/25 p-5">
@@ -315,35 +327,62 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
               </Button>
             </div>
           ) : !selectedSession ? (
-            <Empty description="왼쪽에서 채널을 선택하거나 라이브 녹화를 시작해 주세요." />
+            <Empty description="현재 녹화 중인 작업이 없습니다. 왼쪽 즐겨찾기에서 채널을 선택해 녹화를 시작할 수 있습니다." />
           ) : (
             <div className="flex flex-col gap-4">
               <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="live-recording-session-header">
+                  <RecordingThumbnail url={selectedSession.thumbnailUrl} title={selectedSession.title || '라이브'} />
                   <div className="min-w-0 flex-1">
                     <Space wrap size={8}>
-                      <Tag color={selectedSession.status === 'recording' ? 'green' : undefined}>
+                      <Tag color={selectedSession.status === 'recording' ? 'processing' : undefined}>
                         {statusLabel(selectedSession.status)}
                       </Tag>
                       <Text type="secondary" className="text-xs">{selectedSession.channelName}</Text>
                     </Space>
-                    <Title level={5} className="!mb-2 !mt-3">{selectedSession.title || '라이브 방송'}</Title>
-                    <Text type="secondary" className="block text-xs">
+                    <Title level={5} className="!mb-3 !mt-3">
+                      {selectedSession.title || '라이브 방송'}
+                    </Title>
+                    {selectedSession.broadcastStartedAt && (
+                      <Text className="mb-1 block text-xs">
+                        <Text type="secondary">치지직 방송 시작</Text> · {formatChzzkDateTime(selectedSession.broadcastStartedAt)}
+                      </Text>
+                    )}
+                    <Text className="mb-1 block text-xs">
+                      <Text type="secondary">녹화 시작</Text> · {formatChzzkDateTime(selectedSession.startedAt)}
+                      {formatBroadcastOffset(selectedSession.startedAt, selectedSession.broadcastStartedAt) && (
+                        <Text type="secondary"> (방송 +{formatBroadcastOffset(selectedSession.startedAt, selectedSession.broadcastStartedAt)})</Text>
+                      )}
+                    </Text>
+                    <Text className="mb-1 block text-xs">
+                      <Text type="secondary">녹화 종료</Text> · {
+                        selectedSession.recordingEndedAt || selectedSession.finishedAt
+                          ? formatChzzkDateTime(selectedSession.recordingEndedAt || selectedSession.finishedAt)
+                          : selectedSession.status === 'recording' ? '녹화 중' : '기록 없음'
+                      }
+                      {formatBroadcastOffset(selectedSession.recordingEndedAt || selectedSession.finishedAt, selectedSession.broadcastStartedAt) && (
+                        <Text type="secondary">
+                          {' '}(방송 +{formatBroadcastOffset(selectedSession.recordingEndedAt || selectedSession.finishedAt, selectedSession.broadcastStartedAt)})
+                        </Text>
+                      )}
+                    </Text>
+                    <Text type="secondary" className="mt-3 block text-xs">
                       저장된 구간 {formatTime(selectedSession.availableSeconds)}
                     </Text>
                     <Text type="secondary" className="mt-1 block break-all text-xs">
                       {selectedSession.finalPath || selectedSession.directory}
                     </Text>
+                    {selectedSession.status === 'recording' && (
+                      <Button
+                        danger
+                        className="!mt-3"
+                        loading={busy}
+                        onClick={() => void perform(() => stopLiveRecording(selectedSession.id), '녹화 중지를 요청했습니다.')}
+                      >
+                        녹화 중지
+                      </Button>
+                    )}
                   </div>
-                  {selectedSession.status === 'recording' && (
-                    <Button
-                      danger
-                      loading={busy}
-                      onClick={() => void perform(() => stopLiveRecording(selectedSession.id), '녹화 중지를 요청했습니다.')}
-                    >
-                      녹화 중지
-                    </Button>
-                  )}
                 </div>
                 {selectedSession.error && <Alert type="warning" showIcon message={selectedSession.error} className="!mt-4" />}
                 <ClipEditor key={selectedSession.id} session={selectedSession} onUpdated={() => void refresh()} />

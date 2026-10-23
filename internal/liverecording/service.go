@@ -40,6 +40,9 @@ type Session struct {
  ChannelName string `json:"channelName"`
  LiveID int64 `json:"liveId"`
  Title string `json:"title"`
+ ThumbnailURL string `json:"thumbnailUrl,omitempty"`
+ BroadcastStartedAt string `json:"broadcastStartedAt,omitempty"`
+ RecordingEndedAt string `json:"recordingEndedAt,omitempty"`
  Directory string `json:"directory"`
  Status string `json:"status"`
  StartedAt string `json:"startedAt"`
@@ -250,7 +253,7 @@ func(s *Service) startLocked(live chzzk.LiveStatus,opts Options)(Session,bool){
  }
  stamp:=time.Now().Format("20060102_150405.000")
  folder:=filepath.Join(opts.Directory,"라이브",safeName(live.ChannelName),"live_"+strconv.FormatInt(live.LiveID,10)+"_"+stamp)
- session:=Session{ID:fmt.Sprintf("%s-%d-%d",live.ChannelID,live.LiveID,time.Now().UnixNano()),ChannelID:live.ChannelID,ChannelName:live.ChannelName,LiveID:live.LiveID,Title:live.LiveTitle,Directory:folder,Status:"recording",StartedAt:time.Now().Format(time.RFC3339)}
+ session:=Session{ID:fmt.Sprintf("%s-%d-%d",live.ChannelID,live.LiveID,time.Now().UnixNano()),ChannelID:live.ChannelID,ChannelName:live.ChannelName,LiveID:live.LiveID,Title:live.LiveTitle,ThumbnailURL:live.ThumbnailURL,BroadcastStartedAt:live.OpenDate,Directory:folder,Status:"recording",StartedAt:time.Now().Format(time.RFC3339)}
  ctx,cancel:=context.WithCancel(s.ctx);s.active[live.ChannelID]=cancel;s.closedCounts[live.ChannelID]=0
  s.state.Sessions=append([]Session{session},s.state.Sessions...)
  s.wg.Add(1)
@@ -306,7 +309,7 @@ func(s *Service) record(ctx context.Context,id string,opts Options){
  // The recorder's cancellation is intentional during StopRecording or an
  // application shutdown; all completed segments remain available.
  s.mu.Lock();current:=s.findSessionLocked(id)
- if current!=nil{current.Status="finalizing";current.AvailableSeconds=availableDuration(folder,false)}
+ if current!=nil{current.Status="finalizing";current.RecordingEndedAt=time.Now().Format(time.RFC3339);current.AvailableSeconds=availableDuration(folder,false)}
  _=s.saveLocked();s.mu.Unlock()
  files,_:=segmentFiles(folder,false)
  finalPath:=""

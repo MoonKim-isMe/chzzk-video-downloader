@@ -4,6 +4,7 @@ export interface LiveStatus {
  liveId: number;
  liveTitle: string;
  openDate: string;
+ thumbnailUrl?: string;
  isLive: boolean;
 }
 export interface LiveSubscription {
@@ -18,6 +19,9 @@ export interface LiveSession {
  channelName: string;
  liveId: number;
  title: string;
+ thumbnailUrl?: string;
+ broadcastStartedAt?: string;
+ recordingEndedAt?: string;
  directory: string;
  status: 'recording' | 'finalizing' | 'completed' | 'failed' | 'interrupted';
  startedAt: string;

@@ -16,7 +16,8 @@
     "test:url-tab": "node --test tests/urlTabPersistence.test.mjs",
     "test:updates": "node --experimental-strip-types --test tests/updateNotifications.test.mjs",
     "test:segment-order": "node --test tests/segmentQueueOrder.test.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:live-recording-time": "node --experimental-strip-types --test tests/liveRecordingTime.test.mjs"
   },
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
