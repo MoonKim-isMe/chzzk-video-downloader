@@ -1,8 +1,9 @@
-import { Alert, App as AntdApp, Button, Card, Checkbox, Empty, Input, Select, Space, Tag, Typography } from 'antd';
+import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Select, Space, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
 import { extractLiveClip, getLiveRecordingState, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState } from '../../types/live';
+import type { Channel } from '../../types/channel';
 
 const { Text, Title } = Typography;
 
@@ -98,7 +99,7 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
   );
 }
 
-export default function LiveRecordingPanel() {
+export default function LiveRecordingPanel({ savedChannels }: { savedChannels: Channel[] }) {
   const { message } = AntdApp.useApp();
   const [state, setState] = useState<LiveState>(initialState);
   const [error, setError] = useState('');
@@ -146,7 +147,7 @@ export default function LiveRecordingPanel() {
   const recording = state.sessions.filter((session) => session.status === 'recording');
   const finalizing = state.sessions.filter((session) => session.status === 'finalizing');
   const activeSessions = [...recording, ...finalizing];
-  const watchedChannels = state.subscriptions.filter((subscription) => subscription.enabled);
+  const subscriptions = new Map(state.subscriptions.map((subscription) => [subscription.channelId, subscription]));
 
   const requestedSession = selectedKey?.startsWith('session:')
     ? state.sessions.find((session) => session.id === selectedKey.slice('session:'.length))
@@ -159,8 +160,9 @@ export default function LiveRecordingPanel() {
     : undefined;
   const selectedSession = requestedSession ?? channelSession ?? (!selectedKey ? activeSessions[0] ?? state.sessions[0] : undefined);
   const selectedChannel = requestedChannelId
-    ? state.subscriptions.find((subscription) => subscription.channelId === requestedChannelId)
+    ? savedChannels.find((channel) => channel.channelId === requestedChannelId)
     : undefined;
+  const selectedSubscription = selectedChannel ? subscriptions.get(selectedChannel.channelId) : undefined;
   const selectedSessionClips = state.clips.filter((clip) => clip.sessionId === selectedSession?.id);
 
   const selectSession = (id: string) => setSelectedKey('session:' + id);
@@ -174,7 +176,7 @@ export default function LiveRecordingPanel() {
       <Card bordered={false} className="app-panel live-recording-sidebar">
         <div className="live-recording-sidebar-heading">
           <Title level={5} className="!mb-1">라이브 채널</Title>
-          <Text type="secondary" className="text-xs">자동 감시 및 현재 녹화 상태</Text>
+          <Text type="secondary" className="text-xs">현재 녹화와 즐겨찾기 채널</Text>
         </div>
         <div className="live-recording-sidebar-scroll">
           <div className="live-recording-summary">
@@ -194,40 +196,6 @@ export default function LiveRecordingPanel() {
               설정 변경은 우측 상단 설정에서 가능합니다.
             </Text>
           </div>
-
-          <div className="live-recording-list-heading">
-            <Text strong>자동 녹화 채널</Text>
-            <Tag>{watchedChannels.length}개</Tag>
-          </div>
-          {watchedChannels.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="등록된 자동 녹화 채널이 없습니다." />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {watchedChannels.map((channel) => {
-                const isActive = activeSessions.some((session) => session.channelId === channel.channelId);
-                const selected = selectedKey === 'channel:' + channel.channelId;
-                return (
-                  <button
-                    key={channel.channelId}
-                    type="button"
-                    aria-pressed={selected}
-                    className={'live-recording-list-item' + (selected ? ' is-selected' : '')}
-                    onClick={() => setSelectedKey('channel:' + channel.channelId)}
-                  >
-                    <span className="min-w-0 flex-1 text-left">
-                      <Text strong ellipsis className="block">{channel.channelName || channel.channelId}</Text>
-                      <Text type="secondary" className="block truncate text-xs">
-                        {channel.lastError || (isActive ? '녹화 진행 중' : '방송 감시 중')}
-                      </Text>
-                    </span>
-                    <Tag color={isActive ? 'green' : undefined} className="!mr-0">
-                      {isActive ? '녹화 중' : '자동'}
-                    </Tag>
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           <div className="live-recording-list-heading">
             <Text strong>현재 녹화 중</Text>
@@ -259,6 +227,48 @@ export default function LiveRecordingPanel() {
               })}
             </div>
           )}
+          <div className="live-recording-list-heading">
+            <Text strong>즐겨찾기 목록</Text>
+            <Tag>{savedChannels.length}개</Tag>
+          </div>
+          {savedChannels.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="저장된 즐겨찾기 채널이 없습니다." />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {savedChannels.map((channel) => {
+                const selected = selectedKey === 'channel:' + channel.channelId;
+                const activeSession = activeSessions.find((session) => session.channelId === channel.channelId);
+                const subscription = subscriptions.get(channel.channelId);
+                return (
+                  <button
+                    key={channel.channelId}
+                    type="button"
+                    aria-pressed={selected}
+                    className={'live-recording-list-item' + (selected ? ' is-selected' : '')}
+                    onClick={() => setSelectedKey('channel:' + channel.channelId)}
+                  >
+                    <Avatar size={36} src={channel.channelImageUrl || undefined}>
+                      {channel.channelName.slice(0, 1)}
+                    </Avatar>
+                    <span className="min-w-0 flex-1 text-left">
+                      <Text strong ellipsis className="block">{channel.channelName}</Text>
+                      <Text type="secondary" className="block truncate text-xs">
+                        {activeSession
+                          ? activeSession.status === 'finalizing' ? '파일 생성 중' : '현재 녹화 중'
+                          : subscription?.enabled ? '자동 녹화 감시 중' : '라이브 녹화 가능'}
+                      </Text>
+                    </span>
+                    {activeSession ? (
+                      <Tag color="processing" className="!mr-0">녹화 중</Tag>
+                    ) : subscription?.enabled ? (
+                      <Tag className="!mr-0">자동</Tag>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
         </div>
       </Card>
 
@@ -295,9 +305,11 @@ export default function LiveRecordingPanel() {
             <div className="rounded-xl border border-solid border-slate-500/25 p-5">
               <Title level={5} className="!mb-1">{selectedChannel.channelName || selectedChannel.channelId}</Title>
               <Text type="secondary" className="mb-4 block text-sm">
-                자동 녹화 채널로 등록되어 있습니다. 방송 시작을 감지하면 자동으로 녹화합니다.
+                {selectedSubscription?.enabled
+                  ? '자동 녹화 감시 중입니다. 방송 시작이 감지되면 녹화가 시작됩니다.'
+                  : '즐겨찾기한 채널입니다. 방송 중이라면 지금 녹화를 시작할 수 있습니다.'}
               </Text>
-              {selectedChannel.lastError && <Alert type="warning" showIcon message={selectedChannel.lastError} className="!mb-3" />}
+              {selectedSubscription?.lastError && <Alert type="warning" showIcon message={selectedSubscription.lastError} className="!mb-3" />}
               <Button type="primary" loading={busy} onClick={() => recordChannel(selectedChannel.channelId)}>
                 지금 동영상 녹화
               </Button>

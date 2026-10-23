@@ -31,6 +31,7 @@ import {
   removeSavedChannel,
   saveChannel,
   startDownload,
+  startLiveRecording,
 } from './lib/backend';
 import {
   getRemainingDownloadCount,
@@ -326,6 +327,22 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     [message],
   );
 
+  const handleRecordLive = useCallback(async (channelId: string) => {
+    try {
+      await startLiveRecording(channelId);
+      message.success('라이브 동영상 녹화를 시작했습니다.');
+      setActiveTab('live');
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      if (error.includes('이미 녹화 중인 방송')) {
+        message.info('이미 녹화 중인 방송입니다.');
+        setActiveTab('live');
+        return;
+      }
+      message.error(error);
+    }
+  }, [message]);
+
   const handleQueueSegments = useCallback(
     async (video: Video, segments: SegmentRange[], downloadType: DownloadType, numberFileName: boolean) => {
       const requests = segments.map((segment, index) => {
@@ -467,6 +484,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
             onQueueVideo={handleQueueVideo}
             onOpenSegments={handleOpenSegments}
+            onRecordLive={handleRecordLive}
           />
         ) : (
           <Card bordered={false} className="app-panel channel-vod-empty">
@@ -568,7 +586,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             />
           </div>
           {activeTab === 'live' && (
-            <div className="app-main-tab-view"><LiveRecordingPanel /></div>
+            <div className="app-main-tab-view"><LiveRecordingPanel savedChannels={savedChannels} /></div>
           )}
           {activeTab === 'downloads' && (
             <div className="app-main-tab-view">
@@ -598,6 +616,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
 
       <SettingsDrawer
         open={settingsOpen}
+        savedChannels={savedChannels}
         onClose={() => setSettingsOpen(false)}
         onThemePreview={onThemePreview}
         onSettingsUpdated={onSettingsUpdated}
