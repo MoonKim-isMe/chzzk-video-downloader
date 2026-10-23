@@ -76,7 +76,7 @@ function useChannelBroadcastStatus(channelId: string): BroadcastSnapshot | undef
     };
   }, [channelId]);
 
-  return snapshot?.channelId === channelId ? snapshot.status : undefined;
+  return snapshot?.channelId === channelId ? snapshot : undefined;
 }
 
 function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) {

@@ -470,3 +470,13 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `internal/chzzk/live.go`의 기존 `GetLiveStatusWithCookiesFile` 응답에 `tags`, `liveCategoryValue`를 추가합니다. 별도 라이브 API를 중복 호출하지 않고 기존 `LiveStatus` 데이터와 `LiveRecordingPanel` 방송 상태 조회를 재사용합니다.
 - 방송 확인 전에는 메타데이터를 표시하지 않고 `isLive`가 확인된 경우에만 라이브 상세를 렌더링합니다. 현재 라이브 예약 토글과 녹화 시작 버튼은 유지합니다.
 - `internal/chzzk/live_test.go`에 라이브 메타데이터 파싱 및 비방송/필드 누락 회귀 테스트 추가. 실제 치지직 응답·Windows 실화면/전체 빌드 검증 전에는 완료 체크하지 않습니다.
+
+### 라이브 방송 상태 반환 타입 오류 수정 (2026-10-23, PR #53 후속 수정)
+
+- [x] LIVE-26. `useChannelBroadcastStatus()`가 반환 타입 `BroadcastSnapshot | undefined`와 달리 `snapshot.status` 문자열을 반환해 발생한 TS2322의 원인 수정. 올바른 `snapshot` 객체를 반환하도록 변경하여 상태 태그·라이브 정보 표시 양쪽에서 재사용 가능하도록 처리
+- [ ] LIVE-27. `yarn build`(TypeScript 타입 검사·Vite 빌드) 및 Windows 실제 라이브 상태/메타데이터 출력 재검증. GitHub 연동 환경에서 프로젝트 의존성이 설치되지 않아 전체 빌드 미실행
+
+### 확인
+
+- 반환값을 객체로 통일해 호출부의 `snapshot?.status`, `snapshot?.live` 접근과 `BroadcastSnapshot | undefined` 타입 선언이 일치하도록 수정합니다.
+- 기존 30초 상태 조회·라이브 예약·녹화 실행 로직은 변경하지 않습니다.
