@@ -1,10 +1,10 @@
 import { Alert, App as AntdApp, Avatar, Button, Card, Checkbox, Empty, Input, Space, Switch, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
+import { extractLiveClip, getChannelLiveStatus, getLiveRecordingState, openDownloadDirectory, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState, LiveStatus } from '../../types/live';
 import type { Channel } from '../../types/channel';
-import { formatBroadcastOffset, formatChzzkDateTime } from '../../lib/liveRecordingTime';
+import { formatBroadcastOffset, formatLocalDateTime, getSavedBroadcastPositions } from '../../lib/liveRecordingTime';
 
 const { Text, Title } = Typography;
 
@@ -93,11 +93,6 @@ function BroadcastStatusTag({ status }: { status: BroadcastState | undefined }) 
   );
 }
 
-function ChannelBroadcastStatus({ channelId }: { channelId: string }) {
-  const snapshot = useChannelBroadcastStatus(channelId);
-  return <BroadcastStatusTag status={snapshot?.status} />;
-}
-
 interface ChannelRecordingSetupProps {
   channel: Channel;
   reserved: boolean;
@@ -170,47 +165,171 @@ function ChannelRecordingSetup({
   );
 }
 
-function LiveBroadcastPreview({ live }: { live: LiveStatus }) {
+function LiveBroadcastPreview({
+  live,
+  showStreamingTime = true,
+}: {
+  live: LiveStatus;
+  showStreamingTime?: boolean;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (!showStreamingTime) return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [live.liveId, live.openDate]);
+  }, [live.liveId, live.openDate, showStreamingTime]);
 
-  const streamingTime = formatBroadcastOffset(new Date(now).toISOString(), live.openDate);
+  const streamingTime = showStreamingTime
+    ? formatBroadcastOffset(new Date(now).toISOString(), live.openDate)
+    : undefined;
   const tags = [...new Set(live.tags ?? [])].map((tag) => tag.trim()).filter(Boolean);
 
   return (
     <div className="live-recording-session-header mb-4">
       <RecordingThumbnail url={live.thumbnailUrl} title={live.liveTitle || '라이브'} />
       <div className="min-w-0">
-        <Text type="secondary" className="mb-1 block text-xs">방송 제목</Text>
         <Title level={5} className="!mb-3 !mt-0 break-words">
           {live.liveTitle || '제목 없는 방송'}
         </Title>
         <div className="mb-2">
           <Text type="secondary" className="mr-2 text-xs">방송 시작 시간</Text>
-          <Text className="text-sm">{formatChzzkDateTime(live.openDate)}</Text>
+          <Text className="text-sm">{formatLocalDateTime(live.openDate)}</Text>
         </div>
-        <div className="mb-3">
-          <Text type="secondary" className="mr-2 text-xs">스트리밍 시간</Text>
-          <Text className="text-sm tabular-nums" strong>{streamingTime ?? '시간 정보 없음'}</Text>
+        {showStreamingTime && (
+          <div className="mb-3">
+            <Text type="secondary" className="mr-2 text-xs">스트리밍 시간</Text>
+            <Text className="text-sm tabular-nums" strong>{streamingTime ?? '시간 정보 없음'}</Text>
+          </div>
+        )}
+        {(live.liveCategoryValue || tags.length > 0) && (
+          <div className="flex flex-wrap gap-1.5">
+            {live.liveCategoryValue && (
+              <Tag color="green" className="!m-0">{live.liveCategoryValue}</Tag>
+            )}
+            {tags.map((tag) => (
+              <Tag key={tag} className="!m-0">#{tag.replace(/^#/, '')}</Tag>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Segments expose their total saved media duration, not the wall-clock time
+ * of the most recent segment. The final broadcast position is an estimate
+ * when the recorder has gaps in reception.
+ */
+function SavedBroadcastRange({ session }: { session: LiveSession }) {
+  const positions = getSavedBroadcastPositions(session.startedAt, session.broadcastStartedAt, session.availableSeconds);
+  const start = positions?.start;
+  const lastSaved = positions?.last;
+  const savedSeconds = Math.max(0, Math.floor(session.availableSeconds));
+
+  return (
+    <div className="live-recording-saved-range mt-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <Text strong>저장된 방송 구간</Text>
+        <Tag color="green" className="!m-0">저장 길이 {formatTime(savedSeconds)}</Tag>
+      </div>
+      <div className="live-recording-range-points">
+        <div className="live-recording-range-point">
+          <Text type="secondary" className="block text-xs">저장 시작 · 방송 기준</Text>
+          <Text strong className="block tabular-nums text-lg">{start ?? '시간 정보 없음'}</Text>
         </div>
-        <Text type="secondary" className="mb-2 block text-xs">태그</Text>
-        <div className="flex flex-wrap gap-1.5">
-          {live.liveCategoryValue && (
-            <Tag color="green" className="!m-0">{live.liveCategoryValue}</Tag>
-          )}
-          {tags.map((tag) => (
-            <Tag key={tag} className="!m-0">#{tag.replace(/^#/, '')}</Tag>
-          ))}
-          {!live.liveCategoryValue && tags.length === 0 && (
-            <Text type="secondary" className="text-xs">등록된 태그가 없습니다.</Text>
-          )}
+        <div className="live-recording-range-connector" aria-hidden="true" />
+        <div className="live-recording-range-point">
+          <Text type="secondary" className="block text-xs">마지막 저장 · 방송 기준</Text>
+          <Text strong className="block tabular-nums text-lg">
+            {lastSaved ?? (savedSeconds <= 0 ? '저장 대기' : '시간 정보 없음')}
+          </Text>
         </div>
       </div>
+      {start && savedSeconds > 0 && (
+        <Text type="secondary" className="mt-3 block text-xs">
+          저장된 영상 길이를 기준으로 계산한 위치입니다. 방송 수신이 끊긴 경우 실제 방송 시각과 차이가 날 수 있습니다.
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function RecordingSessionOverview({ session, busy, onStop }: {
+  session: LiveSession;
+  busy: boolean;
+  onStop: () => void;
+}) {
+  const { message } = AntdApp.useApp();
+  const [openingFolder, setOpeningFolder] = useState(false);
+  const snapshot = useChannelBroadcastStatus(session.channelId);
+  const currentLive = snapshot?.live?.liveId === session.liveId ? snapshot.live : undefined;
+
+  const broadcast: LiveStatus = {
+    channelId: session.channelId,
+    channelName: session.channelName,
+    liveId: session.liveId,
+    isLive: Boolean(currentLive),
+    liveTitle: session.title || currentLive?.liveTitle || '',
+    openDate: session.broadcastStartedAt || currentLive?.openDate || '',
+    thumbnailUrl: session.thumbnailUrl || currentLive?.thumbnailUrl,
+    tags: session.tags?.length ? session.tags : (currentLive?.tags ?? []),
+    liveCategoryValue: session.liveCategoryValue || currentLive?.liveCategoryValue,
+  };
+
+  const openFolder = async () => {
+    if (openingFolder) return;
+    setOpeningFolder(true);
+    try {
+      await openDownloadDirectory(session.directory);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOpeningFolder(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-solid border-slate-500/25 p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Title level={5} className="!m-0">{session.channelName || session.channelId}</Title>
+          <Tag color={session.status === 'recording' ? 'processing' : undefined} className="!m-0">
+            {statusLabel(session.status)}
+          </Tag>
+          <BroadcastStatusTag status={snapshot?.status} />
+        </div>
+        <Button size="small" loading={openingFolder} onClick={() => void openFolder()}>
+          폴더 열기
+        </Button>
+      </div>
+      <LiveBroadcastPreview live={broadcast} showStreamingTime={Boolean(currentLive)} />
+      <SavedBroadcastRange session={session} />
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Text type="secondary" className="text-xs">
+          녹화 시작 · {formatLocalDateTime(session.startedAt)}
+        </Text>
+        {session.recordingEndedAt || session.finishedAt ? (
+          <Text type="secondary" className="text-xs">
+            녹화 종료 · {formatLocalDateTime(session.recordingEndedAt || session.finishedAt)}
+          </Text>
+        ) : null}
+      </div>
+      {session.status === 'recording' && (
+        <Button
+          danger
+          className="!mt-4"
+          loading={busy}
+          onClick={onStop}
+        >
+          녹화 중지
+        </Button>
+      )}
+      {session.error && (
+        <Alert type="warning" showIcon message={session.error} className="!mt-4" />
+      )}
     </div>
   );
 }
@@ -265,8 +384,7 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
   };
 
   return (
-    <div className="mt-5 rounded-xl border border-solid border-slate-500/25 p-4">
-      <Text strong className="mb-1 block">녹화된 구간 추출</Text>
+    <div>
       <Text type="secondary" className="mb-4 block text-xs">
         저장이 끝난 구간만 추출할 수 있습니다. 원본 녹화는 중단되지 않습니다.
       </Text>
@@ -501,7 +619,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
         <div className="live-recording-detail-heading">
           <div className="min-w-0">
             <Title level={4} className="!mb-1">라이브 녹화</Title>
-            <Text type="secondary" className="text-xs">녹화 관리와 완료된 구간의 MP4 추출</Text>
+            <Text type="secondary" className="text-xs">방송 녹화와 저장된 작업 관리</Text>
           </div>
           <Tag color="green">라이브 {activeSessions.length} / {state.maxConcurrent}</Tag>
         </div>
@@ -524,67 +642,20 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
             <Empty description="현재 녹화 중인 작업이 없습니다. 왼쪽 즐겨찾기에서 채널을 선택해 녹화를 시작할 수 있습니다." />
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="rounded-xl border border-solid border-slate-500/25 p-5">
-                <div className="live-recording-session-header">
-                  <RecordingThumbnail url={selectedSession.thumbnailUrl} title={selectedSession.title || '라이브'} />
-                  <div className="min-w-0 flex-1">
-                    <Space wrap size={8}>
-                      <Tag color={selectedSession.status === 'recording' ? 'processing' : undefined}>
-                        {statusLabel(selectedSession.status)}
-                      </Tag>
-                      <Text type="secondary" className="text-xs">{selectedSession.channelName}</Text>
-                    </Space>
-                    <Title level={5} className="!mb-3 !mt-3">
-                      {selectedSession.title || '라이브 방송'}
-                    </Title>
-                    <ChannelBroadcastStatus channelId={selectedSession.channelId} />
-                    {selectedSession.broadcastStartedAt && (
-                      <Text className="mb-1 block text-xs">
-                        <Text type="secondary">치지직 방송 시작</Text> · {formatChzzkDateTime(selectedSession.broadcastStartedAt)}
-                      </Text>
-                    )}
-                    <Text className="mb-1 block text-xs">
-                      <Text type="secondary">녹화 시작</Text> · {formatChzzkDateTime(selectedSession.startedAt)}
-                      {formatBroadcastOffset(selectedSession.startedAt, selectedSession.broadcastStartedAt) && (
-                        <Text type="secondary"> (방송 +{formatBroadcastOffset(selectedSession.startedAt, selectedSession.broadcastStartedAt)})</Text>
-                      )}
-                    </Text>
-                    <Text className="mb-1 block text-xs">
-                      <Text type="secondary">녹화 종료</Text> · {
-                        selectedSession.recordingEndedAt || selectedSession.finishedAt
-                          ? formatChzzkDateTime(selectedSession.recordingEndedAt || selectedSession.finishedAt)
-                          : selectedSession.status === 'recording' ? '녹화 중' : '기록 없음'
-                      }
-                      {formatBroadcastOffset(selectedSession.recordingEndedAt || selectedSession.finishedAt, selectedSession.broadcastStartedAt) && (
-                        <Text type="secondary">
-                          {' '}(방송 +{formatBroadcastOffset(selectedSession.recordingEndedAt || selectedSession.finishedAt, selectedSession.broadcastStartedAt)})
-                        </Text>
-                      )}
-                    </Text>
-                    <Text type="secondary" className="mt-3 block text-xs">
-                      저장된 구간 {formatTime(selectedSession.availableSeconds)}
-                    </Text>
-                    <Text type="secondary" className="mt-1 block break-all text-xs">
-                      {selectedSession.finalPath || selectedSession.directory}
-                    </Text>
-                    {selectedSession.status === 'recording' && (
-                      <Button
-                        danger
-                        className="!mt-3"
-                        loading={busy}
-                        onClick={() => void perform(() => stopLiveRecording(selectedSession.id), '녹화 중지를 요청했습니다.')}
-                      >
-                        녹화 중지
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                {selectedSession.error && <Alert type="warning" showIcon message={selectedSession.error} className="!mt-4" />}
+              <RecordingSessionOverview
+                key={selectedSession.id}
+                session={selectedSession}
+                busy={busy}
+                onStop={() => void perform(
+                  () => stopLiveRecording(selectedSession.id),
+                  '녹화 중지를 요청했습니다.',
+                )}
+              />
+              <section className="rounded-xl border border-solid border-slate-500/25 p-5">
+                <Title level={5} className="!mb-4">녹화 구간 추출</Title>
                 <ClipEditor key={selectedSession.id} session={selectedSession} onUpdated={() => void refresh()} />
-              </div>
-
-              <div>
-                <Text strong className="mb-3 block">추출 내역</Text>
+                <div className="mt-5 border-t border-solid border-slate-500/20 pt-4">
+                  <Text strong className="mb-3 block">추출 내역</Text>
                 {selectedSessionClips.length === 0 ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="추출한 구간이 없습니다." />
                 ) : (
@@ -596,10 +667,8 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                           <Text type="secondary" className="block text-xs">
                             {formatTime(clip.startSeconds)} ~ {formatTime(clip.endSeconds)}
                           </Text>
-                          {(clip.filePath || clip.error) && (
-                            <Text type={clip.error ? 'danger' : 'secondary'} className="block break-all text-xs">
-                              {clip.filePath || clip.error}
-                            </Text>
+                          {clip.error && (
+                            <Text type="danger" className="block text-xs">{clip.error}</Text>
                           )}
                         </div>
                         <Tag color={clip.status === 'completed' ? 'success' : clip.status === 'failed' ? 'error' : 'processing'}>
@@ -609,7 +678,8 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </section>
             </div>
           )}
         </div>

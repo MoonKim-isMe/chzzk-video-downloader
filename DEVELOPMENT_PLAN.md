@@ -505,3 +505,18 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `frontend/src/features/live/LiveRecordingPanel.tsx`: `SessionBroadcastStatus`의 녹화 이력 재시작 UI를 일반 방송 상태 표시로 대체합니다. 채널 상세 `ChannelRecordingSetup`은 이전 녹화 유무와 관계없이 실제 방송 중일 때 기존 `recordChannel` 경로로 녹화 시작합니다.
 - `internal/liverecording/service.go`의 수동 시작(이전 기록 허용) 및 자동 중복 방지, 채널당 동시 녹화 제한은 지난 구현을 유지합니다. 그 외 백엔드 변경 없음.
 - 코드 UI 경로/예약 토글/목록 문구에 대한 정적 검증을 진행하며 프로젝트 전체 Yarn 빌드 및 Windows 실화면 검증 전에는 항목을 완료로 처리하지 않습니다.
+
+### 라이브 녹화 전/중 상세 UI 통일, 사용자 시간과 저장 구간 표시 (2026-10-23, PR #53 추가 요청)
+
+- [ ] LIVE-34. 녹화 시작 전 상세의 방송 제목·태그 레이블 제거, 방송 제목과 태그 자체만 표시하고 방송 시작 시각의 KST 접미사 제거. 치지직 원본 `openDate`는 KST로 파싱하되 사용자의 시스템 로컬 시간대로 변환해 출력. 다른 시간대/라이트·다크 화면 검증
+- [ ] LIVE-35. 녹화 중·종료된 작업 상세를 채널 상세와 동일한 채널명·방송 상태·녹화 상태, 썸네일·방송 제목·방송 시작 시각·스트리밍 시간·카테고리/태그 구성으로 통일. 방송 태그와 카테고리는 녹화 시작 시 세션에 보존해 방송 종료 뒤에도 표시. 실제 라이브 상태 변경/작업 이력 검증
+- [ ] LIVE-36. 녹화 시작 시점의 방송 경과 시간과 저장된 마지막 방송 위치를 강조한 구간 UI 표시. 파일에서 읽은 저장 완료 구간 길이로 마지막 위치를 계산하므로 수신 중단 구간이 있는 경우 추정값임을 명시. 실제 분할 저장/재연결 검증
+- [ ] LIVE-37. 저장 경로 문자열 대신 기존 `OpenDownloadDirectory`를 재사용한 `폴더 열기` 버튼 제공. 구간 추출 폼과 추출 내역을 단일 녹화 구간 추출 카드에 배치하고, 추출 결과 목록에서는 저장 경로 대신 상태/오류 정보 중심으로 표시. Windows 폴더 열기/실화면 검증
+- [ ] LIVE-38. TypeScript 타입 검사, 프론트엔드 빌드, Go 회귀 테스트 및 Windows 실방송·녹화/저장/폴더 열기/구간 추출 통합 검증
+
+### 구현 및 영향 범위
+
+- `frontend/src/lib/liveRecordingTime.ts`: 타임존을 명시하지 않으면 실행 시스템의 로컬 타임존을 사용하는 `formatLocalDateTime`으로 변경. 비교 기준 `formatBroadcastOffset`은 방송 시작 시각 기준 계산 정책 유지.
+- `frontend/src/features/live/LiveRecordingPanel.tsx`: 녹화 전/중 모두 `LiveBroadcastPreview`를 사용합니다. 현재 방송이 해당 녹화 세션의 `liveId`와 일치하는 경우에만 실시간 경과 시각을 표시합니다. 방송 시작 시각이 없으면 방송 기준 상대 위치를 추정하지 않습니다.
+- `internal/liverecording/service.go` · `frontend/src/types/live.ts`: 세션에 방송 태그/카테고리를 옵션 메타데이터로 저장하고 과거 레코드의 누락 값을 허용합니다.
+- 실제 빌드 및 실사용 검증은 현재 환경에서 수행하지 못했으므로 검증 전 작업을 완료로 표시하지 않습니다.

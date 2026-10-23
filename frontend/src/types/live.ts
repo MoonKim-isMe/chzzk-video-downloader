@@ -23,6 +23,8 @@ export interface LiveSession {
  title: string;
  thumbnailUrl?: string;
  broadcastStartedAt?: string;
+ tags?: string[];
+ liveCategoryValue?: string;
  recordingEndedAt?: string;
  directory: string;
  status: 'recording' | 'finalizing' | 'completed' | 'failed' | 'interrupted';

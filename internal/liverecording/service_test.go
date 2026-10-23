@@ -72,13 +72,13 @@ func TestSafeName(t *testing.T){
 
 func TestSessionBroadcastMetadataPersistence(t *testing.T) {
  s:=fakeService(t)
- session:=Session{ID:"record-test",ChannelID:sampleChannel,LiveID:12,Title:"방송 제목",ThumbnailURL:"https://example.com/thumbnail.jpg",BroadcastStartedAt:"2026-10-23 12:00:00",StartedAt:"2026-10-23T12:01:00+09:00",RecordingEndedAt:"2026-10-23T12:05:00+09:00",Status:"completed"}
+ session:=Session{ID:"record-test",ChannelID:sampleChannel,LiveID:12,Title:"방송 제목",ThumbnailURL:"https://example.com/thumbnail.jpg",BroadcastStartedAt:"2026-10-23 12:00:00",Tags:[]string{"게임","챌린지"},LiveCategoryValue:"엘든 링",StartedAt:"2026-10-23T12:01:00+09:00",RecordingEndedAt:"2026-10-23T12:05:00+09:00",Status:"completed"}
  s.state.Sessions=append(s.state.Sessions,session)
  if err:=s.saveLocked();err!=nil{t.Fatal(err)}
  restored,err:=New(s.path,s.status,s.tools,s.options)
  if err!=nil{t.Fatal(err)}
  got:=restored.Snapshot().Sessions[0]
- if got.ThumbnailURL!=session.ThumbnailURL || got.BroadcastStartedAt!=session.BroadcastStartedAt || got.RecordingEndedAt!=session.RecordingEndedAt {
+ if got.ThumbnailURL!=session.ThumbnailURL || got.BroadcastStartedAt!=session.BroadcastStartedAt || got.RecordingEndedAt!=session.RecordingEndedAt || got.LiveCategoryValue!=session.LiveCategoryValue || len(got.Tags)!=2 || got.Tags[0]!="게임" {
   t.Fatalf("session metadata was not persisted: %+v",got)
  }
 }

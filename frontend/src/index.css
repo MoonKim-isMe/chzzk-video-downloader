@@ -2599,3 +2599,51 @@ select {
     max-width: 340px;
   }
 }
+
+
+/* Recorded broadcast positions use the same styling in light/dark themes. */
+.live-recording-saved-range {
+  padding: 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+}
+
+.live-recording-range-points {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.live-recording-range-point {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 9px;
+  background: var(--app-surface);
+}
+
+.live-recording-range-point .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.live-recording-range-connector {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--app-primary), var(--app-border));
+}
+
+@media (max-width: 600px) {
+  .live-recording-range-points {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .live-recording-range-connector {
+    width: 3px;
+    height: 20px;
+    justify-self: center;
+    background: linear-gradient(to bottom, var(--app-primary), var(--app-border));
+  }
+}
