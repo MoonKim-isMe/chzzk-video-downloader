@@ -2648,26 +2648,34 @@ select {
   }
 }
 
-/* History is a separate sidebar view: the select surface and remove action
-   are sibling controls, rather than nested interactive elements. */
+/* Two-line history cards keep the title full-width and the delete action
+   separate from the clickable detail surface. */
 .live-recording-history-row {
+  position: relative;
+  display: block;
   cursor: default;
-  padding: 8px 10px;
-  gap: 8px;
+  padding: 11px 12px;
 }
 
 .live-recording-history-select {
   display: flex;
-  flex: 1 1 auto;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
   min-width: 0;
-  gap: 8px;
+  gap: 9px;
   padding: 0;
   background: transparent;
   border: 0;
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+
+.live-recording-history-delete {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
 }
 
 .live-recording-history-select:focus-visible {

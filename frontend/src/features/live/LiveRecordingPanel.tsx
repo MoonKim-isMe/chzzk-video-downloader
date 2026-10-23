@@ -727,6 +727,9 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                 <div className="flex flex-col gap-2">
                   {historySessions.map((session) => {
                     const selected = selectedKey === 'session:' + session.id;
+                    const historyLabel = session.status === 'completed'
+                      ? '완료'
+                      : session.status === 'interrupted' ? '중단' : statusLabel(session.status);
                     return (
                       <div key={session.id} className={'live-recording-list-item live-recording-history-row' + (selected ? ' is-selected' : '')}>
                         <button
@@ -735,17 +738,19 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                           aria-pressed={selected}
                           onClick={() => selectSession(session.id)}
                         >
-                          <span className="min-w-0 flex-1 text-left">
-                            <Text strong ellipsis className="block">{session.title || session.channelName || '라이브 방송'}</Text>
-                            <Text type="secondary" className="block truncate text-xs">
+                          <Text strong ellipsis className="block w-full text-left">
+                            {session.title || session.channelName || '라이브 방송'}
+                          </Text>
+                          <span className="flex min-w-0 items-center gap-2 pr-[94px]">
+                            <Text type="secondary" className="min-w-0 truncate text-xs">
                               {session.channelName || session.channelId}
                             </Text>
+                            <Tag className="!m-0 shrink-0">{historyLabel}</Tag>
                           </span>
-                          <Tag className="!mr-0 shrink-0">{statusLabel(session.status)}</Tag>
                         </button>
                         <Button
                           size="small"
-                          className="!shrink-0"
+                          className="live-recording-history-delete"
                           loading={deletingId === session.id}
                           disabled={historyBusy}
                           onClick={() => void removeHistory(session.id)}
