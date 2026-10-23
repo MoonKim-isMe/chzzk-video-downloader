@@ -16,6 +16,7 @@ import SavedChannels from './components/SavedChannels';
 import AuthenticationDrawer from './features/authentication/AuthenticationDrawer';
 import ChannelSearchTab from './features/channels/ChannelSearchTab';
 import DownloadPanel from './features/downloads/DownloadPanel';
+import LiveRecordingPanel from './features/live/LiveRecordingPanel';
 import VideoRepairPanel from './features/repair/VideoRepairPanel';
 import SettingsDrawer from './features/settings/SettingsDrawer';
 import ChannelVideoList from './features/videos/ChannelVideoList';
@@ -30,6 +31,7 @@ import {
   removeSavedChannel,
   saveChannel,
   startDownload,
+  startLiveRecording,
 } from './lib/backend';
 import {
   getRemainingDownloadCount,
@@ -50,13 +52,14 @@ import type { Video } from './types/video';
 
 const { Header, Content } = Layout;
 
-type AppTab = 'search' | 'url' | 'downloads' | 'repair';
+type AppTab = 'search' | 'url' | 'downloads' | 'live' | 'repair';
 type ChannelPanelTab = 'search' | 'bookmarks';
 
 const navigationItems: Array<{ key: AppTab; label: string }> = [
   { key: 'search', label: '채널 검색' },
   { key: 'url', label: 'URL 직접 입력' },
   { key: 'downloads', label: '다운로드' },
+  { key: 'live', label: '라이브 녹화' },
   { key: 'repair', label: '동영상 복구' },
 ];
 
@@ -324,6 +327,22 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     [message],
   );
 
+  const handleRecordLive = useCallback(async (channelId: string) => {
+    try {
+      await startLiveRecording(channelId);
+      message.success('라이브 동영상 녹화를 시작했습니다.');
+      setActiveTab('live');
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      if (error.includes('이미 녹화 중인 방송')) {
+        message.info('이미 녹화 중인 방송입니다.');
+        setActiveTab('live');
+        return;
+      }
+      message.error(error);
+    }
+  }, [message]);
+
   const handleQueueSegments = useCallback(
     async (video: Video, segments: SegmentRange[], downloadType: DownloadType, numberFileName: boolean) => {
       const requests = segments.map((segment, index) => {
@@ -465,6 +484,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
             activeDownloadStatusByVideoNo={activeDownloadStatusByVideoNo}
             onQueueVideo={handleQueueVideo}
             onOpenSegments={handleOpenSegments}
+            onRecordLive={handleRecordLive}
           />
         ) : (
           <Card bordered={false} className="app-panel channel-vod-empty">
@@ -565,6 +585,9 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               onQueueSegments={handleQueueSegments}
             />
           </div>
+          {activeTab === 'live' && (
+            <div className="app-main-tab-view"><LiveRecordingPanel savedChannels={savedChannels} /></div>
+          )}
           {activeTab === 'downloads' && (
             <div className="app-main-tab-view">
               <DownloadPanel
@@ -593,6 +616,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
 
       <SettingsDrawer
         open={settingsOpen}
+        savedChannels={savedChannels}
         onClose={() => setSettingsOpen(false)}
         onThemePreview={onThemePreview}
         onSettingsUpdated={onSettingsUpdated}

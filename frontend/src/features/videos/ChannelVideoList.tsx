@@ -1,11 +1,13 @@
 import { Alert, Avatar, Button, Card, Empty, Skeleton, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getChannelVideos } from '../../lib/backend';
+import { getChannelLiveStatus, getChannelVideos } from '../../lib/backend';
 import type { Channel } from '../../types/channel';
+import type { LiveStatus } from '../../types/live';
 import type { DownloadTaskStatus, DownloadType } from '../../types/download';
 import type { Video, VideoListResult } from '../../types/video';
 import VideoCard from './VideoCard';
+import ChannelLiveCard from './ChannelLiveCard';
 
 const { Text, Title } = Typography;
 const countFormatter = new Intl.NumberFormat('ko-KR');
@@ -17,6 +19,7 @@ interface ChannelVideoListProps {
   activeDownloadStatusByVideoNo: Map<string, DownloadTaskStatus>;
   onQueueVideo: (video: Video, downloadType?: DownloadType) => Promise<void>;
   onOpenSegments: (video: Video) => void;
+  onRecordLive: (channelId: string) => Promise<void>;
 }
 
 interface FailedRequest {
@@ -47,8 +50,10 @@ function ChannelVideoList({
   activeDownloadStatusByVideoNo,
   onQueueVideo,
   onOpenSegments,
+  onRecordLive,
 }: ChannelVideoListProps) {
   const [result, setResult] = useState<VideoListResult>(emptyResult);
+  const [live, setLive] = useState<LiveStatus>();
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -99,6 +104,27 @@ function ChannelVideoList({
       requestSequence.current += 1;
     };
   }, [fetchPage]);
+
+  useEffect(() => {
+    let active = true;
+    setLive(undefined);
+    const check = async () => {
+      try {
+        const next = await getChannelLiveStatus(channel.channelId);
+        if (active) setLive(next.isLive ? next : undefined);
+      } catch {
+        // Live status may be unavailable for offline/restricted channels;
+        // the VOD search must continue to work independently.
+        if (active) setLive(undefined);
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [channel.channelId, authenticationEnabled]);
 
   const retry = () => {
     if (failedRequest) {
@@ -159,13 +185,21 @@ function ChannelVideoList({
               </Card>
             ))}
           </div>
-        ) : result.videos.length === 0 && !error ? (
+        ) : result.videos.length === 0 && !live && !error ? (
           <div className="channel-vod-empty-content">
             <Empty description="표시할 VOD가 없습니다." />
           </div>
         ) : (
           <>
             <div className="channel-vod-grid">
+              {live && (
+                <ChannelLiveCard
+                  key={'live-' + live.liveId}
+                  channel={channel}
+                  live={live}
+                  onRecord={onRecordLive}
+                />
+              )}
               {result.videos.map((video) => (
                 <VideoCard
                   key={video.videoNo}

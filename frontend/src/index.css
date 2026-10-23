@@ -2443,3 +2443,332 @@ select {
   background: color-mix(in srgb, var(--app-text-muted) 48%, transparent);
   background-clip: padding-box;
 }
+
+
+/* Live recording uses the same two-column workspace language as channel search. */
+.live-recording-workspace {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.live-recording-sidebar,
+.live-recording-detail {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.live-recording-sidebar > .ant-card-body,
+.live-recording-detail > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.live-recording-sidebar-heading,
+.live-recording-detail-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 76px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--app-border-soft);
+}
+
+.live-recording-sidebar-heading {
+  display: block;
+}
+
+.live-recording-sidebar-scroll,
+.live-recording-detail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px;
+}
+
+/* The reserved scrollbar gutter otherwise doubles the sidebar's right inset.
+   Keep ~16px total on both sides: 16px left / 8px right + 8px scrollbar. */
+.live-recording-sidebar-scroll {
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-muted) 45%, transparent) transparent;
+}
+
+.live-recording-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.live-recording-sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 45%, transparent);
+}
+
+.live-recording-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 28px;
+  gap: 10px;
+  margin: 22px 0 10px;
+}
+
+.live-recording-list-heading-first {
+  margin-top: 0;
+}
+
+.live-recording-list-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 60px;
+  padding: 11px 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 10px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.live-recording-list-item:hover,
+.live-recording-list-item.is-selected {
+  border-color: var(--app-primary, #00c471);
+  background: color-mix(in srgb, var(--app-primary, #00c471) 8%, var(--app-surface-soft));
+}
+
+.live-recording-list-item:focus-visible {
+  outline: 2px solid var(--app-primary, #00c471);
+  outline-offset: 2px;
+}
+
+.live-video-card {
+  border: 1px solid color-mix(in srgb, var(--app-primary) 46%, var(--app-border)) !important;
+  background: var(--app-surface) !important;
+}
+
+.live-video-thumbnail {
+  min-height: 152px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--app-primary) 17%, var(--app-surface-soft)),
+    var(--app-surface-soft));
+}
+
+@media (max-width: 1100px) {
+  .live-recording-workspace {
+    grid-template-columns: 290px minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .live-recording-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(230px, 40%) minmax(0, 60%);
+    gap: 10px;
+  }
+}
+
+
+/* Left-pane recording tabs and CHZZK broadcast metadata. */
+.live-recording-sidebar-heading {
+  display: block;
+  min-height: 0;
+  padding: 15px 18px 14px;
+}
+
+.live-recording-task-tab.is-selected {
+  box-shadow: inset 3px 0 0 var(--app-primary, #00c471);
+}
+
+.live-recording-session-header {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.live-recording-session-thumbnail {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 11px;
+  background: var(--app-surface-soft);
+}
+
+@media (max-width: 930px) {
+  .live-recording-session-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .live-recording-session-thumbnail {
+    max-width: 340px;
+  }
+}
+
+
+/* Recorded broadcast positions use the same styling in light/dark themes. */
+.live-recording-saved-range {
+  padding: 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+}
+
+.live-recording-range-points {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.live-recording-range-point {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 9px;
+  background: var(--app-surface);
+}
+
+.live-recording-range-point .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.live-recording-range-connector {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--app-primary), var(--app-border));
+}
+
+@media (max-width: 600px) {
+  .live-recording-range-points {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .live-recording-range-connector {
+    width: 3px;
+    height: 20px;
+    justify-self: center;
+    background: linear-gradient(to bottom, var(--app-primary), var(--app-border));
+  }
+}
+
+/* Two-line history cards keep the title full-width and the delete action
+   separate from the clickable detail surface. */
+.live-recording-history-row {
+  position: relative;
+  display: block;
+  cursor: default;
+  padding: 11px 12px;
+}
+
+.live-recording-history-select {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  gap: 9px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.live-recording-history-delete {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+}
+
+.live-recording-history-select:focus-visible {
+  outline: 2px solid var(--app-primary, #00c471);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+
+/* Quiet blue-gray for the recording-only status in dark mode.
+   Live broadcast and other status tags retain their existing styles. */
+:root:not([data-theme="light"]) .live-recording-active-tag.ant-tag {
+  color: #bac9da !important;
+  background: rgba(101, 122, 148, 0.13) !important;
+  border-color: rgba(154, 169, 188, 0.28) !important;
+  font-weight: 600;
+}
+
+
+/* Compact, theme-aware time basis control in the live clip editor. */
+.live-clip-time-basis.ant-segmented {
+  padding: 4px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+  box-shadow: none;
+}
+
+.live-clip-time-basis .ant-segmented-group {
+  gap: 3px;
+}
+
+.live-clip-time-basis .ant-segmented-item {
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.live-clip-time-basis .ant-segmented-item-label {
+  min-height: 32px;
+  padding: 5px 12px;
+  line-height: 22px;
+}
+
+.live-clip-time-basis .ant-segmented-thumb,
+.live-clip-time-basis .ant-segmented-item-selected {
+  border-radius: 8px;
+  background: var(--app-surface-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px var(--app-border-soft);
+}
+
+.live-clip-time-basis .ant-segmented-item-selected {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.live-clip-time-basis .ant-segmented-item:not(.ant-segmented-item-selected, .ant-segmented-item-disabled):hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.live-clip-time-basis .ant-segmented-item-disabled {
+  color: var(--app-text-muted);
+  opacity: 0.55;
+}
+
+.live-clip-time-basis .ant-segmented-item:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}

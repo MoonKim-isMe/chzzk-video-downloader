@@ -1,6 +1,7 @@
 import {
   App as AntdApp,
   Button,
+  Alert,
   Divider,
   Drawer,
   Form,
@@ -15,10 +16,17 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   getSettings,
+  getLiveRecordingState,
+  configureLiveRecording,
+  setLiveAutoRecording,
+  removeLiveAutoRecording,
   openDownloadDirectory,
   selectDownloadDirectory,
   updateSettings,
 } from '../../lib/backend';
+import LiveAutoRecordingSettings from './LiveAutoRecordingSettings';
+import type { Channel } from '../../types/channel';
+import type { LiveState } from '../../types/live';
 import type {
   AppSettings,
   DownloadAcceleration,
@@ -57,6 +65,7 @@ const themeOptions: Array<{ label: string; value: ThemeMode }> = [
 
 interface SettingsDrawerProps {
   open: boolean;
+  savedChannels: Channel[];
   onClose: () => void;
   onThemePreview: (theme: ThemeMode) => void;
   onSettingsUpdated: (settings: AppSettings) => void;
@@ -66,6 +75,7 @@ interface SettingsDrawerProps {
 
 function SettingsDrawer({
   open,
+  savedChannels,
   onClose,
   onThemePreview,
   onSettingsUpdated,
@@ -78,8 +88,11 @@ function SettingsDrawer({
   const [saving, setSaving] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
   const [openingDirectory, setOpeningDirectory] = useState(false);
+  const [liveState, setLiveState] = useState<LiveState | null>(null);
+  const [liveError, setLiveError] = useState('');
   const downloadDirectory = Form.useWatch('downloadDir', form);
   const persistedTheme = useRef<ThemeMode | undefined>(undefined);
+  const persistedLive = useRef<LiveState | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -88,7 +101,21 @@ function SettingsDrawer({
 
     let active = true;
     persistedTheme.current = undefined;
+    persistedLive.current = null;
+    setLiveState(null);
+    setLiveError('');
     setLoading(true);
+
+    void getLiveRecordingState()
+      .then((state) => {
+        if (active) {
+          persistedLive.current = state;
+          setLiveState(state);
+        }
+      })
+      .catch((cause) => {
+        if (active) setLiveError(cause instanceof Error ? cause.message : String(cause));
+      });
 
     getSettings()
       .then((settings) => {
@@ -158,6 +185,24 @@ function SettingsDrawer({
     setSaving(true);
     try {
       const values = await form.validateFields();
+      // Validate the regular form before persisting either group of settings.
+      if (liveState && persistedLive.current) {
+        const previous = persistedLive.current;
+        if (liveState.pollSeconds !== previous.pollSeconds || liveState.maxConcurrent !== previous.maxConcurrent) {
+          await configureLiveRecording(liveState.pollSeconds, liveState.maxConcurrent);
+        }
+        const currentIds = new Set(liveState.subscriptions.map((channel) => channel.channelId));
+        for (const original of previous.subscriptions) {
+          if (!currentIds.has(original.channelId)) await removeLiveAutoRecording(original.channelId);
+        }
+        for (const next of liveState.subscriptions) {
+          const original = previous.subscriptions.find((channel) => channel.channelId === next.channelId);
+          if (!original || original.enabled !== next.enabled || original.channelName !== next.channelName) {
+            await setLiveAutoRecording(next.channelId, next.channelName, next.enabled);
+          }
+        }
+        persistedLive.current = liveState;
+      }
       const updated = await updateSettings({
         ...values,
         downloadDir: values.downloadDir.trim(),
@@ -327,6 +372,26 @@ function SettingsDrawer({
             >
               <InputNumber min={1} max={8} precision={0} className="!w-full" />
             </Form.Item>
+          </section>
+
+          <Divider className="!my-6" />
+
+          <section className="settings-section">
+            <Text className="app-eyebrow">LIVE RECORDING</Text>
+            <Title level={5} className="!mb-1 !mt-1">라이브 자동 녹화</Title>
+            <Paragraph className="app-muted !mb-4 !text-[13px]">
+              방송 감시 간격과 동시 녹화 수, 자동 녹화 채널을 설정합니다.
+            </Paragraph>
+            {liveError && <Alert type="warning" showIcon message="라이브 녹화 설정을 불러올 수 없습니다." description={liveError} className="!mb-4" />}
+            {liveState ? (
+              <LiveAutoRecordingSettings
+                value={liveState}
+                onChange={setLiveState}
+                savedChannels={savedChannels}
+              />
+            ) : !liveError ? (
+              <Skeleton active paragraph={{ rows: 4 }} />
+            ) : null}
           </section>
 
           <Divider className="!my-6" />
