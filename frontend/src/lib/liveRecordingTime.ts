@@ -28,12 +28,38 @@ export function formatLocalDateTime(value?: string, timeZone?: string): string {
   return `${part('year')}.${part('month')}.${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`;
 }
 
+/** Seconds already elapsed on the broadcast timeline when recording began.
+ * CHZZK openDate without timezone is KST, but recording timestamps are RFC3339.
+ */
+export function getRecordingBroadcastOffsetSeconds(
+  recordingStartedAt?: string,
+  broadcastStartedAt?: string,
+): number | undefined {
+  const recording = parseChzzkDateTime(recordingStartedAt);
+  const broadcast = parseChzzkDateTime(broadcastStartedAt);
+  if (!recording || !broadcast || recording.getTime() < broadcast.getTime()) return undefined;
+  return Math.floor((recording.getTime() - broadcast.getTime()) / 1000);
+}
+
+export type ClipTimeBasis = 'video' | 'broadcast';
+
+/** Convert a user-entered clock on either timeline to seconds in the saved file. */
+export function getClipVideoSeconds(
+  seconds: number,
+  basis: ClipTimeBasis,
+  broadcastOffset?: number,
+): number | undefined {
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  if (basis === 'video') return seconds;
+  if (broadcastOffset === undefined || !Number.isFinite(broadcastOffset)) return undefined;
+  const videoSeconds = seconds - broadcastOffset;
+  return videoSeconds >= 0 ? videoSeconds : undefined;
+}
+
 /** Recording position on the CHZZK broadcast timeline, not on the saved file. */
 export function formatBroadcastOffset(recordedAt?: string, broadcastStartedAt?: string): string | undefined {
-  const recorded = parseChzzkDateTime(recordedAt);
-  const broadcast = parseChzzkDateTime(broadcastStartedAt);
-  if (!recorded || !broadcast || recorded.getTime() < broadcast.getTime()) return undefined;
-  const seconds = Math.floor((recorded.getTime() - broadcast.getTime()) / 1000);
+  const seconds = getRecordingBroadcastOffsetSeconds(recordedAt, broadcastStartedAt);
+  if (seconds === undefined) return undefined;
   return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
     .map((part) => String(part).padStart(2, '0')).join(':');
 }

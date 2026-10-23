@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { clearLiveRecordingHistory, deleteLiveRecordingHistory, extractLiveClip, getChannelLiveStatus, getLiveRecordingState, openDownloadDirectory, setLiveAutoRecording, startLiveRecording, stopLiveRecording } from '../../lib/backend';
 import type { LiveSession, LiveState, LiveStatus } from '../../types/live';
 import type { Channel } from '../../types/channel';
-import { formatBroadcastOffset, formatLocalDateTime, getSavedBroadcastPositions } from '../../lib/liveRecordingTime';
+import { formatBroadcastOffset, formatLocalDateTime, getClipVideoSeconds, getRecordingBroadcastOffsetSeconds, getSavedBroadcastPositions } from '../../lib/liveRecordingTime';
+import type { ClipTimeBasis } from '../../lib/liveRecordingTime';
 
 const { Text, Title } = Typography;
 
@@ -395,14 +396,34 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
   const [title, setTitle] = useState('하이라이트');
   const [start, setStart] = useState('00:00:00');
   const [end, setEnd] = useState('00:01:00');
+  const [timeBasis, setTimeBasis] = useState<ClipTimeBasis>('video');
   const [exact, setExact] = useState(false);
   const [working, setWorking] = useState(false);
+  const broadcastOffset = getRecordingBroadcastOffsetSeconds(session.startedAt, session.broadcastStartedAt);
+  const rangeStart = timeBasis === 'broadcast' ? (broadcastOffset ?? 0) : 0;
+  const rangeEnd = rangeStart + session.availableSeconds;
+
+  const changeTimeBasis = (next: ClipTimeBasis) => {
+    if (next === timeBasis || (next === 'broadcast' && broadcastOffset === undefined)) return;
+    // Preserve the selected media segment while changing its clock. Invalid
+    // draft input stays unchanged for correction by the user.
+    const shift = (next === 'broadcast' ? 1 : -1) * (broadcastOffset ?? 0);
+    const convertInput = (value: string) => {
+      const seconds = toSeconds(value);
+      return seconds === undefined ? value : formatTime(Math.max(0, seconds + shift));
+    };
+    setStart((value) => convertInput(value));
+    setEnd((value) => convertInput(value));
+    setTimeBasis(next);
+  };
 
   const extract = async () => {
-    const a = toSeconds(start);
-    const b = toSeconds(end);
+    const inputStart = toSeconds(start);
+    const inputEnd = toSeconds(end);
+    const a = inputStart === undefined ? undefined : getClipVideoSeconds(inputStart, timeBasis, broadcastOffset);
+    const b = inputEnd === undefined ? undefined : getClipVideoSeconds(inputEnd, timeBasis, broadcastOffset);
     if (a === undefined || b === undefined || b <= a || b > session.availableSeconds) {
-      message.warning('이미 저장된 구간 안에서 올바른 시작·종료 시간을 입력해 주세요.');
+      message.warning('선택한 시간 기준의 추출 가능 구간 안에서 시작·종료 시간을 입력해 주세요.');
       return;
     }
     setWorking(true);
@@ -419,9 +440,30 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
 
   return (
     <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Title level={5} className="!m-0">녹화 구간 추출</Title>
+        <Segmented
+          size="small"
+          aria-label="추출 시간 기준"
+          value={timeBasis}
+          onChange={(value) => changeTimeBasis(value === 'broadcast' ? 'broadcast' : 'video')}
+          options={[
+            { label: '방송 시간 기준', value: 'broadcast', disabled: broadcastOffset === undefined },
+            { label: '영상 시간 기준', value: 'video' },
+          ]}
+        />
+      </div>
       <Text type="secondary" className="mb-4 block text-xs">
-        저장이 끝난 구간만 추출할 수 있습니다. 원본 녹화는 중단되지 않습니다.
+        {timeBasis === 'broadcast'
+          ? '방송 시작 후 경과 시간으로 입력합니다. 수신이 끊긴 구간이 있으면 실제 방송 시각과 차이가 날 수 있습니다.'
+          : '녹화된 영상의 시작을 00:00:00으로 계산합니다.'}
+        {' '}저장 완료된 구간만 추출할 수 있으며 녹화는 중단되지 않습니다.
       </Text>
+      {broadcastOffset === undefined && (
+        <Text type="secondary" className="mb-3 block text-xs">
+          방송 시작 시각을 확인할 수 없어 방송 시간 기준을 사용할 수 없습니다.
+        </Text>
+      )}
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
         <div>
           <Text className="mb-1 block text-xs">파일 제목</Text>
@@ -445,7 +487,7 @@ function ClipEditor({ session, onUpdated }: { session: LiveSession; onUpdated: (
         </Button>
       </div>
       <Text type="secondary" className="mt-3 block text-xs">
-        추출 가능: 00:00:00 ~ {formatTime(session.availableSeconds)}
+        {timeBasis === 'broadcast' ? '방송 시간 기준' : '영상 시간 기준'} 추출 가능: {formatTime(rangeStart)} ~ {formatTime(rangeEnd)}
       </Text>
     </div>
   );
@@ -828,7 +870,6 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                 onRecord={() => recordChannel(selectedSession.channelId)}
               />
               <section className="rounded-xl border border-solid border-slate-500/25 p-5">
-                <Title level={5} className="!mb-4">녹화 구간 추출</Title>
                 <ClipEditor key={selectedSession.id} session={selectedSession} onUpdated={() => void refresh()} />
                 <div className="mt-5 border-t border-solid border-slate-500/20 pt-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -848,7 +889,7 @@ export default function LiveRecordingPanel({ savedChannels }: { savedChannels: C
                         <div className="min-w-0">
                           <Text strong className="block">{clip.title}</Text>
                           <Text type="secondary" className="block text-xs">
-                            {formatTime(clip.startSeconds)} ~ {formatTime(clip.endSeconds)}
+                            영상 기준 {formatTime(clip.startSeconds)} ~ {formatTime(clip.endSeconds)}
                           </Text>
                           {clip.error && (
                             <Text type="danger" className="block text-xs">{clip.error}</Text>

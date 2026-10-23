@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatBroadcastOffset, formatLocalDateTime, getSavedBroadcastPositions } from '../src/lib/liveRecordingTime.ts';
+import { formatBroadcastOffset, formatLocalDateTime, getClipVideoSeconds, getRecordingBroadcastOffsetSeconds, getSavedBroadcastPositions } from '../src/lib/liveRecordingTime.ts';
 
 test('CHZZK openDate without offset is interpreted as Korean source time', () => {
   assert.equal(formatLocalDateTime('2026-10-23 12:00:00', 'Asia/Seoul'), '2026.10.23 12:00:00');
@@ -46,4 +46,34 @@ test('saved broadcast positions add completed media duration to the streaming of
     getSavedBroadcastPositions('2026-10-23T03:15:30Z', '2026-10-23 12:00:00', Number.NaN),
     { start: '00:15:30' },
   );
+});
+
+
+test('recording start offset uses broadcast elapsed time across time zones and midnight', () => {
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-23T05:00:00Z', '2026-10-23 13:00:00'), 3600);
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-23T14:30:00+09:00', '2026-10-23 13:00:00'), 5400);
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-24T00:10:00+09:00', '2026-10-23 23:45:00'), 1500);
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-23T05:00:00Z', '2026-10-23 14:00:00'), 0);
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-23T04:59:00Z', '2026-10-23 14:00:00'), undefined);
+  assert.equal(getRecordingBroadcastOffsetSeconds('invalid', '2026-10-23 13:00:00'), undefined);
+  assert.equal(getRecordingBroadcastOffsetSeconds('2026-10-23T05:00:00Z'), undefined);
+});
+
+test('broadcast-time range converts to the same saved-video range', () => {
+  const offset = getRecordingBroadcastOffsetSeconds('2026-10-23T05:00:00Z', '2026-10-23 13:00:00');
+  assert.equal(offset, 3600); // Live at 1 PM, recording began at 2 PM.
+  assert.equal(getClipVideoSeconds(3900, 'broadcast', offset), 300);
+  assert.equal(getClipVideoSeconds(4200, 'broadcast', offset), 600);
+  assert.equal(getClipVideoSeconds(300, 'video', offset), 300);
+  assert.equal(getClipVideoSeconds(600, 'video', offset), 600);
+  assert.equal(getClipVideoSeconds(3599, 'broadcast', offset), undefined);
+});
+
+test('video-time mode works with older sessions while broadcast-time needs metadata', () => {
+  assert.equal(getClipVideoSeconds(15, 'video'), 15);
+  assert.equal(getClipVideoSeconds(15, 'broadcast'), undefined);
+  assert.equal(getClipVideoSeconds(-1, 'video'), undefined);
+  assert.equal(getClipVideoSeconds(Number.NaN, 'video'), undefined);
+  assert.equal(getClipVideoSeconds(Number.POSITIVE_INFINITY, 'broadcast', 3600), undefined);
+  assert.equal(getClipVideoSeconds(3601, 'broadcast', Number.NaN), undefined);
 });
