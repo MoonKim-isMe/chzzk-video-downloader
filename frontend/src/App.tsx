@@ -360,6 +360,15 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     setDownloadTasks((current) => current.filter((task) => task.taskId !== taskId));
   }, []);
 
+  const handleDownloadTasksRemoved = useCallback((taskIds: string[]) => {
+    if (taskIds.length === 0) {
+      return;
+    }
+    const removedIds = new Set(taskIds);
+    taskIds.forEach((taskId) => hiddenDownloadTaskIds.current.add(taskId));
+    setDownloadTasks((current) => current.filter((task) => !removedIds.has(task.taskId)));
+  }, []);
+
   const handleDownloadTaskRecovered = useCallback(
     (previousTaskId: string, task: DownloadTask) => {
       // Prepared jobs activate under the same taskId; never hide their
@@ -547,6 +556,7 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
               <DownloadPanel
                 tasks={downloadTasks}
                 onTaskRemoved={handleDownloadTaskRemoved}
+                onTasksRemoved={handleDownloadTasksRemoved}
                 onTaskRecovered={handleDownloadTaskRecovered}
               />
             </div>

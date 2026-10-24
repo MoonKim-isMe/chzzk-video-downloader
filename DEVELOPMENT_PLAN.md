@@ -666,3 +666,18 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 - `남은 항목 N` 태그는 기존의 준비됨/대기/진행/이어받기 가능한 실패 기준을 유지합니다. 다운로드 실행·저장 데이터·SQLite는 변경하지 않습니다.
 - 회귀 테스트는 목록의 개별 완료 삭제·완료 일괄 삭제·취소 제외·일반 실패 포함·준비 작업 실행/재시도 교체를 확인합니다.
 - Windows 실사용 및 Node 24 전체 타입 검사/빌드는 별도 검증 전까지 미완료로 유지합니다.
+
+
+### 완료 목록 일괄 삭제 최적화 (2026-10-24, PR #55 추가 요청)
+
+- [x] DL-UX-25. `완료 목록 삭제`를 완료 항목별 API 반복 대신 단일 `ClearCompletedDownloadTasks` 호출로 변경
+- [x] DL-UX-26. SQLite의 `status = completed` 이력을 한 트랜잭션/DELETE 문으로 일괄 삭제하고 삭제된 작업 ID를 반환. 실제 MP4/MP3 파일은 보존
+- [x] DL-UX-27. Queue의 완료 항목을 한 번의 잠금/순회로 정리하고 프론트엔드 목록·요청 완료 집계를 한 번의 상태 갱신으로 변경
+- [ ] DL-UX-28. Go 전체 테스트, Node 24 프론트엔드 타입 검사/빌드 및 Windows 다량 완료 항목 삭제의 실제 속도 확인
+
+#### 영향 및 검증
+
+- `app.go`, `internal/persistence/downloads.go`, `internal/downloader/queue.go`에 일괄 삭제 경로를 추가하고, `frontend/src/lib/backend.ts`, `frontend/src/App.tsx`, `frontend/src/features/downloads/DownloadPanel.tsx`에서 연결합니다.
+- 완료 상태의 목록 이력만 삭제합니다. 준비됨/대기/진행/실패 이력, 실제 다운로드 파일, 다른 다운로드 실행/이어받기 로직은 변경하지 않습니다.
+- Go 회귀 테스트에 상태별 보존, 반복 호출, 다운로드 파일 보존, Queue의 요청/정렬 정리 및 앱 API 동작 검증을 추가했습니다.
+- 빌드/실환경 검증을 수행하기 전에는 DL-UX-28을 완료 처리하지 않습니다.

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   cancelDownload,
+  clearCompletedDownloadTasks,
   deleteDownloadTask,
   getDownloadToolchainStatus,
   openDownloadFolder,
@@ -30,6 +31,7 @@ const { Text, Title } = Typography;
 interface DownloadPanelProps {
   tasks: DownloadTask[];
   onTaskRemoved: (taskId: string) => void;
+  onTasksRemoved: (taskIds: string[]) => void;
   onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
 }
 
@@ -485,6 +487,7 @@ function DownloadSection({
 function DownloadPanel({
   tasks,
   onTaskRemoved,
+  onTasksRemoved,
   onTaskRecovered,
 }: DownloadPanelProps) {
   const { message } = AntdApp.useApp();
@@ -560,27 +563,12 @@ function DownloadPanel({
     }
 
     setDeletingCompleted(true);
-    let removedCount = 0;
-    let failedCount = 0;
-
     try {
-      for (const task of completedTasks) {
-        try {
-          await deleteDownloadTask(task.taskId);
-          onTaskRemoved(task.taskId);
-          removedCount += 1;
-        } catch {
-          failedCount += 1;
-        }
-      }
-
-      if (failedCount === 0) {
-        message.success(`완료 항목 ${removedCount}개를 목록에서 삭제했습니다.`);
-      } else if (removedCount > 0) {
-        message.warning(`완료 항목 ${removedCount}개를 삭제했고 ${failedCount}개는 삭제하지 못했습니다.`);
-      } else {
-        message.error('완료 항목을 삭제하지 못했습니다.');
-      }
+      const removedTaskIds = await clearCompletedDownloadTasks();
+      onTasksRemoved(removedTaskIds);
+      message.success(`완료 항목 ${removedTaskIds.length}개를 목록에서 삭제했습니다.`);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setDeletingCompleted(false);
     }
