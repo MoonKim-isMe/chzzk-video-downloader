@@ -446,6 +446,28 @@ func (q *Queue) Remove(taskID string) bool {
 	return true
 }
 
+// RemoveCompleted removes finished tasks while holding the queue lock once.
+func (q *Queue) RemoveCompleted() []string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	removed := make([]string, 0)
+	remaining := q.order[:0]
+	for _, taskID := range q.order {
+		task, ok := q.tasks[taskID]
+		if !ok || task.Status != TaskStatusCompleted {
+			remaining = append(remaining, taskID)
+			continue
+		}
+		removed = append(removed, taskID)
+		delete(q.tasks, taskID)
+		delete(q.requests, taskID)
+		delete(q.cancelRequested, taskID)
+	}
+	q.order = remaining
+	return removed
+}
+
 func (q *Queue) updateProgress(taskID string, progress DownloadProgress) {
 	q.mu.Lock()
 	task, ok := q.tasks[taskID]

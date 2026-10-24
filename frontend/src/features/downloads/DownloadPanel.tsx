@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   cancelDownload,
+  clearCompletedDownloadTasks,
   deleteDownloadTask,
   getDownloadToolchainStatus,
   openDownloadFolder,
@@ -22,7 +23,7 @@ import {
   startDownload,
   startPreparedSegment,
 } from '../../lib/backend';
-import { isResumableDownloadTask } from '../../lib/downloadTasks';
+import { getDownloadRequestCounts, isResumableDownloadTask } from '../../lib/downloadTasks';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
 const { Text, Title } = Typography;
@@ -30,9 +31,8 @@ const { Text, Title } = Typography;
 interface DownloadPanelProps {
   tasks: DownloadTask[];
   onTaskRemoved: (taskId: string) => void;
+  onTasksRemoved: (taskIds: string[]) => void;
   onTaskRecovered: (previousTaskId: string, task: DownloadTask) => void;
-  completedRequestCount: number;
-  totalRequestCount: number;
 }
 
 const statusMeta: Record<
@@ -487,9 +487,8 @@ function DownloadSection({
 function DownloadPanel({
   tasks,
   onTaskRemoved,
+  onTasksRemoved,
   onTaskRecovered,
-  completedRequestCount,
-  totalRequestCount,
 }: DownloadPanelProps) {
   const { message } = AntdApp.useApp();
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
@@ -556,12 +555,7 @@ function DownloadPanel({
     return positions;
   }, [activeTasks]);
 
-  const counts = {
-    active: activeTasks.length,
-    prepared: preparedTasks.length,
-    completed: completedTasks.length,
-    failed: failedTasks.length,
-  };
+  const counts = useMemo(() => getDownloadRequestCounts(visibleTasks), [visibleTasks]);
 
   const handleDeleteCompleted = async () => {
     if (completedTasks.length === 0 || deletingCompleted) {
@@ -569,27 +563,12 @@ function DownloadPanel({
     }
 
     setDeletingCompleted(true);
-    let removedCount = 0;
-    let failedCount = 0;
-
     try {
-      for (const task of completedTasks) {
-        try {
-          await deleteDownloadTask(task.taskId);
-          onTaskRemoved(task.taskId);
-          removedCount += 1;
-        } catch {
-          failedCount += 1;
-        }
-      }
-
-      if (failedCount === 0) {
-        message.success(`완료 항목 ${removedCount}개를 목록에서 삭제했습니다.`);
-      } else if (removedCount > 0) {
-        message.warning(`완료 항목 ${removedCount}개를 삭제했고 ${failedCount}개는 삭제하지 못했습니다.`);
-      } else {
-        message.error('완료 항목을 삭제하지 못했습니다.');
-      }
+      const removedTaskIds = await clearCompletedDownloadTasks();
+      onTasksRemoved(removedTaskIds);
+      message.success(`완료 항목 ${removedTaskIds.length}개를 목록에서 삭제했습니다.`);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setDeletingCompleted(false);
     }
@@ -606,7 +585,7 @@ function DownloadPanel({
         </div>
 
         <div className="download-summary">
-          <span className="download-session-counter"><strong>{completedRequestCount}/{totalRequestCount}</strong> 요청 완료</span>
+          <span className="download-session-counter"><strong>{counts.completed}/{counts.total}</strong> 요청 완료</span>
           <span><strong>{counts.prepared}</strong> 준비됨</span>
           <span><strong>{counts.active}</strong> 진행/대기</span>
           <span><strong>{counts.completed}</strong> 완료</span>
