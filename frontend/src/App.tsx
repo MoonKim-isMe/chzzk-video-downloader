@@ -35,7 +35,6 @@ import {
 } from './lib/backend';
 import {
   getRemainingDownloadCount,
-  isStartupDownloadRequest,
   mergeDownloadTaskSnapshot,
   upsertDownloadTask,
 } from './lib/downloadTasks';
@@ -108,9 +107,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
   const [savedChannels, setSavedChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>();
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
-  // A session request keeps its identity through prepared activation and retries.
-  const [requestIdByTask, setRequestIdByTask] = useState<Map<string, string>>(() => new Map());
-  const [completedRequestIds, setCompletedRequestIds] = useState<Set<string>>(() => new Set());
   const hiddenDownloadTaskIds = useRef(new Set<string>());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authenticationOpen, setAuthenticationOpen] = useState(false);
@@ -203,15 +199,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     getDownloadTasks()
       .then((snapshot) => {
         if (active) {
-          setRequestIdByTask((current) => {
-            const next = new Map(current);
-            snapshot.forEach((task) => {
-              if (isStartupDownloadRequest(task) && !next.has(task.taskId)) {
-                next.set(task.taskId, task.taskId);
-              }
-            });
-            return next;
-          });
           const visibleSnapshot = snapshot.filter(
             (task) => task.status !== 'cancelled' && !hiddenDownloadTaskIds.current.has(task.taskId),
           );
@@ -230,26 +217,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
     };
   }, [message]);
 
-  useEffect(() => {
-    const completed = downloadTasks
-      .filter((task) => task.status === 'completed')
-      .map((task) => requestIdByTask.get(task.taskId))
-      .filter((requestId): requestId is string => Boolean(requestId));
-
-    if (completed.length > 0) {
-      setCompletedRequestIds((current) => {
-        if (completed.every((requestId) => current.has(requestId))) {
-          return current;
-        }
-        return new Set([...current, ...completed]);
-      });
-    }
-  }, [downloadTasks, requestIdByTask]);
-
-  const totalRequestCount = useMemo(
-    () => new Set(requestIdByTask.values()).size,
-    [requestIdByTask],
-  );
   const remainingDownloadCount = useMemo(
     () => getRemainingDownloadCount(downloadTasks),
     [downloadTasks],
@@ -314,9 +281,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
           outputDir: '',
         });
         setDownloadTasks((current) => upsertDownloadTask(current, task));
-        setRequestIdByTask((current) =>
-          current.has(task.taskId) ? current : new Map(current).set(task.taskId, task.taskId),
-        );
         message.success(
           task.status === 'running' ? `${downloadType === 'audio' ? 'MP3' : '동영상'} 다운로드를 시작했습니다.` : '다운로드 목록에 추가했습니다.',
         );
@@ -377,9 +341,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
           const task = await startDownload(request);
           successfulCount += 1;
           setDownloadTasks((current) => upsertDownloadTask(current, task));
-          setRequestIdByTask((current) =>
-            current.has(task.taskId) ? current : new Map(current).set(task.taskId, task.taskId),
-          );
         } catch (cause) {
           failures.push(cause instanceof Error ? cause.message : String(cause));
         }
@@ -406,13 +367,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
       if (previousTaskId !== task.taskId) {
         hiddenDownloadTaskIds.current.add(previousTaskId);
       }
-      setRequestIdByTask((current) => {
-        const next = new Map(current);
-        const requestId = next.get(previousTaskId) ?? task.taskId;
-        next.delete(previousTaskId);
-        next.set(task.taskId, requestId);
-        return next;
-      });
       setDownloadTasks((current) =>
         upsertDownloadTask(
           current.filter((item) => previousTaskId === task.taskId || item.taskId !== previousTaskId),
@@ -594,8 +548,6 @@ function AppContent({ themeMode, onThemePreview, onSettingsUpdated }: AppContent
                 tasks={downloadTasks}
                 onTaskRemoved={handleDownloadTaskRemoved}
                 onTaskRecovered={handleDownloadTaskRecovered}
-                completedRequestCount={completedRequestIds.size}
-                totalRequestCount={totalRequestCount}
               />
             </div>
           )}
