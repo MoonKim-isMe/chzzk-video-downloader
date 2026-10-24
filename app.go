@@ -838,6 +838,31 @@ func (a *App) DeleteDownloadTask(taskID string) error {
 	return nil
 }
 
+// ClearCompletedDownloadTasks removes completed history from SQLite and the
+// in-memory queue and returns the affected IDs for a single frontend update.
+func (a *App) ClearCompletedDownloadTasks() ([]string, error) {
+	removed := make([]string, 0)
+	if database := a.persistenceDatabase(); database != nil {
+		persisted, err := database.DeleteCompletedDownloadTasks()
+		if err != nil {
+			return nil, err
+		}
+		removed = append(removed, persisted...)
+	}
+	removed = append(removed, a.ensureDownloadQueue().RemoveCompleted()...)
+
+	unique := make([]string, 0, len(removed))
+	seen := make(map[string]struct{}, len(removed))
+	for _, taskID := range removed {
+		if _, exists := seen[taskID]; exists {
+			continue
+		}
+		seen[taskID] = struct{}{}
+		unique = append(unique, taskID)
+	}
+	return unique, nil
+}
+
 func (a *App) OpenDownloadLog(taskID string) error {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {

@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -517,4 +519,71 @@ func TestSegmentFileNumberingLegacyDefault(t *testing.T) {
     !*items[0].Segment.NumberFileName {
     t.Fatalf("legacy unset numbering should default true: %#v", items)
   }
+}
+
+
+func TestDeleteCompletedDownloadTasksOnlyRemovesCompletedHistory(t *testing.T) {
+	database := openTestDatabase(t)
+	outputFile := filepath.Join(t.TempDir(), "completed.mp4")
+	if err := os.WriteFile(outputFile, []byte("keep this video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statuses := []downloader.TaskStatus{
+		downloader.TaskStatusPrepared,
+		downloader.TaskStatusQueued,
+		downloader.TaskStatusRunning,
+		downloader.TaskStatusFailed,
+		downloader.TaskStatusCompleted,
+		downloader.TaskStatusCompleted,
+	}
+	for i, status := range statuses {
+		task := downloader.DownloadTask{
+			TaskID: fmt.Sprintf("bulk-%d", i),
+			VideoNo: int64(92000 + i),
+			VideoTitle: "테스트 영상",
+			URL: fmt.Sprintf("https://chzzk.naver.com/video/%d", 92000+i),
+			OutputDir: t.TempDir(),
+			Status: status,
+			QueuedAt: "2026-10-24T00:00:00Z",
+		}
+		if status == downloader.TaskStatusCompleted {
+			task.FinalPath = outputFile
+		}
+		if err := database.UpsertDownloadTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removed, err := database.DeleteCompletedDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("expected two completed history IDs, got %#v", removed)
+	}
+	removedSet := map[string]bool{}
+	for _, id := range removed {
+		removedSet[id] = true
+	}
+	if !removedSet["bulk-4"] || !removedSet["bulk-5"] {
+		t.Fatalf("wrong history removed: %#v", removed)
+	}
+	remaining, err := database.ListDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 4 {
+		t.Fatalf("expected four non-completed tasks, got %#v", remaining)
+	}
+	for _, task := range remaining {
+		if task.Status == downloader.TaskStatusCompleted {
+			t.Fatalf("completed task remained: %#v", task)
+		}
+	}
+	if content, err := os.ReadFile(outputFile); err != nil || string(content) != "keep this video" {
+		t.Fatalf("video file was modified: content=%q, err=%v", content, err)
+	}
+	second, err := database.DeleteCompletedDownloadTasks()
+	if err != nil || len(second) != 0 {
+		t.Fatalf("repeat deletion should be empty: %#v, %v", second, err)
+	}
 }

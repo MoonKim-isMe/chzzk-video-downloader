@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  getDownloadRequestCounts,
   getRemainingDownloadCount,
   isResumableDownloadTask,
-  isStartupDownloadRequest,
   mergeDownloadTaskSnapshot,
   pickFresherDownloadTask,
   upsertDownloadTask,
@@ -64,9 +64,45 @@ test('download tab counts only actionable remaining jobs', () => {
   assert.equal(getRemainingDownloadCount(tasks), 6);
   assert.equal(isResumableDownloadTask(tasks[3]), true);
   assert.equal(isResumableDownloadTask(tasks[6]), false);
-  assert.equal(isStartupDownloadRequest(tasks[0]), true);
-  assert.equal(isStartupDownloadRequest(tasks[3]), true);
-  assert.equal(isStartupDownloadRequest(tasks[1]), false);
-  assert.equal(isStartupDownloadRequest(tasks[7]), false);
   assert.equal(getRemainingDownloadCount(tasks.filter((item) => item.taskId !== 'retry-2')), 5);
+});
+
+test('request completion and total count the four visible status groups', () => {
+  const tasks = [
+    task('prepared', { taskId: 'prepared' }),
+    task('queued', { taskId: 'queued' }),
+    task('running', { taskId: 'running' }),
+    task('completed', { taskId: 'completed-1' }),
+    task('completed', { taskId: 'completed-2' }),
+    task('failed', { taskId: 'resumable', errorCode: 'source_url_missing' }),
+    task('failed', { taskId: 'not-resumable', errorCode: 'authentication_required' }),
+    task('cancelled', { taskId: 'cancelled' }),
+  ];
+
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 1, active: 2, completed: 2, failed: 2, total: 7,
+  });
+  // Removing one completed task decreases both completion and total.
+  const afterSingleDelete = tasks.filter((item) => item.taskId !== 'completed-1');
+  assert.deepEqual(getDownloadRequestCounts(afterSingleDelete), {
+    prepared: 1, active: 2, completed: 1, failed: 2, total: 6,
+  });
+  // Clearing completed history leaves only unfinished/failed requests.
+  const afterClear = tasks.filter((item) => item.status !== 'completed');
+  assert.deepEqual(getDownloadRequestCounts(afterClear), {
+    prepared: 1, active: 2, completed: 0, failed: 2, total: 5,
+  });
+  assert.equal(getDownloadRequestCounts([]).total, 0);
+});
+
+test('activating a prepared task and replacing a failed retry never double-count requests', () => {
+  let tasks = [task('prepared', { taskId: 'segment' }), task('failed', { taskId: 'retry-old' })];
+  tasks = upsertDownloadTask(tasks, task('queued', { taskId: 'segment' }));
+  tasks = upsertDownloadTask(
+    tasks.filter((item) => item.taskId !== 'retry-old'),
+    task('running', { taskId: 'retry-new' }),
+  );
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 0, active: 2, completed: 0, failed: 0, total: 2,
+  });
 });
