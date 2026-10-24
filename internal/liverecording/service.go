@@ -384,32 +384,46 @@ func(s *Service) record(ctx context.Context,id string,opts Options){
  channelID:=session.ChannelID;folder:=session.Directory;s.mu.Unlock()
  failure:=error(nil)
  if err:=os.MkdirAll(folder,0755);err!=nil{failure=err}
- // Each retry receives a fresh signed stream URL. Previously completed
- // MPEG-TS segments are never overwritten, even after an interrupted FFmpeg.
- for attempt:=0;failure==nil && attempt<12;attempt++{
+ // Reconnect after an FFmpeg stall or network failure with a fresh stream URL.
+ // Completed MPEG-TS files are retained and the next output number advances.
+ // Count only consecutive failures without saved media, so a long broadcast
+ // does not stop merely because it needed several successful reconnects.
+ const maxConsecutiveFailures=12
+ consecutiveFailures:=0
+ for failure==nil && consecutiveFailures<maxConsecutiveFailures{
   if ctx.Err()!=nil{break}
   tools,err:=s.tools(ctx);if err!=nil{failure=err;break}
   url,err:=s.resolveStream(ctx,tools.YTDLP,channelID,opts.CookiesFile)
   if err!=nil{
+   consecutiveFailures++
+   if consecutiveFailures>=maxConsecutiveFailures{failure=errors.New("라이브 재생 주소를 반복적으로 확인할 수 없습니다");break}
    if !sleep(ctx,5*time.Second){break}
    continue
   }
-  // The next invocation starts counting at zero. Completed segments supply
-  // the cumulative offset while the current segment continues being written.
+  // A reconnect restarts the FFmpeg media clock; finalized segments supply
+  // the cumulative offset and old segments are never overwritten.
   baseSeconds:=availableDuration(folder,false)
   startNumber:=nextSegmentNumber(folder)
   playlist:=filepath.Join(folder,fmt.Sprintf("index_%06d.csv",startNumber))
   args:=[]string{"-hide_banner","-loglevel","error","-nostdin","-nostats","-stats_period","1","-progress","pipe:1","-i",url,"-map","0:v:0","-map","0:a?","-c","copy","-f","segment","-segment_time","30","-segment_format","mpegts","-segment_list_type","csv","-segment_list",playlist,"-segment_start_number",strconv.Itoa(startNumber),filepath.Join(folder,"segment_%06d.ts")}
   cmd:=exec.CommandContext(ctx,tools.FFmpeg,args...);hideWindow(cmd)
-  // Parse only machine-readable stdout: signed playback URLs must not appear
-  // in progress, persisted state, errors or application logs.
+  // Neither the signed URL nor FFmpeg stderr is stored or reported.
   err=s.runRecorderWithProgress(cmd,id,baseSeconds)
-  if ctx.Err()!=nil {break}
+  if ctx.Err()!=nil{break}
+  if availableDuration(folder,false)>baseSeconds{
+   consecutiveFailures=0
+  }else{
+   consecutiveFailures++
+  }
   statusCtx,cancel:=context.WithTimeout(ctx,12*time.Second)
   current,statusErr:=s.status(statusCtx,channelID,opts.CookiesFile);cancel()
   if statusErr==nil && !current.IsLive{break}
-  if err!=nil && attempt==11{failure=errors.New("라이브 스트림이 반복적으로 중단되었습니다")}
-  if !sleep(ctx,5*time.Second){break}
+  if consecutiveFailures>=maxConsecutiveFailures{failure=errors.New("라이브 스트림이 반복적으로 중단되었습니다");break}
+  // Restart promptly when stuck; while media is advancing FFmpeg is kept
+  // running to fetch any available backlog without skipping it on purpose.
+  delay:=5*time.Second
+  if errors.Is(err,errRecorderStalled){delay=time.Second}
+  if !sleep(ctx,delay){break}
  }
  // The recorder's cancellation is intentional during StopRecording or an
  // application shutdown; all completed segments remain available.
@@ -458,24 +472,69 @@ func(s *Service) updateRecorderProgress(id string,baseSeconds,elapsedSeconds flo
  if value>previous.seconds {s.progress[id]=recordingProgress{seconds:value}}
 }
 
+// A live HLS reader may remain alive while no media data arrives. The progress
+// watchdog detects this independently of the child process exit status.
+const recorderStallTimeout=30*time.Second
+var errRecorderStalled=errors.New("라이브 녹화 데이터 수신이 중단되어 재연결합니다")
+
 // Drain stdout before Wait as required by exec.Cmd.StdoutPipe.
-// Progress stops changing on stalled streams: no wall-clock extrapolation.
+// Only actual media timestamp advancement resets the watchdog. Duplicate
+// progress lines and wall-clock time cannot masquerade as new recorded video.
 func(s *Service) runRecorderWithProgress(cmd *exec.Cmd,id string,baseSeconds float64)error{
+ return s.runRecorderWithProgressTimeout(cmd,id,baseSeconds,recorderStallTimeout)
+}
+
+func(s *Service) runRecorderWithProgressTimeout(cmd *exec.Cmd,id string,baseSeconds float64,stallTimeout time.Duration)error{
  stdout,err:=cmd.StdoutPipe()
  if err!=nil{return err}
  if err=cmd.Start();err!=nil{return err}
+ lastAdvance:=time.Now()
+ lastMediaSeconds:=-1.0
+ var progressMu sync.Mutex
+ done:=make(chan struct{})
+ stalled:=make(chan struct{},1)
+ if stallTimeout>0{
+  interval:=stallTimeout/4
+  if interval>2*time.Second{interval=2*time.Second}
+  if interval<time.Millisecond{interval=time.Millisecond}
+  go func(){
+   ticker:=time.NewTicker(interval);defer ticker.Stop()
+   for{
+    select{
+    case <-done:return
+    case <-ticker.C:
+     progressMu.Lock()
+     inactive:=time.Since(lastAdvance)>=stallTimeout
+     progressMu.Unlock()
+     if inactive{
+      stalled<-struct{}{}
+      _=cmd.Process.Kill()
+      return
+     }
+    }
+   }
+  }()
+ }
  scanner:=bufio.NewScanner(stdout)
  for scanner.Scan(){
   if seconds,ok:=parseFFmpegProgressLine(scanner.Text());ok{
+   if seconds>lastMediaSeconds{
+    lastMediaSeconds=seconds
+    progressMu.Lock();lastAdvance=time.Now();progressMu.Unlock()
+   }
    s.updateRecorderProgress(id,baseSeconds,seconds)
   }
  }
+ close(done)
  if scanner.Err()!=nil{
   _=cmd.Process.Kill()
   _=cmd.Wait()
+  select{case <-stalled:return errRecorderStalled;default:}
   return errors.New("라이브 녹화 진행 시간을 읽지 못했습니다")
  }
- return cmd.Wait()
+ err=cmd.Wait()
+ select{case <-stalled:return errRecorderStalled;default:}
+ return err
 }
 
 func sleep(ctx context.Context,d time.Duration)bool{
