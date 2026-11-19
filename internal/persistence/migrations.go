@@ -170,6 +170,12 @@ var migrations = []migration{
 			`ALTER TABLE download_tasks ADD COLUMN segment_number_file_name INTEGER NOT NULL DEFAULT 1`,
 		},
 	},
+	{
+		version: 12,
+		statements: []string{
+			`ALTER TABLE download_tasks ADD COLUMN publish_date TEXT NOT NULL DEFAULT ''`,
+		},
+	},
 }
 
 func (d *Database) migrate() error {

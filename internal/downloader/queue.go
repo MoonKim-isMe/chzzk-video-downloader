@@ -96,6 +96,7 @@ func (q *Queue) Enqueue(request StartDownloadRequest) (DownloadTask, error) {
 		TaskID:            taskID,
 		VideoNo:           request.VideoNo,
 		VideoTitle:        request.VideoTitle,
+		PublishDate:       request.PublishDate,
 		ChannelName:       request.ChannelName,
 		ThumbnailImageURL: request.ThumbnailImageURL,
 		URL:               request.URL,
@@ -152,6 +153,9 @@ func (q *Queue) ActivatePrepared(taskID string, request DownloadRequest) (Downlo
 	// when starting a persisted draft.
 	request.OutputDir = task.OutputDir
 	request.URL = task.URL
+	request.VideoTitle = task.VideoTitle
+	request.PublishDate = task.PublishDate
+	request.ChannelName = task.ChannelName
 	request.DownloadType = task.DownloadType
 	request.Segment = task.Segment
 	request.OutputTemplate = task.Segment.FileName + ".%(ext)s"

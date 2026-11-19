@@ -118,6 +118,11 @@ func (m *Manager) Download(ctx context.Context, request DownloadRequest, handler
 			usedSpec = fallbackSpec
 		}
 	}
+	if err == nil && NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio && result.FinalPath != "" {
+		if metadataErr := applyMP3Metadata(ctx, toolchain.FFmpeg.Path, request, result.FinalPath, m.runner.Run); metadataErr != nil {
+			err = fmt.Errorf("MP3 메타데이터 기록에 실패했습니다. 원본 MP3 파일은 보존했습니다: %w", metadataErr)
+		}
+	}
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			if logPath, logErr := writeDownloadFailureLog(request, usedSpec, result, err); logErr == nil {

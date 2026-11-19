@@ -13,6 +13,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task_id,
 		video_no,
 		video_title,
+		publish_date,
 		channel_name,
 		thumbnail_image_url,
 		url,
@@ -40,10 +41,11 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		started_at,
 		finished_at,
 		updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(task_id) DO UPDATE SET
 		video_no = excluded.video_no,
 		video_title = excluded.video_title,
+		publish_date = excluded.publish_date,
 		channel_name = excluded.channel_name,
 		thumbnail_image_url = excluded.thumbnail_image_url,
 		url = excluded.url,
@@ -74,6 +76,7 @@ func (d *Database) UpsertDownloadTask(task downloader.DownloadTask) error {
 		task.TaskID,
 		task.VideoNo,
 		task.VideoTitle,
+		task.PublishDate,
 		task.ChannelName,
 		task.ThumbnailImageURL,
 		task.URL,
@@ -161,6 +164,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 		task_id,
 		video_no,
 		video_title,
+		publish_date,
 		channel_name,
 		thumbnail_image_url,
 		url,
@@ -206,6 +210,7 @@ func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 			&task.TaskID,
 			&task.VideoNo,
 			&task.VideoTitle,
+			&task.PublishDate,
 			&task.ChannelName,
 			&task.ThumbnailImageURL,
 			&task.URL,

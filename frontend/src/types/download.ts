@@ -51,6 +51,7 @@ export interface StartDownloadRequest {
   downloadType?: DownloadType;
   videoNo: number;
   videoTitle: string;
+  publishDate?: string;
   channelName: string;
   thumbnailImageUrl: string;
   url: string;
@@ -65,6 +66,7 @@ export interface DownloadTask {
   taskId: string;
   videoNo: number;
   videoTitle: string;
+  publishDate?: string;
   channelName: string;
   thumbnailImageUrl: string;
   url: string;
