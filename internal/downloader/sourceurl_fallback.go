@@ -32,6 +32,7 @@ var (
 
 type sourceURLHLSStream struct {
 	URL          string
+	MPDPlaylist  []byte // Signed media playlist synthesized from a DASH SegmentTemplate when HLS GET fails.
 	DASHVideoURL string
 	DASHAudioURL string
 	PlaylistPath string
@@ -203,11 +204,10 @@ func validSourceURLVideoID(videoID string) bool {
 
 func validSourceURLHLSAddress(raw string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" || !strings.HasSuffix(strings.ToLower(u.Path), ".m3u8") {
+	if err != nil || !validSignedHLSResource(u) || !strings.EqualFold(filepath.Ext(u.Path), ".m3u8") {
 		return false
 	}
-	host := strings.ToLower(u.Hostname())
-	return host == "pstatic.net" || strings.HasSuffix(host, ".pstatic.net")
+	return true
 }
 
 func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *http.Client) (sourceURLHLSStream, error) {
@@ -278,7 +278,13 @@ func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *htt
 		}
 		return sourceURLHLSStream{}, fmt.Errorf("%v; MP4 영상·오디오 대체 경로: %w", err, dashErr)
 	}
-	return sourceURLHLSStream{URL: playlist, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: height}, nil
+	stream := sourceURLHLSStream{URL: playlist, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: height}
+	if isSourceURLAkamaiHost(strings.ToLower(mustURLHostname(playlist))) {
+		// Browser playback can use the MPD SegmentTemplate directly without
+		// requesting the advertised .m3u8. Keep a verified local alternative.
+		stream.MPDPlaylist, _ = buildSourceURLMPDHLSPlaylist(body, playlist)
+	}
+	return stream, nil
 }
 
 func sourceURLFallbackFileName(title string, videoNo int64, ext string) string {
@@ -407,7 +413,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 		return nil
 	}}
-	source.PlaylistPath, err = prepareSignedHLSPlaylist(ctx, client, source.URL, manifestDir)
+	source.PlaylistPath, err = prepareSourceURLHLSPlaylist(ctx, client, source, manifestDir)
 	if err != nil {
 		if ctx.Err() != nil {
 			return original, CommandSpec{}, ctx.Err()

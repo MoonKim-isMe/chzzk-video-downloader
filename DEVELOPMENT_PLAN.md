@@ -710,5 +710,24 @@ PR #47의 `sourceURL` 추출 오류 대응용 FFmpeg 직접 HLS 경로도 MP3에
 
 - MP4/M4A 원본의 BaseURL이 존재하고 해당 주소가 완전한 파일을 제공하는 구조에만 적용됩니다. DASH 세그먼트 템플릿, 암호화·DRM, 인증 만료와 특수 응답은 자동 복구하지 않습니다.
 - 신규 경로에서는 두 원본을 순차 수신해 임시 저장하고 FFmpeg 스트림 복사하므로, HLS 기반 병렬 가속·세그먼트 이어받기·속도 제한을 지원하지 않습니다. 임시 저장 공간이 원본 파일 용량만큼 필요할 수 있습니다.
-- 현재 제공된 실패 로그에는 원본 MPD 본문이 없으므로 영상 15977157의 실제 BaseURL 구조는 미확인입니다. 보완이 해당 영상에서 효과가 있는지는 현장 재검증이 필요합니다.
+- 추가 확보한 HAR에서 영상 15977157은 별도 video/mp4 완성 파일이 아닌 video/mp2t HLS 조각과 SegmentTemplate으로 제공되는 것이 확인되었습니다. 이 영상은 아래 Akamai HLS 경로가 우선 적용되며, 전체 다운로드 성공은 Windows 실환경 검증이 필요합니다.
 - Go 회귀 테스트는 작성했지만 이 연결 환경에서 Go 1.25 전체 테스트와 Windows 실사용 다운로드는 실행하지 않았습니다.
+
+### Phase 7 — Akamai HLS 재생 방식 호환 및 기존 다운로드 유지 (2026-11-19, HAR 영상 15977157)
+
+- [x] PKG-7-AK-1. HAR의 HLS video/mp2t 스트림과 Akamai CDN 도메인 및 __gda__ 서명 구조 확인
+- [x] PKG-7-AK-2. 기존 pstatic.net + _lsu_sa_ 방식 유지, NAVER Akamai CDN만 추가 허용
+- [x] PKG-7-AK-3. HLS 재생목록/세그먼트 상대 경로의 __gda__ 전달, 프록시의 인증 갱신 및 서명 제거형 캐시 지원
+- [x] PKG-7-AK-4. m3u8 재생목록 HTTP 요청이 실패할 때 MPD SegmentTemplate/SegmentTimeline에서 로컬 HLS 재생목록 생성 (총 20,000조각 및 4MiB 제한)
+- [x] PKG-7-AK-5. 기존 yt-dlp 우선 → HLS (pstatic/Akamai) → MP4/DASH 파일 경로 순서 유지, MP3도 결합 HLS 스트림 공유
+- [x] PKG-7-AK-6. 기존/신규 도메인과 서명 전달, 인증 갱신, 화질 제한, 7,292조각 재생목록, 캐시 키 및 안전한 주소 검증 회귀 테스트 작성
+- [ ] PKG-7-AK-7. Go 1.25 전체 테스트 및 Windows 앱 빌드
+- [ ] PKG-7-AK-8. Windows에서 영상 15977157의 MP4·MP3 전체 다운로드, 인증 갱신, 캐시 이어받기 및 출력 재생 확인
+
+#### HAR 확인 및 적용 제약
+
+- 영상 15977157의 브라우저 기록은 a01-g-naver-vod.akamaized.net의 __gda__ 서명과 1080p H.264/AAC video/mp2t Representation, SegmentTemplate 번호 0~7291, TS 조각 HTTP 200을 확인할 수 있습니다.
+- HAR에는 m3u8 자체 요청 기록이 없습니다. 따라서 앱은 서명된 m3u8을 우선 요청하고 실패하면 HAR의 MPD 구간 목록을 사용합니다.
+- 기존 다운로드의 yt-dlp, pstatic HLS, FFmpeg -c copy 및 캐시·가속 경로는 유지하고, Akamai CDN만 동일한 검증된 내부 경로로 추가합니다.
+- 승인 CDN 호스트와 서명 키를 제한하며, 인증 토큰은 로그/FFmpeg 명령/캐시 파일명에 노출하지 않습니다.
+- 전체 영상 다운로드와 실제 CDN 재연결은 외부 인증 세션 및 Windows 실행 환경에서 별도로 확인해야 하므로 검증 완료 전까지 미완료로 유지합니다.

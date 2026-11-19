@@ -38,6 +38,7 @@ type sourceURLSegmentProxy struct {
 	failedIDs        map[string]bool
 	original         *url.URL
 	current          *url.URL
+	signatureKey     string
 	renew            func(context.Context) (string, error)
 	client           *http.Client
 	listener         net.Listener
@@ -72,7 +73,7 @@ func startSourceURLSegmentProxyWithAcceleration(ctx context.Context, originalURL
 		return nil, err
 	}
 	original, err := url.Parse(originalURL)
-	if err != nil || !validSourceURLHLSAddress(originalURL) || original.Query().Get("_lsu_sa_") == "" {
+	if err != nil || !validSourceURLHLSAddress(originalURL) || sourceURLHLSAuthQueryKey(original) == "" {
 		return nil, fmt.Errorf("서명된 HLS 주소를 확인할 수 없습니다")
 	}
 	if client == nil || renew == nil {
@@ -104,6 +105,7 @@ func startSourceURLSegmentProxyWithAcceleration(ctx context.Context, originalURL
 		failedIDs:     make(map[string]bool),
 		original:      original,
 		current:       original,
+		signatureKey:  sourceURLHLSAuthQueryKey(original),
 		renew:         renew,
 		client:        client,
 		cacheDir:      persistentCache,
@@ -158,7 +160,7 @@ func (p *sourceURLSegmentProxy) HasFailedSegments() bool {
 
 func (p *sourceURLSegmentProxy) register(raw string) (string, error) {
 	u, err := url.Parse(raw)
-	if err != nil || !validSignedHLSResource(u) || u.Query().Get("_lsu_sa_") == "" {
+	if err != nil || !validSignedHLSResource(u) || sourceURLHLSAuthQueryKey(u) != p.signatureKey {
 		return "", fmt.Errorf("허용되지 않은 서명 HLS 세그먼트 주소입니다")
 	}
 	p.mu.Lock()
@@ -346,7 +348,8 @@ func (p *sourceURLSegmentProxy) signedTarget(original *url.URL) string {
 	target := *original
 	query := target.Query()
 	query.Del("_lsu_sa_")
-	query.Set("_lsu_sa_", p.current.Query().Get("_lsu_sa_"))
+	query.Del("__gda__")
+	query.Set(p.signatureKey, p.current.Query().Get(p.signatureKey))
 	target.RawQuery = query.Encode()
 	// A refreshed playlist can move to another CDN node. Preserve the
 	// segment's relative location under its original playlist directory.
@@ -369,7 +372,7 @@ func (p *sourceURLSegmentProxy) refreshSignature(ctx context.Context, attemptedU
 		return fmt.Errorf("HLS 재생 URL을 확인하지 못했습니다")
 	}
 	p.mu.Lock()
-	if attempted.Query().Get("_lsu_sa_") != p.current.Query().Get("_lsu_sa_") {
+	if attempted.Query().Get(p.signatureKey) != p.current.Query().Get(p.signatureKey) {
 		p.mu.Unlock()
 		return nil // Another worker already refreshed this session.
 	}
@@ -382,7 +385,7 @@ func (p *sourceURLSegmentProxy) refreshSignature(ctx context.Context, attemptedU
 		return fmt.Errorf("새 HLS 재생 주소를 확인하지 못했습니다")
 	}
 	newURL, err := url.Parse(fresh)
-	if err != nil || newURL.Query().Get("_lsu_sa_") == "" {
+	if err != nil || sourceURLHLSAuthQueryKey(newURL) != p.signatureKey {
 		return fmt.Errorf("새 HLS 인증 서명이 없습니다")
 	}
 	p.mu.Lock()
