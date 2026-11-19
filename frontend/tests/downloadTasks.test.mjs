@@ -80,17 +80,17 @@ test('request completion and total count the four visible status groups', () => 
   ];
 
   assert.deepEqual(getDownloadRequestCounts(tasks), {
-    prepared: 1, active: 2, completed: 2, failed: 2, total: 7,
+    prepared: 1, running: 1, queued: 1, active: 2, completed: 2, failed: 2, total: 7,
   });
   // Removing one completed task decreases both completion and total.
   const afterSingleDelete = tasks.filter((item) => item.taskId !== 'completed-1');
   assert.deepEqual(getDownloadRequestCounts(afterSingleDelete), {
-    prepared: 1, active: 2, completed: 1, failed: 2, total: 6,
+    prepared: 1, running: 1, queued: 1, active: 2, completed: 1, failed: 2, total: 6,
   });
   // Clearing completed history leaves only unfinished/failed requests.
   const afterClear = tasks.filter((item) => item.status !== 'completed');
   assert.deepEqual(getDownloadRequestCounts(afterClear), {
-    prepared: 1, active: 2, completed: 0, failed: 2, total: 5,
+    prepared: 1, running: 1, queued: 1, active: 2, completed: 0, failed: 2, total: 5,
   });
   assert.equal(getDownloadRequestCounts([]).total, 0);
 });
@@ -103,6 +103,34 @@ test('activating a prepared task and replacing a failed retry never double-count
     task('running', { taskId: 'retry-new' }),
   );
   assert.deepEqual(getDownloadRequestCounts(tasks), {
-    prepared: 0, active: 2, completed: 0, failed: 0, total: 2,
+    prepared: 0, running: 1, queued: 1, active: 2, completed: 0, failed: 0, total: 2,
+  });
+});
+
+test('running and queued counts move independently as work progresses', () => {
+  let tasks = [
+    task('prepared', { taskId: 'prepared' }),
+    task('running', { taskId: 'running-1' }),
+    task('queued', { taskId: 'queued-1' }),
+    task('queued', { taskId: 'queued-2' }),
+    task('failed', { taskId: 'failed' }),
+  ];
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 1, running: 1, queued: 2, active: 3, completed: 0, failed: 1, total: 5,
+  });
+
+  tasks = upsertDownloadTask(tasks, task('running', { taskId: 'queued-1' }));
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 1, running: 2, queued: 1, active: 3, completed: 0, failed: 1, total: 5,
+  });
+
+  tasks = upsertDownloadTask(tasks, task('completed', { taskId: 'running-1' }));
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 1, running: 1, queued: 1, active: 2, completed: 1, failed: 1, total: 5,
+  });
+
+  tasks = tasks.filter((item) => item.taskId !== 'queued-2');
+  assert.deepEqual(getDownloadRequestCounts(tasks), {
+    prepared: 1, running: 1, queued: 0, active: 1, completed: 1, failed: 1, total: 4,
   });
 });

@@ -586,8 +586,8 @@ function DownloadPanel({
 
         <div className="download-summary">
           <span className="download-session-counter"><strong>{counts.completed}/{counts.total}</strong> 요청 완료</span>
-          <span><strong>{counts.prepared}</strong> 준비됨</span>
-          <span><strong>{counts.active}</strong> 진행/대기</span>
+          <span><strong>{counts.running}</strong> 진행</span>
+          <span><strong>{counts.queued}</strong> 대기</span>
           <span><strong>{counts.completed}</strong> 완료</span>
           <span><strong>{counts.failed}</strong> 실패</span>
         </div>

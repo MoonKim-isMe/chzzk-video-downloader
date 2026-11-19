@@ -66,17 +66,21 @@ export function getRemainingDownloadCount(tasks: DownloadTask[]) {
   ).length;
 }
 
-// Count the four groups currently visible in the downloads tab.
-// Cancelled tasks are hidden and do not contribute to either count.
+// Count the visible download statuses separately while preserving the combined
+// active count and the total including prepared segments. Cancelled tasks are excluded.
 export function getDownloadRequestCounts(tasks: DownloadTask[]) {
-  const counts = { prepared: 0, active: 0, completed: 0, failed: 0, total: 0 };
+  const counts = { prepared: 0, running: 0, queued: 0, active: 0, completed: 0, failed: 0, total: 0 };
   for (const task of tasks) {
     switch (task.status) {
       case 'prepared':
         counts.prepared += 1;
         break;
-      case 'queued':
       case 'running':
+        counts.running += 1;
+        counts.active += 1;
+        break;
+      case 'queued':
+        counts.queued += 1;
         counts.active += 1;
         break;
       case 'completed':
