@@ -32,6 +32,7 @@ var (
 
 type sourceURLHLSStream struct {
 	URL          string
+	DASHVideoURL string
 	DASHAudioURL string
 	PlaylistPath string
 	Title        string
@@ -44,8 +45,10 @@ type sourceURLManifest struct {
 	Periods []struct {
 		Adaptations []struct {
 			MimeType        string `xml:"mimeType,attr"`
+			Codecs          string `xml:"codecs,attr"`
 			BaseURL         string `xml:"BaseURL"`
 			Representations []struct {
+				MimeType  string     `xml:"mimeType,attr"`
 				Height    int        `xml:"height,attr"`
 				Bandwidth int64      `xml:"bandwidth,attr"`
 				Codecs    string     `xml:"codecs,attr"`
@@ -100,12 +103,20 @@ func selectSourceURLHLSForType(manifest []byte, selector string, downloadType Do
 	var bestBandwidth int64
 	for _, period := range mpd.Periods {
 		for _, adaptation := range period.Adaptations {
-			if adaptation.MimeType != "video/mp2t" {
-				continue
-			}
 			for _, rep := range adaptation.Representations {
+				mimeType := adaptation.MimeType
+				if mimeType == "" {
+					mimeType = rep.MimeType
+				}
+				if !strings.EqualFold(mimeType, "video/mp2t") {
+					continue
+				}
+				codecs := rep.Codecs
+				if codecs == "" {
+					codecs = adaptation.Codecs
+				}
 				// HAR의 video/mp2t HLS는 영상과 AAC 오디오가 함께 포함된 스트림입니다.
-				if !strings.Contains(rep.Codecs, "mp4a") || rep.Height <= 0 || (maxHeight > 0 && rep.Height > maxHeight) {
+				if !strings.Contains(strings.ToLower(codecs), "mp4a") || rep.Height <= 0 || (maxHeight > 0 && rep.Height > maxHeight) {
 					continue
 				}
 				for _, attr := range rep.Attrs {
@@ -140,11 +151,16 @@ func selectSourceURLDASHAudio(manifest []byte) (string, error) {
 	var bestBandwidth int64
 	for _, period := range mpd.Periods {
 		for _, adaptation := range period.Adaptations {
-			if !strings.EqualFold(adaptation.MimeType, "audio/mp4") {
-				continue
-			}
 			for _, rep := range adaptation.Representations {
-				if !strings.Contains(strings.ToLower(rep.Codecs), "mp4a") {
+				mimeType := adaptation.MimeType
+				if mimeType == "" {
+					mimeType = rep.MimeType
+				}
+				codecs := rep.Codecs
+				if codecs == "" {
+					codecs = adaptation.Codecs
+				}
+				if !strings.EqualFold(mimeType, "audio/mp4") || !strings.Contains(strings.ToLower(codecs), "mp4a") {
 					continue
 				}
 				address := strings.TrimSpace(rep.BaseURL)
@@ -256,7 +272,11 @@ func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *htt
 			}
 			return sourceURLHLSStream{}, fmt.Errorf("%v; MP4 오디오 대체 경로: %w", err, dashErr)
 		}
-		return sourceURLHLSStream{}, err
+		videoURL, audioURL, dashHeight, dashErr := selectSourceURLDASHVideo(body, request.FormatSelector)
+		if dashErr == nil {
+			return sourceURLHLSStream{DASHVideoURL: videoURL, DASHAudioURL: audioURL, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: dashHeight}, nil
+		}
+		return sourceURLHLSStream{}, fmt.Errorf("%v; MP4 영상·오디오 대체 경로: %w", err, dashErr)
 	}
 	return sourceURLHLSStream{URL: playlist, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: height}, nil
 }
@@ -364,6 +384,9 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	source, err := fetchSourceURLHLS(ctx, request, &http.Client{Timeout: 20 * time.Second})
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "CHZZK 대체 재생 정보를 확인하지 못했습니다.", Cause: err}
+	}
+	if source.DASHVideoURL != "" {
+		return m.executeSourceURLDASHVideoFallback(ctx, request, toolchain, handler, original, originalErr, source)
 	}
 	if source.DASHAudioURL != "" {
 		return m.executeSourceURLDASHAudioFallback(ctx, request, toolchain, handler, original, originalErr, source)

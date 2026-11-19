@@ -16,7 +16,7 @@ import (
 // MP4 audio is sometimes the only source in a CHZZK MPD. In that case,
 // download the signed audio object to a private local file before invoking
 // FFmpeg. Never include its signed CDN URL in subprocess arguments or logs.
-const maxSourceURLDASHAudioBytes int64 = 8 << 30
+const maxSourceURLDASHMediaBytes int64 = 64 << 30
 
 func buildSourceURLDASHAudioFFmpegCommand(toolchain ToolchainStatus, request DownloadRequest, inputPath, outputPath string) (CommandSpec, error) {
 	if !toolchain.FFmpeg.Available {
@@ -46,11 +46,11 @@ func buildSourceURLDASHAudioFFmpegCommand(toolchain ToolchainStatus, request Dow
 // must never be treated as a complete MP4 input.
 func downloadSourceURLDASHAudio(ctx context.Context, client *http.Client, signedURL, outputPath string, progress func(int64, int64)) error {
 	if !validSourceURLDASHAudioAddress(signedURL) {
-		return fmt.Errorf("허용되지 않은 MP4 오디오 서버입니다")
+		return fmt.Errorf("허용되지 않은 MP4 미디어 서버입니다")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
 	if err != nil {
-		return fmt.Errorf("MP4 오디오 요청을 준비할 수 없습니다")
+		return fmt.Errorf("MP4 미디어 요청을 준비할 수 없습니다")
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Origin", "https://chzzk.naver.com")
@@ -62,21 +62,21 @@ func downloadSourceURLDASHAudio(ctx context.Context, client *http.Client, signed
 			return ctx.Err()
 		}
 		// net/url.Error can embed the signed URL; never wrap it.
-		return fmt.Errorf("MP4 오디오 서버에 연결할 수 없습니다")
+		return fmt.Errorf("MP4 미디어 서버에 연결할 수 없습니다")
 	}
 	defer response.Body.Close()
 	if !validSourceURLDASHAudioAddress(response.Request.URL.String()) {
-		return fmt.Errorf("MP4 오디오가 허용되지 않은 서버로 이동했습니다")
+		return fmt.Errorf("MP4 미디어가 허용되지 않은 서버로 이동했습니다")
 	}
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("MP4 오디오 서버가 HTTP %d를 반환했습니다", response.StatusCode)
+		return fmt.Errorf("MP4 미디어 서버가 HTTP %d를 반환했습니다", response.StatusCode)
 	}
-	if response.ContentLength > maxSourceURLDASHAudioBytes {
-		return fmt.Errorf("MP4 오디오 크기가 허용 범위를 초과했습니다")
+	if response.ContentLength > maxSourceURLDASHMediaBytes {
+		return fmt.Errorf("MP4 미디어 크기가 허용 범위를 초과했습니다")
 	}
 	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
-		return fmt.Errorf("MP4 오디오 임시 파일을 생성할 수 없습니다: %w", err)
+		return fmt.Errorf("MP4 미디어 임시 파일을 생성할 수 없습니다: %w", err)
 	}
 	complete := false
 	defer func() {
@@ -92,11 +92,11 @@ func downloadSourceURLDASHAudio(ctx context.Context, client *http.Client, signed
 		count, readErr := response.Body.Read(buffer)
 		if count > 0 {
 			downloaded += int64(count)
-			if downloaded > maxSourceURLDASHAudioBytes {
-				return fmt.Errorf("MP4 오디오 크기가 허용 범위를 초과했습니다")
+			if downloaded > maxSourceURLDASHMediaBytes {
+				return fmt.Errorf("MP4 미디어 크기가 허용 범위를 초과했습니다")
 			}
 			if _, writeErr := file.Write(buffer[:count]); writeErr != nil {
-				return fmt.Errorf("MP4 오디오 임시 저장에 실패했습니다: %w", writeErr)
+				return fmt.Errorf("MP4 미디어 임시 저장에 실패했습니다: %w", writeErr)
 			}
 			if progress != nil && time.Since(lastReport) >= 300*time.Millisecond {
 				progress(downloaded, response.ContentLength)
@@ -110,14 +110,14 @@ func downloadSourceURLDASHAudio(ctx context.Context, client *http.Client, signed
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return fmt.Errorf("MP4 오디오 수신이 중단되었습니다")
+			return fmt.Errorf("MP4 미디어 수신이 중단되었습니다")
 		}
 	}
 	if downloaded == 0 || (response.ContentLength >= 0 && downloaded != response.ContentLength) {
-		return fmt.Errorf("MP4 오디오 파일이 비어 있거나 완전히 수신되지 않았습니다")
+		return fmt.Errorf("MP4 미디어 파일이 비어 있거나 완전히 수신되지 않았습니다")
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("MP4 오디오 파일을 저장할 수 없습니다: %w", err)
+		return fmt.Errorf("MP4 미디어 파일을 저장할 수 없습니다: %w", err)
 	}
 	complete = true
 	if progress != nil {
