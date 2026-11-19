@@ -2,6 +2,7 @@ package liverecording
 
 import (
  "context"
+ "errors"
  "fmt"
  "os"
  "os/exec"
@@ -285,5 +286,47 @@ func TestFFmpegProgressStdoutReader(t *testing.T){
  got:=s.Snapshot().Sessions[0]
  if got.RecordedSeconds!=32.5 || got.AvailableSeconds!=0{
   t.Fatalf("FFmpeg stdout updates not combined with previous segments: %+v",got)
+ }
+}
+
+func TestRecorderWatchdogHelperProcess(t *testing.T){
+ mode:=os.Getenv("CHZZK_FFMPEG_WATCHDOG_HELPER")
+ if mode==""{return}
+ for i:=0;i<8;i++{
+  seconds:=1
+  if mode=="catchup"{seconds=i+1}
+  fmt.Printf("out_time_us=%d\n",seconds*1_000_000)
+  time.Sleep(50*time.Millisecond)
+ }
+ if mode=="stall"{time.Sleep(2500*time.Millisecond)}
+ os.Exit(0)
+}
+
+func TestRecorderStallRestartsWhenDuplicateProgressNeverAdvances(t *testing.T){
+ s:=fakeService(t)
+ s.state.Sessions=[]Session{{ID:"recording",ChannelID:sampleChannel,LiveID:123,Directory:t.TempDir(),Status:"recording"}}
+ ctx,cancel:=context.WithTimeout(context.Background(),6*time.Second);defer cancel()
+ cmd:=exec.CommandContext(ctx,os.Args[0],"-test.run=^TestRecorderWatchdogHelperProcess$")
+ cmd.Env=append(os.Environ(),"CHZZK_FFMPEG_WATCHDOG_HELPER=stall")
+ err:=s.runRecorderWithProgressTimeout(cmd,"recording",30,1500*time.Millisecond)
+ if !errors.Is(err,errRecorderStalled){t.Fatalf("expected stalled reconnect after duplicate progress, got %v",err)}
+ got:=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds!=31 || got.AvailableSeconds!=0{
+  t.Fatalf("watchdog changed recorded or extractable time: %+v",got)
+ }
+}
+
+func TestRecorderWatchdogKeepsReceivingDelayedSegments(t *testing.T){
+ s:=fakeService(t)
+ s.state.Sessions=[]Session{{ID:"recording",ChannelID:sampleChannel,LiveID:123,Directory:t.TempDir(),Status:"recording"}}
+ ctx,cancel:=context.WithTimeout(context.Background(),6*time.Second);defer cancel()
+ cmd:=exec.CommandContext(ctx,os.Args[0],"-test.run=^TestRecorderWatchdogHelperProcess$")
+ cmd.Env=append(os.Environ(),"CHZZK_FFMPEG_WATCHDOG_HELPER=catchup")
+ if err:=s.runRecorderWithProgressTimeout(cmd,"recording",30,1500*time.Millisecond);err!=nil{
+  t.Fatalf("active catch-up should not be interrupted: %v",err)
+ }
+ got:=s.Snapshot().Sessions[0]
+ if got.RecordedSeconds!=38 || got.AvailableSeconds!=0{
+  t.Fatalf("catch-up progress incorrect: %+v",got)
  }
 }
