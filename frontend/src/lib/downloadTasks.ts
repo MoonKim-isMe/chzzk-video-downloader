@@ -66,8 +66,31 @@ export function getRemainingDownloadCount(tasks: DownloadTask[]) {
   ).length;
 }
 
-export function isStartupDownloadRequest(task: DownloadTask) {
-  return task.status === 'prepared' || isResumableDownloadTask(task);
+// Count the four groups currently visible in the downloads tab.
+// Cancelled tasks are hidden and do not contribute to either count.
+export function getDownloadRequestCounts(tasks: DownloadTask[]) {
+  const counts = { prepared: 0, active: 0, completed: 0, failed: 0, total: 0 };
+  for (const task of tasks) {
+    switch (task.status) {
+      case 'prepared':
+        counts.prepared += 1;
+        break;
+      case 'queued':
+      case 'running':
+        counts.active += 1;
+        break;
+      case 'completed':
+        counts.completed += 1;
+        break;
+      case 'failed':
+        counts.failed += 1;
+        break;
+      default:
+        continue;
+    }
+    counts.total += 1;
+  }
+  return counts;
 }
 
 export function mergeDownloadTaskSnapshot(current: DownloadTask[], snapshot: DownloadTask[]) {

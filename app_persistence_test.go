@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -440,5 +442,69 @@ func TestOpenDownloadFolderUsesFinalPathDirectory(t *testing.T) {
 	}
 	if opened != directory {
 		t.Fatalf("unexpected opened directory: got %q want %q", opened, directory)
+	}
+}
+
+
+func TestClearCompletedDownloadTasksRemovesHistoryAndPreservesFiles(t *testing.T) {
+	database, err := persistence.Open(filepath.Join(t.TempDir(), "app.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	file := filepath.Join(t.TempDir(), "saved.mp4")
+	if err := os.WriteFile(file, []byte("saved"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i, status := range []downloader.TaskStatus{
+		downloader.TaskStatusCompleted,
+		downloader.TaskStatusCompleted,
+		downloader.TaskStatusFailed,
+		downloader.TaskStatusPrepared,
+	} {
+		task := downloader.DownloadTask{
+			TaskID: fmt.Sprintf("app-bulk-%d", i),
+			VideoNo: int64(99000 + i),
+			VideoTitle: "다운로드",
+			URL: fmt.Sprintf("https://chzzk.naver.com/video/%d", 99000+i),
+			OutputDir: t.TempDir(),
+			Status: status,
+			QueuedAt: "2026-10-24T00:00:00Z",
+		}
+		if status == downloader.TaskStatusCompleted {
+			task.FinalPath = file
+		}
+		if err := database.UpsertDownloadTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app := NewApp()
+	app.ctx = context.Background()
+	app.database = database
+	app.eventEmitter = func(downloader.DownloadTask) {}
+
+	removed, err := app.ClearCompletedDownloadTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("expected two removed task IDs, got %#v", removed)
+	}
+	remaining := app.GetDownloadTasks()
+	if len(remaining) != 2 {
+		t.Fatalf("only failed and prepared items should remain: %#v", remaining)
+	}
+	for _, task := range remaining {
+		if task.Status == downloader.TaskStatusCompleted {
+			t.Fatalf("completed task remained visible: %#v", task)
+		}
+	}
+	if content, err := os.ReadFile(file); err != nil || string(content) != "saved" {
+		t.Fatalf("video file changed: content=%q err=%v", content, err)
+	}
+	second, err := app.ClearCompletedDownloadTasks()
+	if err != nil || len(second) != 0 {
+		t.Fatalf("second clear should be empty: %#v err=%v", second, err)
 	}
 }

@@ -60,6 +60,7 @@ interface BackendApp {
   CancelDownload(taskId: string): Promise<boolean>;
   RecoverDownload(taskId: string): Promise<DownloadTask>;
   DeleteDownloadTask(taskId: string): Promise<void>;
+  ClearCompletedDownloadTasks(): Promise<string[]>;
   OpenDownloadLog(taskId: string): Promise<void>;
   OpenDownloadFolder(taskId: string): Promise<void>;
 }
@@ -164,6 +165,8 @@ export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);
 export const recoverDownload = (taskId: string) => app().RecoverDownload(taskId);
 
 export const deleteDownloadTask = (taskId: string) => app().DeleteDownloadTask(taskId);
+
+export const clearCompletedDownloadTasks = () => app().ClearCompletedDownloadTasks();
 
 export const openDownloadLog = (taskId: string) => app().OpenDownloadLog(taskId);
 

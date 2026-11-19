@@ -16,7 +16,7 @@ const sourceURLResumeDirectoryName = ".chzzk-resume"
 
 // CDN signatures are per-session credentials. They must never become part of
 // the cache identity, otherwise a fresh session cannot reuse stored segments.
-var sourceURLCacheSignature = regexp.MustCompile(`(_lsu_sa_=)[^&\s"']+`)
+var sourceURLCacheSignature = regexp.MustCompile(`(?:_lsu_sa_|__gda__)=[^&\s"']+`)
 
 // sourceURLSegmentCacheDir uses the exact downloaded media manifest as the
 // cache identity, ignoring only the short-lived CDN signature. A different
@@ -86,6 +86,7 @@ func sourceURLSegmentCacheFile(folder string, u *url.URL) string {
 	identity := u.EscapedPath()
 	params := u.Query()
 	params.Del("_lsu_sa_")
+	params.Del("__gda__")
 	if query := params.Encode(); query != "" {
 		identity += "?" + query
 	}

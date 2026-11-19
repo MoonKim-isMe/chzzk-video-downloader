@@ -741,3 +741,46 @@ func TestPreparedSegmentsDoNotStartWholeVOD(t *testing.T) {
   }
   queue.Stop()
 }
+
+
+func TestQueueRemoveCompletedInOnePassPreservesOtherStatuses(t *testing.T) {
+	queue := NewQueue(context.Background(), newControlledExecutor(), nil, 2)
+	statuses := []TaskStatus{
+		TaskStatusPrepared, TaskStatusQueued, TaskStatusRunning,
+		TaskStatusFailed, TaskStatusCompleted, TaskStatusCompleted,
+	}
+	for i, status := range statuses {
+		taskID := strconv.Itoa(i)
+		queue.tasks[taskID] = DownloadTask{TaskID: taskID, Status: status}
+		queue.requests[taskID] = DownloadRequest{}
+		queue.order = append(queue.order, taskID)
+	}
+	queue.pending = []string{"1"}
+
+	removed := queue.RemoveCompleted()
+	if len(removed) != 2 || removed[0] != "4" || removed[1] != "5" {
+		t.Fatalf("wrong completed tasks removed: %#v", removed)
+	}
+	if len(queue.List()) != 4 {
+		t.Fatalf("expected remaining prepared, queued, running and failed tasks: %#v", queue.List())
+	}
+	if len(queue.pending) != 1 || queue.pending[0] != "1" {
+		t.Fatalf("pending queue changed: %#v", queue.pending)
+	}
+	for _, id := range []string{"0", "1", "2", "3"} {
+		if _, ok := queue.Get(id); !ok {
+			t.Fatalf("non-completed task %s was removed", id)
+		}
+	}
+	for _, id := range removed {
+		if _, ok := queue.Get(id); ok {
+			t.Fatalf("completed task %s is still present", id)
+		}
+		if _, ok := queue.requests[id]; ok {
+			t.Fatalf("request for completed task %s is still present", id)
+		}
+	}
+	if next := queue.RemoveCompleted(); len(next) != 0 {
+		t.Fatalf("repeating removal must not delete other statuses: %#v", next)
+	}
+}

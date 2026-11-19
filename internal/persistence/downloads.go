@@ -119,6 +119,43 @@ func (d *Database) DeleteDownloadTask(taskID string) error {
 	return nil
 }
 
+// DeleteCompletedDownloadTasks deletes only completed history in one SQL
+// statement, leaving other states and the downloaded files untouched.
+func (d *Database) DeleteCompletedDownloadTasks() ([]string, error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("완료 다운로드 목록 삭제를 시작할 수 없습니다: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`DELETE FROM download_tasks WHERE status = ? RETURNING task_id`,
+		string(downloader.TaskStatusCompleted))
+	if err != nil {
+		return nil, fmt.Errorf("완료 다운로드 목록을 삭제할 수 없습니다: %w", err)
+	}
+
+	removed := make([]string, 0)
+	for rows.Next() {
+		var taskID string
+		if err := rows.Scan(&taskID); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("삭제한 다운로드 작업을 확인할 수 없습니다: %w", err)
+		}
+		removed = append(removed, taskID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("완료 다운로드 목록 삭제 결과를 읽을 수 없습니다: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("완료 다운로드 목록 삭제 결과를 닫을 수 없습니다: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("완료 다운로드 목록 삭제를 확정할 수 없습니다: %w", err)
+	}
+	return removed, nil
+}
+
 func (d *Database) ListDownloadTasks() ([]downloader.DownloadTask, error) {
 	rows, err := d.db.Query(`SELECT
 		task_id,
