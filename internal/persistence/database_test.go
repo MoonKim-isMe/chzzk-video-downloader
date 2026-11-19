@@ -36,7 +36,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 11 {
+	if version != 12 {
 		t.Fatalf("unexpected migration version: %d", version)
 	}
 	if err := database.Close(); err != nil {
@@ -52,7 +52,7 @@ func TestOpenAppliesMigrationsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 11 {
+	if version != 12 {
 		t.Fatalf("unexpected reopened migration version: %d", version)
 	}
 }
@@ -466,7 +466,7 @@ func TestPreparedSegmentsPersistenceAndReopen(t *testing.T) {
   end := int64(179)
   numberFileName := false
   task := downloader.DownloadTask{
-    TaskID: "segment-prepared-1", VideoNo: 9001, VideoTitle: "시험",
+    TaskID: "segment-prepared-1", VideoNo: 9001, VideoTitle: "시험", PublishDate: "2026-11-19 22:45:00",
     URL: "https://chzzk.naver.com/video/9001",
     OutputDir: filepath.Join(t.TempDir(), "downloads", "시험"),
     DownloadType: downloader.DownloadTypeAudio,
@@ -490,6 +490,7 @@ func TestPreparedSegmentsPersistenceAndReopen(t *testing.T) {
   }
   got := saved[0]
   if got.Status != downloader.TaskStatusPrepared || got.DownloadType != task.DownloadType ||
+    got.PublishDate != task.PublishDate ||
     got.Segment.Title != "영상 1" || got.Segment.FileName != "영상 1" ||
     got.Segment.NumberFileName == nil || *got.Segment.NumberFileName ||
     got.Segment.StartSeconds != 60 || got.Segment.EndSeconds == nil || *got.Segment.EndSeconds != 179 {

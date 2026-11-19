@@ -22,6 +22,9 @@ var videoPathPattern = regexp.MustCompile(`^/video/[0-9]+/?$`)
 
 type DownloadRequest struct {
 	DownloadType            DownloadType          `json:"downloadType,omitempty"`
+	VideoTitle              string                `json:"videoTitle,omitempty"`
+	PublishDate             string                `json:"publishDate,omitempty"`
+	ChannelName             string                `json:"channelName,omitempty"`
 	Segment                 *DownloadSegment      `json:"segment,omitempty"`
 	URL                     string                `json:"url"`
 	OutputDir               string                `json:"outputDir"`

@@ -65,6 +65,7 @@ type StartDownloadRequest struct {
 	Segment                 *DownloadSegment      `json:"segment,omitempty"`
 	VideoNo                 int64                 `json:"videoNo"`
 	VideoTitle              string                `json:"videoTitle"`
+	PublishDate             string                `json:"publishDate,omitempty"`
 	ChannelName             string                `json:"channelName"`
 	ThumbnailImageURL       string                `json:"thumbnailImageUrl"`
 	URL                     string                `json:"url"`
@@ -83,6 +84,7 @@ type DownloadTask struct {
 	TaskID            string           `json:"taskId"`
 	VideoNo           int64            `json:"videoNo"`
 	VideoTitle        string           `json:"videoTitle"`
+	PublishDate       string           `json:"publishDate,omitempty"`
 	ChannelName       string           `json:"channelName"`
 	ThumbnailImageURL string           `json:"thumbnailImageUrl"`
 	URL               string           `json:"url"`
@@ -127,6 +129,9 @@ func (r StartDownloadRequest) DownloadRequest() DownloadRequest {
 		DownloadType: NormalizeDownloadType(r.DownloadType),
 		Segment:      r.Segment,
 		URL:            r.URL,
+		VideoTitle:     r.VideoTitle,
+		PublishDate:    r.PublishDate,
+		ChannelName:    r.ChannelName,
 		OutputDir:      r.OutputDir,
 		FormatSelector: r.FormatSelector,
 		OutputTemplate:      r.OutputTemplate,
