@@ -32,6 +32,9 @@ var (
 
 type sourceURLHLSStream struct {
 	URL          string
+	MPDPlaylist  []byte // Signed media playlist synthesized from a DASH SegmentTemplate when HLS GET fails.
+	DASHVideoURL string
+	DASHAudioURL string
 	PlaylistPath string
 	Title        string
 	VideoNo      int64
@@ -43,10 +46,14 @@ type sourceURLManifest struct {
 	Periods []struct {
 		Adaptations []struct {
 			MimeType        string `xml:"mimeType,attr"`
+			Codecs          string `xml:"codecs,attr"`
+			BaseURL         string `xml:"BaseURL"`
 			Representations []struct {
+				MimeType  string     `xml:"mimeType,attr"`
 				Height    int        `xml:"height,attr"`
 				Bandwidth int64      `xml:"bandwidth,attr"`
 				Codecs    string     `xml:"codecs,attr"`
+				BaseURL   string     `xml:"BaseURL"`
 				Attrs     []xml.Attr `xml:",any,attr"`
 			} `xml:"Representation"`
 		} `xml:"AdaptationSet"`
@@ -97,12 +104,20 @@ func selectSourceURLHLSForType(manifest []byte, selector string, downloadType Do
 	var bestBandwidth int64
 	for _, period := range mpd.Periods {
 		for _, adaptation := range period.Adaptations {
-			if adaptation.MimeType != "video/mp2t" {
-				continue
-			}
 			for _, rep := range adaptation.Representations {
+				mimeType := adaptation.MimeType
+				if mimeType == "" {
+					mimeType = rep.MimeType
+				}
+				if !strings.EqualFold(mimeType, "video/mp2t") {
+					continue
+				}
+				codecs := rep.Codecs
+				if codecs == "" {
+					codecs = adaptation.Codecs
+				}
 				// HAR의 video/mp2t HLS는 영상과 AAC 오디오가 함께 포함된 스트림입니다.
-				if !strings.Contains(rep.Codecs, "mp4a") || rep.Height <= 0 || (maxHeight > 0 && rep.Height > maxHeight) {
+				if !strings.Contains(strings.ToLower(codecs), "mp4a") || rep.Height <= 0 || (maxHeight > 0 && rep.Height > maxHeight) {
 					continue
 				}
 				for _, attr := range rep.Attrs {
@@ -125,6 +140,61 @@ func selectSourceURLHLSForType(manifest []byte, selector string, downloadType Do
 	return bestURL, bestHeight, nil
 }
 
+// selectSourceURLDASHAudio returns an entire MP4/M4A resource, not a signed
+// segment URL. Some CHZZK VODs advertise audio/mp4 with SegmentList byte
+// ranges but no HLS representation; its BaseURL is a complete fMP4 file.
+func selectSourceURLDASHAudio(manifest []byte) (string, error) {
+	var mpd sourceURLManifest
+	if err := xml.Unmarshal(manifest, &mpd); err != nil {
+		return "", fmt.Errorf("MP4 오디오 재생 정보를 해석할 수 없습니다")
+	}
+	var best string
+	var bestBandwidth int64
+	for _, period := range mpd.Periods {
+		for _, adaptation := range period.Adaptations {
+			for _, rep := range adaptation.Representations {
+				mimeType := adaptation.MimeType
+				if mimeType == "" {
+					mimeType = rep.MimeType
+				}
+				codecs := rep.Codecs
+				if codecs == "" {
+					codecs = adaptation.Codecs
+				}
+				if !strings.EqualFold(mimeType, "audio/mp4") || !strings.Contains(strings.ToLower(codecs), "mp4a") {
+					continue
+				}
+				address := strings.TrimSpace(rep.BaseURL)
+				if address == "" {
+					address = strings.TrimSpace(adaptation.BaseURL)
+				}
+				if !validSourceURLDASHAudioAddress(address) {
+					continue
+				}
+				if best == "" || rep.Bandwidth > bestBandwidth {
+					best, bestBandwidth = address, rep.Bandwidth
+				}
+			}
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("지원하는 MP4 오디오 원본 주소를 찾을 수 없습니다")
+	}
+	return best, nil
+}
+
+func validSourceURLDASHAudioAddress(raw string) bool {
+	address, err := url.Parse(raw)
+	if err != nil || !validSignedHLSResource(address) {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(address.Path)) {
+	case ".mp4", ".m4a":
+		return true
+	}
+	return false
+}
+
 // CHZZK VOD IDs are opaque hexadecimal identifiers. The HAR for VOD 15651133
 // contains a 36-character ID; rejecting anything other than 32 characters
 // prevents the fallback from reaching the playback API.
@@ -134,11 +204,10 @@ func validSourceURLVideoID(videoID string) bool {
 
 func validSourceURLHLSAddress(raw string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" || !strings.HasSuffix(strings.ToLower(u.Path), ".m3u8") {
+	if err != nil || !validSignedHLSResource(u) || !strings.EqualFold(filepath.Ext(u.Path), ".m3u8") {
 		return false
 	}
-	host := strings.ToLower(u.Hostname())
-	return host == "pstatic.net" || strings.HasSuffix(host, ".pstatic.net")
+	return true
 }
 
 func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *http.Client) (sourceURLHLSStream, error) {
@@ -196,9 +265,26 @@ func fetchSourceURLHLS(ctx context.Context, request DownloadRequest, client *htt
 	}
 	playlist, height, err := selectSourceURLHLSForType(body, request.FormatSelector, request.DownloadType)
 	if err != nil {
-		return sourceURLHLSStream{}, err
+		if NormalizeDownloadType(request.DownloadType) == DownloadTypeAudio {
+			dashURL, dashErr := selectSourceURLDASHAudio(body)
+			if dashErr == nil {
+				return sourceURLHLSStream{DASHAudioURL: dashURL, VideoNo: videoNo, Title: info.Title, Duration: info.Duration}, nil
+			}
+			return sourceURLHLSStream{}, fmt.Errorf("%v; MP4 오디오 대체 경로: %w", err, dashErr)
+		}
+		videoURL, audioURL, dashHeight, dashErr := selectSourceURLDASHVideo(body, request.FormatSelector)
+		if dashErr == nil {
+			return sourceURLHLSStream{DASHVideoURL: videoURL, DASHAudioURL: audioURL, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: dashHeight}, nil
+		}
+		return sourceURLHLSStream{}, fmt.Errorf("%v; MP4 영상·오디오 대체 경로: %w", err, dashErr)
 	}
-	return sourceURLHLSStream{URL: playlist, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: height}, nil
+	stream := sourceURLHLSStream{URL: playlist, VideoNo: videoNo, Title: info.Title, Duration: info.Duration, Height: height}
+	if isSourceURLAkamaiHost(strings.ToLower(mustURLHostname(playlist))) {
+		// Browser playback can use the MPD SegmentTemplate directly without
+		// requesting the advertised .m3u8. Keep a verified local alternative.
+		stream.MPDPlaylist, _ = buildSourceURLMPDHLSPlaylist(body, playlist)
+	}
+	return stream, nil
 }
 
 func sourceURLFallbackFileName(title string, videoNo int64, ext string) string {
@@ -305,6 +391,12 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 	if err != nil {
 		return original, CommandSpec{}, &DownloadFailure{Kind: DownloadFailureSourceURLMissing, Message: "CHZZK 대체 재생 정보를 확인하지 못했습니다.", Cause: err}
 	}
+	if source.DASHVideoURL != "" {
+		return m.executeSourceURLDASHVideoFallback(ctx, request, toolchain, handler, original, originalErr, source)
+	}
+	if source.DASHAudioURL != "" {
+		return m.executeSourceURLDASHAudioFallback(ctx, request, toolchain, handler, original, originalErr, source)
+	}
 	tempDir, err := fallbackTemporaryDownloadDirForRequest(request, "sourceurl-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 	if err != nil {
 		return original, CommandSpec{}, err
@@ -321,7 +413,7 @@ func (m *Manager) executeSourceURLFallback(ctx context.Context, request Download
 		}
 		return nil
 	}}
-	source.PlaylistPath, err = prepareSignedHLSPlaylist(ctx, client, source.URL, manifestDir)
+	source.PlaylistPath, err = prepareSourceURLHLSPlaylist(ctx, client, source, manifestDir)
 	if err != nil {
 		if ctx.Err() != nil {
 			return original, CommandSpec{}, ctx.Err()

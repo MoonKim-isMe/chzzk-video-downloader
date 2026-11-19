@@ -18,7 +18,41 @@ const (
 	maxSignedHLSDepth         = 4
 )
 
-var hlsURIAttributePattern = regexp.MustCompile(`URI="([^"]+)"`)
+var (
+	hlsURIAttributePattern = regexp.MustCompile(`URI="([^"]+)"`)
+	sourceURLAkamaiHostName = regexp.MustCompile(`^[a-z][0-9]{2}-[a-z]-naver-vod\.akamaized\.net$`)
+)
+
+func isSourceURLAkamaiHost(host string) bool {
+	return sourceURLAkamaiHostName.MatchString(strings.ToLower(host))
+}
+
+func mustURLHostname(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// The legacy and Akamai CDNs use different credential query keys. Never
+// infer a signing key from an arbitrary hostname or user-supplied parameter.
+func sourceURLHLSAuthQueryKey(u *url.URL) string {
+	if !validSignedHLSResource(u) {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if isSourceURLAkamaiHost(host) {
+		if u.Query().Get("__gda__") != "" {
+			return "__gda__"
+		}
+		return ""
+	}
+	if u.Query().Get("_lsu_sa_") != "" {
+		return "_lsu_sa_"
+	}
+	return ""
+}
 
 type signedHLSPlaylistWriter struct {
 	client *http.Client
@@ -150,7 +184,7 @@ func validSignedHLSResource(target *url.URL) bool {
 		return false
 	}
 	host := strings.ToLower(target.Hostname())
-	return host == "pstatic.net" || strings.HasSuffix(host, ".pstatic.net")
+	return host == "pstatic.net" || strings.HasSuffix(host, ".pstatic.net") || isSourceURLAkamaiHost(host)
 }
 
 func signedHLSChildURL(parent *url.URL, raw string) (*url.URL, error) {
@@ -165,10 +199,10 @@ func signedHLSChildURL(parent *url.URL, raw string) (*url.URL, error) {
 	// CDN-signed playback manifests use relative TS paths. URL.ResolveReference
 	// drops the parent's query string; restore only the known CDN signature.
 	if absolute.Hostname() == parent.Hostname() {
-		parentSignature := parent.Query().Get("_lsu_sa_")
-		if parentSignature != "" && absolute.Query().Get("_lsu_sa_") == "" {
+		key := sourceURLHLSAuthQueryKey(parent)
+		if key != "" && absolute.Query().Get(key) == "" {
 			query := absolute.Query()
-			query.Set("_lsu_sa_", parentSignature)
+			query.Set(key, parent.Query().Get(key))
 			absolute.RawQuery = query.Encode()
 		}
 	}
