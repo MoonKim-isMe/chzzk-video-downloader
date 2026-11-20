@@ -48,6 +48,11 @@ export function upsertDownloadTask(tasks: DownloadTask[], incoming: DownloadTask
   return next;
 }
 
+// Cancel only downloads already queued or running; keep prepared drafts and history.
+export function getCancelableDownloadTasks(tasks: DownloadTask[]) {
+  return tasks.filter((task) => task.status === 'queued' || task.status === 'running');
+}
+
 // Match the criteria of the "이어받기" button in the download list.
 export function isResumableDownloadTask(task: DownloadTask) {
   return task.status === 'failed' && (

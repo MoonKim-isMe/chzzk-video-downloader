@@ -258,6 +258,56 @@ func (q *Queue) Cancel(taskID string) bool {
 	}
 }
 
+// CancelAll atomically cancels all queued and running downloads so that
+// a queued download cannot start while another active download is stopping.
+// Prepared segments and finished history are intentionally left untouched.
+func (q *Queue) CancelAll() []string {
+	q.mu.Lock()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	cancelled := make([]DownloadTask, 0)
+	cancels := make([]context.CancelFunc, 0, len(q.active))
+	for _, taskID := range q.order {
+		task, exists := q.tasks[taskID]
+		if !exists {
+			continue
+		}
+		switch task.Status {
+		case TaskStatusQueued:
+			delete(q.requests, taskID)
+		case TaskStatusRunning:
+			cancel, active := q.active[taskID]
+			if !active {
+				continue
+			}
+			q.cancelRequested[taskID] = struct{}{}
+			cancels = append(cancels, cancel)
+		default:
+			continue
+		}
+		task.Status = TaskStatusCancelled
+		task.FinishedAt = now
+		task.Error = ""
+		task.ErrorCode = ""
+		task.LogPath = ""
+		q.tasks[taskID] = task
+		cancelled = append(cancelled, task)
+	}
+	q.pending = nil
+	q.mu.Unlock()
+
+	// Stop active processes before persisting cancellation events, which may
+	// require disk I/O for each completed cancellation.
+	for _, cancel := range cancels {
+		cancel()
+	}
+	ids := make([]string, 0, len(cancelled))
+	for _, task := range cancelled {
+		ids = append(ids, task.TaskID)
+		q.emit(task)
+	}
+	return ids
+}
+
 func (q *Queue) Stop() {
 	q.mu.Lock()
 	if q.stopped {

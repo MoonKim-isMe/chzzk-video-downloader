@@ -58,6 +58,7 @@ interface BackendApp {
   StartPreparedSegment(taskId: string): Promise<DownloadTask>;
   GetDownloadTasks(): Promise<DownloadTask[]>;
   CancelDownload(taskId: string): Promise<boolean>;
+  CancelAllDownloads(): Promise<string[]>;
   RecoverDownload(taskId: string): Promise<DownloadTask>;
   DeleteDownloadTask(taskId: string): Promise<void>;
   ClearCompletedDownloadTasks(): Promise<string[]>;
@@ -161,6 +162,8 @@ export const startPreparedSegment = (taskId: string) => app().StartPreparedSegme
 export const getDownloadTasks = () => app().GetDownloadTasks();
 
 export const cancelDownload = (taskId: string) => app().CancelDownload(taskId);
+
+export const cancelAllDownloads = () => app().CancelAllDownloads();
 
 export const recoverDownload = (taskId: string) => app().RecoverDownload(taskId);
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  getCancelableDownloadTasks,
   getDownloadRequestCounts,
   getRemainingDownloadCount,
   isResumableDownloadTask,
@@ -132,5 +133,27 @@ test('running and queued counts move independently as work progresses', () => {
   tasks = tasks.filter((item) => item.taskId !== 'queued-2');
   assert.deepEqual(getDownloadRequestCounts(tasks), {
     prepared: 1, running: 1, queued: 0, active: 1, completed: 1, failed: 1, total: 4,
+  });
+});
+
+test('bulk cancellation selects only queued and running downloads', () => {
+  const tasks = [
+    task('prepared', { taskId: 'prepared' }),
+    task('queued', { taskId: 'queued' }),
+    task('running', { taskId: 'running' }),
+    task('completed', { taskId: 'completed' }),
+    task('failed', { taskId: 'failed' }),
+    task('cancelled', { taskId: 'cancelled' }),
+  ];
+  const active = getCancelableDownloadTasks(tasks);
+  assert.deepEqual(active.map((item) => item.taskId), ['queued', 'running']);
+
+  // The existing bulk-removal callback must only remove returned IDs.
+  const cancelledIds = new Set(active.map((item) => item.taskId));
+  const remaining = tasks.filter((item) => !cancelledIds.has(item.taskId));
+  assert.deepEqual(remaining.map((item) => item.taskId), ['prepared', 'completed', 'failed', 'cancelled']);
+  assert.equal(getCancelableDownloadTasks(remaining).length, 0);
+  assert.deepEqual(getDownloadRequestCounts(remaining), {
+    prepared: 1, running: 0, queued: 0, active: 0, completed: 1, failed: 1, total: 3,
   });
 });

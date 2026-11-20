@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   cancelDownload,
+  cancelAllDownloads,
   clearCompletedDownloadTasks,
   deleteDownloadTask,
   getDownloadToolchainStatus,
@@ -23,7 +24,7 @@ import {
   startDownload,
   startPreparedSegment,
 } from '../../lib/backend';
-import { getDownloadRequestCounts, isResumableDownloadTask } from '../../lib/downloadTasks';
+import { getCancelableDownloadTasks, getDownloadRequestCounts, isResumableDownloadTask } from '../../lib/downloadTasks';
 import type { DownloadTask, ToolchainStatus } from '../../types/download';
 
 const { Text, Title } = Typography;
@@ -494,6 +495,7 @@ function DownloadPanel({
   const [toolchain, setToolchain] = useState<ToolchainStatus>();
   const [preparing, setPreparing] = useState(true);
   const [deletingCompleted, setDeletingCompleted] = useState(false);
+  const [cancellingAll, setCancellingAll] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -531,7 +533,7 @@ function DownloadPanel({
     [visibleTasks],
   );
   const activeTasks = useMemo(
-    () => visibleTasks.filter((task) => task.status === 'queued' || task.status === 'running'),
+    () => getCancelableDownloadTasks(visibleTasks),
     [visibleTasks],
   );
   const completedTasks = useMemo(
@@ -556,6 +558,27 @@ function DownloadPanel({
   }, [activeTasks]);
 
   const counts = useMemo(() => getDownloadRequestCounts(visibleTasks), [visibleTasks]);
+
+  const handleCancelAll = async () => {
+    if (cancellingAll || activeTasks.length === 0) {
+      return;
+    }
+
+    setCancellingAll(true);
+    try {
+      const cancelledIds = await cancelAllDownloads();
+      if (cancelledIds.length === 0) {
+        message.info('취소할 다운로드가 없습니다.');
+        return;
+      }
+      onTasksRemoved(cancelledIds);
+      message.success(`진행/대기 중인 다운로드 ${cancelledIds.length}개를 취소했습니다.`);
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCancellingAll(false);
+    }
+  };
 
   const handleDeleteCompleted = async () => {
     if (completedTasks.length === 0 || deletingCompleted) {
@@ -590,6 +613,15 @@ function DownloadPanel({
           <span><strong>{counts.queued}</strong> 대기</span>
           <span><strong>{counts.completed}</strong> 완료</span>
           <span><strong>{counts.failed}</strong> 실패</span>
+          <Button
+            danger
+            size="small"
+            disabled={activeTasks.length === 0}
+            loading={cancellingAll}
+            onClick={() => void handleCancelAll()}
+          >
+            전체 취소
+          </Button>
         </div>
       </div>
 
