@@ -1006,3 +1006,59 @@ func TestOpenDownloadLogUsesStoredFailureLog(t *testing.T) {
 		t.Fatalf("unexpected opened log path: %q", opened)
 	}
 }
+
+func TestCancelAllDownloadsStopsRunningAndQueued(t *testing.T) {
+	started := make(chan string, 3)
+	service := &fakeDownloadService{
+		status: readyDownloadStatus(),
+		download: func(ctx context.Context, request downloader.DownloadRequest, _ downloader.ProgressHandler) (downloader.DownloadResult, error) {
+			started <- request.URL
+			<-ctx.Done()
+			return downloader.DownloadResult{}, ctx.Err()
+		},
+	}
+	settings := appsettings.Defaults(t.TempDir())
+	settings.MaxConcurrentDownloads = 1
+	store, err := appsettings.NewStore(settings)
+	if err != nil { t.Fatal(err) }
+	app := NewApp()
+	app.downloadManager = service
+	app.settingsStore = store
+	app.videoAccessChecker = func(context.Context, int64, string) error { return nil }
+	app.eventEmitter = func(downloader.DownloadTask) {}
+	defer app.ensureDownloadQueue().Stop()
+
+	first, err := app.StartDownload(testStartRequest(t))
+	if err != nil { t.Fatal(err) }
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first download did not start")
+	}
+	secondRequest := testStartRequest(t)
+	secondRequest.VideoNo = 88880
+	secondRequest.URL = "https://chzzk.naver.com/video/88880"
+	second, err := app.StartDownload(secondRequest)
+	if err != nil { t.Fatal(err) }
+	if second.Status != downloader.TaskStatusQueued {
+		t.Fatalf("expected queued second download, got %s", second.Status)
+	}
+	ids := app.CancelAllDownloads()
+	if len(ids) != 2 || ids[0] != first.TaskID || ids[1] != second.TaskID {
+		t.Fatalf("unexpected bulk cancelled IDs: %v", ids)
+	}
+	for _, taskID := range ids {
+		task, ok := app.ensureDownloadQueue().Get(taskID)
+		if !ok || task.Status != downloader.TaskStatusCancelled {
+			t.Fatalf("task not cancelled: %#v", task)
+		}
+	}
+	if again := app.CancelAllDownloads(); len(again) != 0 {
+		t.Fatalf("repeated bulk cancellation must not cancel more tasks: %v", again)
+	}
+	select {
+	case url := <-started:
+		t.Fatalf("queued download started unexpectedly: %s", url)
+	case <-time.After(40 * time.Millisecond):
+	}
+}

@@ -769,6 +769,11 @@ func (a *App) CancelDownload(taskID string) bool {
 	return a.ensureDownloadQueue().Cancel(strings.TrimSpace(taskID))
 }
 
+// CancelAllDownloads stops currently queued/running jobs without modifying prepared or completed entries.
+func (a *App) CancelAllDownloads() []string {
+	return a.ensureDownloadQueue().CancelAll()
+}
+
 func (a *App) RecoverDownload(taskID string) (downloader.DownloadTask, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {

@@ -784,3 +784,81 @@ func TestQueueRemoveCompletedInOnePassPreservesOtherStatuses(t *testing.T) {
 		t.Fatalf("repeating removal must not delete other statuses: %#v", next)
 	}
 }
+
+func TestQueueCancelAllKeepsPreparedAndCompletedWithoutStartingPending(t *testing.T) {
+	executor := newControlledExecutor()
+	queue := NewQueue(context.Background(), executor, nil, 2)
+	defer queue.Stop()
+
+	completed, err := queue.Enqueue(queueRequest(9901))
+	if err != nil { t.Fatal(err) }
+	waitForStartedCount(t, executor, 1)
+	executor.release(completed.URL)
+	waitForTaskStatus(t, queue, completed.TaskID, TaskStatusCompleted)
+
+	first, err := queue.Enqueue(queueRequest(9902))
+	if err != nil { t.Fatal(err) }
+	second, err := queue.Enqueue(queueRequest(9903))
+	if err != nil { t.Fatal(err) }
+	waitForStartedCount(t, executor, 3)
+	third, err := queue.Enqueue(queueRequest(9904))
+	if err != nil { t.Fatal(err) }
+	fourth, err := queue.Enqueue(queueRequest(9905))
+	if err != nil { t.Fatal(err) }
+	preparedReq := queueRequest(9906)
+	preparedReq.Segment = &DownloadSegment{Title: "준비된 구간", Position: 1, StartSeconds: 0}
+	prepared, err := queue.Enqueue(preparedReq)
+	if err != nil { t.Fatal(err) }
+	if prepared.Status != TaskStatusPrepared { t.Fatalf("expected prepared status: %#v", prepared) }
+
+	ids := queue.CancelAll()
+	if len(ids) != 4 {
+		t.Fatalf("expected 4 cancelled tasks, got %v", ids)
+	}
+	for i, want := range []string{first.TaskID, second.TaskID, third.TaskID, fourth.TaskID} {
+		if ids[i] != want { t.Fatalf("cancelled out of order: %v", ids) }
+		got := waitForTaskStatus(t, queue, want, TaskStatusCancelled)
+		if got.FinishedAt == "" || got.Error != "" {
+			t.Fatalf("cancelled task state incorrect: %#v", got)
+		}
+	}
+	if executor.hasStarted(third.URL) || executor.hasStarted(fourth.URL) {
+		t.Fatal("queued downloads must not start while bulk cancellation runs")
+	}
+	if got, _ := queue.Get(completed.TaskID); got.Status != TaskStatusCompleted {
+		t.Fatalf("completed history changed: %#v", got)
+	}
+	if got, _ := queue.Get(prepared.TaskID); got.Status != TaskStatusPrepared {
+		t.Fatalf("prepared segment should remain: %#v", got)
+	}
+	if next := queue.CancelAll(); len(next) != 0 {
+		t.Fatalf("repeated cancellation must be idempotent: %v", next)
+	}
+
+	// Cancelling all does not stop the Queue from accepting a new request.
+	next, err := queue.Enqueue(queueRequest(9907))
+	if err != nil { t.Fatal(err) }
+	waitForTaskStatus(t, queue, next.TaskID, TaskStatusRunning)
+	if executor.hasStarted(third.URL) || executor.hasStarted(fourth.URL) {
+		t.Fatal("previously queued work started after new enqueue")
+	}
+}
+
+func TestQueueCancelAllWinsLateCompletionRace(t *testing.T) {
+	executor := newControlledExecutor()
+	request := queueRequest(9910)
+	executor.ignoreCancellation(request.URL)
+	queue := NewQueue(context.Background(), executor, nil, 1)
+	task, err := queue.Enqueue(request)
+	if err != nil { t.Fatal(err) }
+	waitForStartedCount(t, executor, 1)
+	ids := queue.CancelAll()
+	if len(ids) != 1 || ids[0] != task.TaskID {
+		t.Fatalf("unexpected cancelled IDs: %v", ids)
+	}
+	executor.release(task.URL)
+	got := waitForTaskStatus(t, queue, task.TaskID, TaskStatusCancelled)
+	if got.FinalPath != "" {
+		t.Fatalf("late success must not resurrect a cancelled task: %#v", got)
+	}
+}
